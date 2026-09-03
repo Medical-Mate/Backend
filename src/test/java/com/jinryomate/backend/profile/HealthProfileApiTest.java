@@ -193,6 +193,21 @@ class HealthProfileApiTest {
     }
 
     @Test
+    @DisplayName("생일만 동의하고 출생연도를 동의하지 않으면 나이를 만들지 못한다")
+    void 생일만_있으면_나이_없음() throws Exception {
+        // 생일과 출생연도는 카카오에서 별개 동의항목이다. 생일만 켜면 MMDD 만 온다.
+        givenKakaoProfile("김서연", "female", null, "0303", "SOLAR");
+
+        TokenResponse tokens = login();
+
+        mockMvc.perform(get("/api/me/health-profile").header("Authorization", bearer(tokens)))
+                .andExpect(jsonPath("$.birthMonthDay").value("03-03"))
+                .andExpect(jsonPath("$.birthYear").doesNotExist())
+                .andExpect(jsonPath("$.age").doesNotExist())
+                .andExpect(jsonPath("$.canStartIntake").value(false));
+    }
+
+    @Test
     @DisplayName("음력 생일은 나이 계산에 쓰지 않는다")
     void 음력_생일은_무시한다() throws Exception {
         givenKakaoProfile("김서연", "female", "1994", "0303", "LUNAR");

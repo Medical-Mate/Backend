@@ -11,6 +11,9 @@ import com.fasterxml.jackson.annotation.JsonProperty;
  *
  * <p>연령대({@code age_range})는 받지 않는다. {@code "30~39"} 구간이라 카드의 {@code 32세}를
  * 만들 수 없어서, 출생연도와 생일만 쓴다.
+ *
+ * <p><b>생일과 출생연도는 별개 동의항목이다.</b> 생일만 켜면 {@code MMDD}만 오고 연도가 없어
+ * 나이를 만들 수 없다. 콘솔에서 둘 다 켜야 한다.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record KakaoProfile(
@@ -28,6 +31,9 @@ public record KakaoProfile(
             /** {@code "SOLAR"} 또는 {@code "LUNAR"}. */
             @JsonProperty("birthday_type") String birthdayType
     ) {}
+    // 카카오는 is_leap_month(윤달 여부)도 함께 주지만 읽지 않는다.
+    // 음력 생일을 나이 계산에서 통째로 제외하므로 윤달만 따로 볼 이유가 없다.
+    // 나중에 음력→양력 변환을 넣게 되면 그때 이 필드가 필요하다.
 
     public String name() {
         return kakaoAccount == null ? null : kakaoAccount.name();
