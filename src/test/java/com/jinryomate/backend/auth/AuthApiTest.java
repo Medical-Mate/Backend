@@ -75,8 +75,11 @@ class AuthApiTest {
         String body = login("kakao-token").getResponse().getContentAsString();
         TokenResponse response = objectMapper.readValue(body, TokenResponse.class);
 
-        assertThat(response.onboardingRequired()).isFalse();
         assertThat(userRepository.count()).isEqualTo(1);
+
+        // 재로그인이라도 온보딩을 마치지 않았으면 여전히 온보딩이 필요하다.
+        // onboardingRequired 는 "신규 가입 여부"가 아니라 "온보딩 완료 여부"를 뜻한다.
+        assertThat(response.onboardingRequired()).isTrue();
     }
 
     @Test
