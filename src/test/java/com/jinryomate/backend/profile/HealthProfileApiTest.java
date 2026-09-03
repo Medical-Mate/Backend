@@ -19,6 +19,9 @@ import com.jinryomate.backend.profile.dto.ProfileDtos.ListFieldRequest;
 import com.jinryomate.backend.profile.dto.ProfileDtos.TextFieldRequest;
 import com.jinryomate.backend.profile.entity.FieldStatus;
 import com.jinryomate.backend.profile.entity.Sex;
+import java.time.LocalDate;
+import java.time.MonthDay;
+import java.time.Period;
 import java.time.Year;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
@@ -75,7 +78,7 @@ class HealthProfileApiTest {
     @Test
     @DisplayName("카카오에서 받은 값이 프로필에 미리 채워지고 출처가 KAKAO로 남는다")
     void 카카오_값_선반영() throws Exception {
-        givenKakaoProfile("김서연", "female", "1994");
+        givenKakaoProfile("김서연", "female", "1994", "0303", "SOLAR");
 
         TokenResponse tokens = login();
 
@@ -84,7 +87,9 @@ class HealthProfileApiTest {
                 .andExpect(jsonPath("$.name").value("김서연"))
                 .andExpect(jsonPath("$.sex").value("FEMALE"))
                 .andExpect(jsonPath("$.birthYear").value(1994))
-                .andExpect(jsonPath("$.age").value(Year.now().getValue() - 1994))
+                .andExpect(jsonPath("$.birthMonthDay").value("03-03"))
+                // 생일이 있으면 올해에서 빼는 근사값이 아니라 만 나이를 정확히 계산한다.
+                .andExpect(jsonPath("$.age").value(exactAge(1994, "03-03")))
                 .andExpect(jsonPath("$.sources.name").value("KAKAO"))
                 // 카카오 값이 채워졌어도 온보딩을 마친 것은 아니다.
                 .andExpect(jsonPath("$.onboardingCompleted").value(false))
@@ -95,7 +100,7 @@ class HealthProfileApiTest {
     @Test
     @DisplayName("연령대만 오고 출생연도가 없으면 나이를 만들지 못한다")
     void 출생연도_없으면_나이_없음() throws Exception {
-        givenKakaoProfile("김서연", "female", null);
+        givenKakaoProfile("김서연", "female", null, null, null);
 
         TokenResponse tokens = login();
 
@@ -112,7 +117,7 @@ class HealthProfileApiTest {
         TokenResponse tokens = login();
 
         HealthProfileRequest request = new HealthProfileRequest(
-                "김서연", 1994, Sex.FEMALE,
+                "김서연", 1994, "03-03", Sex.FEMALE,
                 new ListFieldRequest(FieldStatus.KNOWN, List.of("이부프로펜", "비타민D")),
                 new ListFieldRequest(FieldStatus.NONE, List.of()),
                 new TextFieldRequest(FieldStatus.UNKNOWN, null));
@@ -135,11 +140,11 @@ class HealthProfileApiTest {
     @Test
     @DisplayName("사용자가 고친 값은 다시 로그인해도 카카오 값으로 덮이지 않는다")
     void 직접_입력값_보존() throws Exception {
-        givenKakaoProfile("김서연", "female", "1994");
+        givenKakaoProfile("김서연", "female", "1994", "0303", "SOLAR");
         TokenResponse tokens = login();
 
         HealthProfileRequest request = new HealthProfileRequest(
-                "김민지", 1990, Sex.FEMALE,
+                "김민지", 1990, "07-15", Sex.FEMALE,
                 new ListFieldRequest(FieldStatus.NONE, List.of()),
                 new ListFieldRequest(FieldStatus.NONE, List.of()),
                 new TextFieldRequest(FieldStatus.NONE, null));
@@ -167,7 +172,7 @@ class HealthProfileApiTest {
         TokenResponse tokens = login();
 
         HealthProfileRequest invalid = new HealthProfileRequest(
-                "김서연", null, Sex.FEMALE,
+                "김서연", null, null, Sex.FEMALE,
                 new ListFieldRequest(FieldStatus.NONE, List.of()),
                 new ListFieldRequest(FieldStatus.NONE, List.of()),
                 new TextFieldRequest(FieldStatus.NONE, null));
@@ -187,12 +192,31 @@ class HealthProfileApiTest {
                 .andExpect(status().isUnauthorized());
     }
 
+    @Test
+    @DisplayName("음력 생일은 나이 계산에 쓰지 않는다")
+    void 음력_생일은_무시한다() throws Exception {
+        givenKakaoProfile("김서연", "female", "1994", "0303", "LUNAR");
+
+        TokenResponse tokens = login();
+
+        // 양력 변환 없이 그대로 쓰면 오히려 틀린 나이가 나오므로 출생연도만으로 근사한다.
+        mockMvc.perform(get("/api/me/health-profile").header("Authorization", bearer(tokens)))
+                .andExpect(jsonPath("$.birthMonthDay").doesNotExist())
+                .andExpect(jsonPath("$.age").value(Year.now().getValue() - 1994));
+    }
+
     // ---------- helpers ----------
 
-    private void givenKakaoProfile(String name, String gender, String birthYear) {
+    private void givenKakaoProfile(String name, String gender, String birthYear,
+                                   String birthday, String birthdayType) {
         given(kakaoClient.fetchProfile(anyString())).willReturn(
                 new KakaoProfile(KAKAO_ID,
-                        new KakaoProfile.KakaoAccount(name, gender, birthYear)));
+                        new KakaoProfile.KakaoAccount(name, gender, birthYear, birthday, birthdayType)));
+    }
+
+    private static int exactAge(int birthYear, String monthDay) {
+        LocalDate birth = MonthDay.parse("--" + monthDay).atYear(birthYear);
+        return Period.between(birth, LocalDate.now()).getYears();
     }
 
     private TokenResponse login() throws Exception {

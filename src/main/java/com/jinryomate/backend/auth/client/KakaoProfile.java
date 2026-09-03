@@ -10,7 +10,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
  * 항목 자체가 내려오지 않는다. 값이 없는 경우가 예외가 아니라 정상 경로다.
  *
  * <p>연령대({@code age_range})는 받지 않는다. {@code "30~39"} 구간이라 카드의 {@code 32세}를
- * 만들 수 없어서, 출생연도만 쓴다.
+ * 만들 수 없어서, 출생연도와 생일만 쓴다.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record KakaoProfile(
@@ -22,7 +22,11 @@ public record KakaoProfile(
     public record KakaoAccount(
             String name,
             String gender,
-            String birthyear
+            String birthyear,
+            /** {@code "MMDD"} 형식. 연도는 들어 있지 않다. */
+            String birthday,
+            /** {@code "SOLAR"} 또는 {@code "LUNAR"}. */
+            @JsonProperty("birthday_type") String birthdayType
     ) {}
 
     public String name() {
@@ -43,5 +47,25 @@ public record KakaoProfile(
         } catch (NumberFormatException e) {
             return null;
         }
+    }
+
+    /**
+     * 생일을 {@code "MM-dd"} 형식으로. 만 나이를 정확히 계산하는 데 쓴다.
+     *
+     * <p><b>음력 생일은 쓰지 않는다.</b> 양력으로 변환하지 않고 그대로 계산하면 오히려 틀린
+     * 나이가 나온다. 이 경우 출생연도만으로 근사한다.
+     */
+    public String birthMonthDay() {
+        if (kakaoAccount == null || kakaoAccount.birthday() == null) {
+            return null;
+        }
+        if ("LUNAR".equalsIgnoreCase(kakaoAccount.birthdayType())) {
+            return null;
+        }
+        String raw = kakaoAccount.birthday();
+        if (raw.length() != 4 || !raw.chars().allMatch(Character::isDigit)) {
+            return null;
+        }
+        return raw.substring(0, 2) + "-" + raw.substring(2);
     }
 }

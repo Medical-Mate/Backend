@@ -64,7 +64,8 @@ public class AuthService {
                 user,
                 profile.name(),
                 Sex.fromKakao(profile.gender()),
-                profile.birthYear());
+                profile.birthYear(),
+                profile.birthMonthDay());
     }
 
     @Transactional

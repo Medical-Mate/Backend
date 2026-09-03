@@ -3,7 +3,10 @@ package com.jinryomate.backend.profile.entity;
 import com.jinryomate.backend.auth.entity.User;
 import jakarta.persistence.*;
 import java.time.Instant;
-import java.time.Year;
+import java.time.LocalDate;
+import java.time.MonthDay;
+import java.time.Period;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
 import lombok.AccessLevel;
@@ -48,6 +51,10 @@ public class HealthProfile {
     @Enumerated(EnumType.STRING)
     @Column(length = 16)
     private FieldSource birthYearSource;
+
+    /** {@code "MM-dd"}. 만 나이를 정확히 계산하는 데 쓴다. 없으면 출생연도만으로 근사한다. */
+    @Column(length = 5)
+    private String birthMonthDay;
 
     @Enumerated(EnumType.STRING)
     @Column(length = 16)
@@ -107,7 +114,8 @@ public class HealthProfile {
      * <p>사용자가 직접 고친 필드({@link FieldSource#SELF_INPUT})는 건드리지 않는다.
      * 값이 없는 항목(동의 거부)은 그냥 넘어간다.
      */
-    public void applyKakaoValues(String kakaoName, Sex kakaoSex, Integer kakaoBirthYear) {
+    public void applyKakaoValues(String kakaoName, Sex kakaoSex,
+                                 Integer kakaoBirthYear, String kakaoBirthMonthDay) {
         if (kakaoName != null && nameSource != FieldSource.SELF_INPUT) {
             this.name = kakaoName;
             this.nameSource = FieldSource.KAKAO;
@@ -120,11 +128,15 @@ public class HealthProfile {
             this.birthYear = kakaoBirthYear;
             this.birthYearSource = FieldSource.KAKAO;
         }
+        if (kakaoBirthMonthDay != null && birthYearSource != FieldSource.SELF_INPUT) {
+            this.birthMonthDay = kakaoBirthMonthDay;
+        }
     }
 
     /** 온보딩 저장. 여기서 들어온 값은 전부 사용자가 직접 넣은 것으로 표시한다. */
     public void completeOnboarding(String name,
                                    Integer birthYear,
+                                   String birthMonthDay,
                                    Sex sex,
                                    FieldStatus medicationsStatus, List<String> medications,
                                    FieldStatus conditionsStatus, List<String> conditions,
@@ -132,6 +144,7 @@ public class HealthProfile {
         this.name = name;
         this.nameSource = FieldSource.SELF_INPUT;
         this.birthYear = birthYear;
+        this.birthMonthDay = birthMonthDay;
         this.birthYearSource = FieldSource.SELF_INPUT;
         this.sex = sex;
         this.sexSource = FieldSource.SELF_INPUT;
@@ -154,9 +167,27 @@ public class HealthProfile {
         this.completedAt = Instant.now();
     }
 
-    /** 카드에 찍히는 만 나이. 생일 전이면 한 살 적게 나올 수 있으나 출생연도만으로는 그 이상 알 수 없다. */
+    /**
+     * 카드에 찍히는 만 나이.
+     *
+     * <p>생일까지 있으면 정확히 계산한다. 출생연도만 있으면 올해에서 빼는 근사값이라
+     * 생일 전인 사람은 한 살 많게 나온다.
+     */
     public Integer age() {
-        return birthYear == null ? null : Year.now().getValue() - birthYear;
+        if (birthYear == null) {
+            return null;
+        }
+        LocalDate today = LocalDate.now();
+        if (birthMonthDay != null) {
+            try {
+                // 2월 29일생이 평년 출생연도를 만나면 atYear 가 2월 28일로 맞춰준다.
+                LocalDate birth = MonthDay.parse("--" + birthMonthDay).atYear(birthYear);
+                return Period.between(birth, today).getYears();
+            } catch (DateTimeParseException e) {
+                // 저장된 값이 깨졌으면 근사값으로 넘어간다.
+            }
+        }
+        return today.getYear() - birthYear;
     }
 
     public boolean isOnboardingCompleted() {

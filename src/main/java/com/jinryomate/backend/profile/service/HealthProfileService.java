@@ -34,6 +34,7 @@ public class HealthProfileService {
         profile.completeOnboarding(
                 request.name(),
                 request.birthYear(),
+                request.birthMonthDay(),
                 request.sex(),
                 request.medications().status(), request.medications().items(),
                 request.conditions().status(), request.conditions().items(),
@@ -53,13 +54,14 @@ public class HealthProfileService {
      * <p>카카오 동의를 거부해 값이 하나도 없으면 아무것도 하지 않는다.
      */
     @Transactional
-    public void applyKakaoValues(User user, String name, Sex sex, Integer birthYear) {
-        if (name == null && sex == null && birthYear == null) {
+    public void applyKakaoValues(User user, String name, Sex sex,
+                                 Integer birthYear, String birthMonthDay) {
+        if (name == null && sex == null && birthYear == null && birthMonthDay == null) {
             return;
         }
         HealthProfile profile = repository.findByUserId(user.getId())
                 .orElseGet(() -> repository.save(HealthProfile.emptyFor(user)));
-        profile.applyKakaoValues(name, sex, birthYear);
+        profile.applyKakaoValues(name, sex, birthYear, birthMonthDay);
     }
 
     /** 온보딩을 마쳤는지. 로그인 응답에서 앱이 어느 화면으로 갈지 정하는 데 쓴다. */

@@ -9,6 +9,7 @@ import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import java.util.List;
 
@@ -51,6 +52,11 @@ public final class ProfileDtos {
             @Max(value = 2100, message = "출생연도를 확인해주세요.")
             Integer birthYear,
 
+            /** {@code "MM-dd"}. 선택. 있으면 만 나이를 정확히 계산한다. */
+            @Pattern(regexp = "^(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$",
+                    message = "생일은 MM-dd 형식입니다.")
+            String birthMonthDay,
+
             @NotNull(message = "성별이 필요합니다.")
             Sex sex,
 
@@ -74,6 +80,7 @@ public final class ProfileDtos {
     public record HealthProfileResponse(
             String name,
             Integer birthYear,
+            String birthMonthDay,
             Integer age,
             Sex sex,
             ListFieldResponse medications,
@@ -89,6 +96,7 @@ public final class ProfileDtos {
             return new HealthProfileResponse(
                     p.getName(),
                     p.getBirthYear(),
+                    p.getBirthMonthDay(),
                     p.age(),
                     p.getSex(),
                     new ListFieldResponse(p.getMedicationsStatus(), List.copyOf(p.getMedications())),
@@ -102,7 +110,7 @@ public final class ProfileDtos {
         /** 프로필이 아직 없는 사용자. 앱이 빈 온보딩 화면을 띄우면 된다. */
         public static HealthProfileResponse empty() {
             return new HealthProfileResponse(
-                    null, null, null, null,
+                    null, null, null, null, null,
                     new ListFieldResponse(FieldStatus.UNKNOWN, List.of()),
                     new ListFieldResponse(FieldStatus.UNKNOWN, List.of()),
                     new TextFieldResponse(FieldStatus.UNKNOWN, null),
