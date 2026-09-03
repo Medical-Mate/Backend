@@ -1,0 +1,34 @@
+# Gradle
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+
+# IntelliJ
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+
+# Eclipse / VS Code
+.classpath
+.project
+.settings/
+.vscode/
+bin/
+
+# 로그·임시 파일
+*.log
+logs/
+
+# 환경변수 (API 키가 들어간다 — 절대 커밋 금지)
+.env
+.env.*
+!.env.example
+
+# Claude Code worktree (저장소 안에 생기지만 추적 대상 아님)
+.claude/worktrees/
+
+# OS
+.DS_Store
+Thumbs.db
