@@ -42,6 +42,15 @@ docker compose up -d          # 로컬 PostgreSQL
 
 로컬 전용 설정은 `src/main/resources/application-local.yml.example`을 복사해서 씁니다. 복사본은 커밋되지 않습니다.
 
+**5432가 다른 프로젝트에 물려 있으면** `DB_PORT`를 비어 있는 포트로 지정합니다. `docker-compose`와 Spring이 같은 변수를 읽으므로 한 곳만 바꾸면 됩니다. 셸이나 IDE 실행 구성의 환경변수로 넣으세요.
+
+```bash
+DB_PORT=5434 docker compose up -d
+DB_PORT=5434 ./gradlew bootRun
+```
+
+앱을 컨테이너로 띄울 때는 DB 호스트가 `localhost`가 아니라 compose 서비스명이므로 `DB_HOST=postgres`를 함께 줍니다.
+
 **Spring Boot는 `.env`를 스스로 읽지 않습니다.** `.env`는 컨테이너 실행(`docker-compose`의 `env_file`) 전용이고, IDE·`gradlew` 실행은 `application-local.yml`을 씁니다.
 
 ---

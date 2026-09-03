@@ -1,3 +1,5 @@
+name: jinryomate
+
 # 로컬 개발용 PostgreSQL.  docker compose up -d
 services:
   postgres:
@@ -8,7 +10,7 @@ services:
       POSTGRES_USER: jinryomate
       POSTGRES_PASSWORD: local
     ports:
-      - "5432:5432"
+      - "${DB_PORT:-5432}:5432"
     volumes:
       - jinryomate-pgdata:/var/lib/postgresql/data
     healthcheck:
