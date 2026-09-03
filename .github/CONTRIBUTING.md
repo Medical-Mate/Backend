@@ -103,7 +103,7 @@ chore/add-commitlint-ci
 1. `main`에서 브랜치를 생성합니다.
 2. 작업 후 PR을 엽니다. `.github/PULL_REQUEST_TEMPLATE.md`가 자동으로 채워집니다.
 3. 템플릿의 안내 주석을 지우고 각 섹션을 실제 내용으로 채웁니다.
-4. CI(lint, typecheck, test, commitlint)가 통과할 때까지 수정합니다.
+4. CI(`build`, `commit-message`)가 통과할 때까지 수정합니다.
 5. **Squash and merge**로 머지합니다.
 
 ### PR 제목
@@ -132,8 +132,15 @@ feat: 주문 생성 시 재고 비관적 락 적용
 
 | 시점 | 검증 대상 | 수단 |
 |---|---|---|
-| 커밋 시 (로컬) | 커밋 메시지, 스테이징된 파일 lint | Husky + commitlint |
-| PR 생성·업데이트 시 | lint, typecheck, test, PR 내 전체 커밋 메시지 | GitHub Actions |
-| 머지 시 | 위 CI 통과 여부 | Ruleset (required status checks) |
+| PR 생성·업데이트 시 | 컴파일과 테스트 (`./gradlew build`) | GitHub Actions — `build` |
+| 머지 시 | 위 체크 통과, PR 필수, `main` 직접 푸시 금지 | Ruleset |
 
-로컬 훅은 `--no-verify`로 우회할 수 있습니다. 실제 강제는 CI와 Ruleset이 담당합니다.
+자바에서는 **컴파일이 곧 타입 검사**이므로 별도 typecheck 단계를 두지 않습니다. `./gradlew build`에 컴파일과 테스트가 모두 포함됩니다.
+
+**커밋 메시지는 CI에서 강제하지 않습니다.** Squash 머지라 히스토리에 남는 것은 PR 제목이고, 개별 커밋 제목을 막아 세울 실익이 크지 않다고 판단했습니다. 규칙은 사람이 지키고, 필요하면 아래 스크립트로 직접 확인합니다.
+
+```bash
+.github/scripts/check-commit-messages.sh origin/main HEAD
+```
+
+코드 스타일 검사(Spotless·Checkstyle)와 로컬 훅(Husky)도 넣지 않았습니다. 3주 일정에 룰셋 튜닝 시간이 아깝고, 로컬 훅은 `--no-verify`로 우회되어 실효가 낮습니다. 필요해지면 그때 도입합니다.
