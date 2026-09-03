@@ -26,6 +26,9 @@ logs/
 .env.*
 !.env.example
 
+# 로컬 전용 설정 (토큰이 들어간다)
+src/main/resources/application-local.yml
+
 # Claude Code worktree (저장소 안에 생기지만 추적 대상 아님)
 .claude/worktrees/
 
