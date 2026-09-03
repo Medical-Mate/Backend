@@ -64,3 +64,27 @@ kakao:
   api-base-url: ${KAKAO_API_BASE_URL:https://kapi.kakao.com}
   app-id: ${KAKAO_APP_ID:}
   admin-key: ${KAKAO_ADMIN_KEY:}
+
+# API 문서. 기본은 꺼둔다 — 운영에 실수로 열린 채 나가지 않게 안전한 쪽을 기본값으로.
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+
+---
+# 개발 프로필에서만 문서를 연다. SecurityConfig 의 경로 개방도 같은 프로필 기준이다.
+spring:
+  config:
+    activate:
+      on-profile: "local | dev"
+
+springdoc:
+  api-docs:
+    enabled: true
+  swagger-ui:
+    enabled: true
+    path: /swagger-ui.html
+    operations-sorter: method
+    tags-sorter: alpha
+    display-request-duration: true

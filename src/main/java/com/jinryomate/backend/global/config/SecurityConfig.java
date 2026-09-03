@@ -9,6 +9,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.env.Environment;
 import org.springframework.http.MediaType;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -28,8 +29,16 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 @RequiredArgsConstructor
 public class SecurityConfig {
 
+    /** API 문서를 여는 프로필. 그 외에서는 경로 자체를 열지 않는다. */
+    private static final String[] DOCS_PROFILES = {"local", "dev"};
+
+    private static final String[] DOCS_PATHS = {
+            "/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs", "/v3/api-docs/**"
+    };
+
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final ObjectMapper objectMapper;
+    private final Environment environment;
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
@@ -40,15 +49,21 @@ public class SecurityConfig {
                 .httpBasic(AbstractHttpConfigurer::disable)
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 
-                .authorizeHttpRequests(auth -> auth
-                        // --- 무인증으로 여는 경로 ---
-                        .requestMatchers("/api/auth/kakao", "/api/auth/refresh").permitAll()
-                        .requestMatchers("/api/health", "/actuator/health").permitAll()
-                        // 공유 링크(S6). 인증 대신 토큰 만료가 방어선이다.
-                        .requestMatchers("/s/**").permitAll()
+                .authorizeHttpRequests(auth -> {
+                    // --- 무인증으로 여는 경로 ---
+                    auth.requestMatchers("/api/auth/kakao", "/api/auth/refresh").permitAll();
+                    auth.requestMatchers("/api/health", "/actuator/health").permitAll();
+                    // 공유 링크(S6). 인증 대신 토큰 만료가 방어선이다.
+                    auth.requestMatchers("/s/**").permitAll();
 
-                        // --- 나머지는 전부 인증 필요 ---
-                        .anyRequest().authenticated())
+                    // API 문서는 개발 프로필에서만. 운영에서는 이 경로가 열리지 않는다.
+                    if (environment.matchesProfiles(DOCS_PROFILES)) {
+                        auth.requestMatchers(DOCS_PATHS).permitAll();
+                    }
+
+                    // --- 나머지는 전부 인증 필요 ---
+                    auth.anyRequest().authenticated();
+                })
 
                 .exceptionHandling(e -> e.authenticationEntryPoint(this::writeUnauthorized))
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
