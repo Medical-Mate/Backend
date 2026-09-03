@@ -93,7 +93,11 @@ com.jinryomate.backend
 
 ### 결정을 남기는 곳
 
-아래 **설계 결정 로그**에 한 줄로 남기고, 자세한 근거는 이슈에 둡니다.
+**노션 설계 결정 로그**가 단일 원천입니다. 아래 링크를 참고하세요.
+
+설계 결정이 확정되는 순간(“이걸로 가자”, “확정” 같은 답이 나온 직후) **바로 기록합니다.** 나중에 몰아서 쓰면 근거가 이미 사라져 있습니다. Claude Code에는 `.claude/skills/design-decision` 스킬이 있어 이 상황에서 자동으로 동작합니다.
+
+아직 안 정해진 것도 상태를 `재검토 필요`로 두고 기록합니다. 무엇을 기다리는지가 남아야 합니다.
 
 ---
 
@@ -171,17 +175,19 @@ S5 되묻기는 기억 재구성 방식입니다. 오디오 컬럼 자체를 만
 
 ## 설계 결정 로그
 
-| 결정 | 대안 → 선택 근거 | 이슈 |
-|---|---|---|
-| Java 21 + Gradle | Java 17 → **21**. AI 호출이 요청당 수 초 I/O 대기라 가상 스레드가 실이득 | [#2](https://github.com/Medical-Mate/Backend/issues/2) |
-| Spring Boot 3.5.16 | 4.1.1 → **3.5.16**. Security 설정이 버전마다 바뀌어 카카오 OAuth 예제 불일치 리스크 | [#2](https://github.com/Medical-Mate/Backend/issues/2) |
-| PostgreSQL | MySQL → **PG**. 카드 필드 확정 전이라 `jsonb`로 마이그레이션 횟수를 줄임 | [#2](https://github.com/Medical-Mate/Backend/issues/2) |
-| Spring Data JPA 단독 | QueryDSL·MyBatis → **JPA**. MVP에 검색·필터·정렬이 없음 | [#2](https://github.com/Medical-Mate/Backend/issues/2) |
-| `ddl-auto`로 시작 | Flyway 처음부터 → **`ddl-auto`**. 1주차 스키마 변동 구간의 속도를 택함 | [#2](https://github.com/Medical-Mate/Backend/issues/2) |
-| 도메인형 패키지 | 계층형 → **도메인형**. 도메인이 화면 단위로 이미 갈림 | [#2](https://github.com/Medical-Mate/Backend/issues/2) |
-| AI는 별도 서비스 | 백엔드 직접 프록시 → **별도 서비스**. 멀티 에이전트는 파이썬 생태계가 낫고 역할 경계가 선명해짐 | [#2](https://github.com/Medical-Mate/Backend/issues/2) |
-| 카카오 로그인, 회원번호만 | 기기 토큰·SMS → **카카오**. 이름·성별 등은 비즈앱 검수가 붙어 3주 크리티컬 패스에 외부 심사가 올라감 | [#2](https://github.com/Medical-Mate/Backend/issues/2) |
-| 콘솔 로깅만 | 파일 로깅 → **콘솔**. 증상이 평문으로 디스크에 쌓이는 것을 피함 | [#2](https://github.com/Medical-Mate/Backend/issues/2) |
+**노션에서 관리합니다.** 저장소에 표를 두면 두 곳이 갈라져서 한쪽이 낡습니다.
+
+[설계 결정 로그 (Notion)](https://app.notion.com/p/1cea038a97e74046b5158c4bab472538) · [진료메이트 프로젝트 페이지](https://app.notion.com/p/3d0eaf19306981efacd6cd60ffbfd25f)
+
+각 행은 `결정 · 날짜 · 영역 · 상태 · 검토한 대안 · 선택 근거 · 재검토 트리거 · 관련 링크`를 가집니다. 상태가 `재검토 필요`인 항목은 아래 미확정 항목과 같은 것들입니다.
+
+### 언제 기록하나
+
+**되돌리는 데 비용이 드는 선택을 했을 때** 기록합니다. 라이브러리·프레임워크 채택, 스키마 구조, 인증 방식, 외부 연동 형태, 저장하지 않기로 한 데이터 같은 것들입니다.
+
+변수명이나 메서드 분리처럼 코드를 읽으면 알 수 있는 것, 되돌리는 데 5분이면 되는 것은 기록하지 않습니다. 로그가 길어지면 아무도 안 읽습니다.
+
+Claude Code로 작업 중이라면 `/design-decision` 스킬이 노션에 바로 씁니다. 자세한 내용은 `.claude/skills/design-decision/SKILL.md`.
 
 ---
 
