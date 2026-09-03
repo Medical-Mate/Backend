@@ -51,3 +51,16 @@ logging:
     console: "%d{HH:mm:ss.SSS} %-5level [%X{requestId:-}] %logger{36} - %msg%n"
   level:
     com.jinryomate.backend: DEBUG
+
+# JWT. 시크릿은 환경변수로만 주입한다 (HS256이라 32바이트 이상 필요).
+auth:
+  jwt:
+    secret: ${JWT_SECRET:local-dev-secret-please-change-this-32bytes+}
+    access-ttl: 1h
+    refresh-ttl: 30d
+
+# 카카오. app-id 는 토큰이 우리 앱에서 발급된 것인지 확인하는 데 쓴다.
+kakao:
+  api-base-url: ${KAKAO_API_BASE_URL:https://kapi.kakao.com}
+  app-id: ${KAKAO_APP_ID:}
+  admin-key: ${KAKAO_ADMIN_KEY:}
