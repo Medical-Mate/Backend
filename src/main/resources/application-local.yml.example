@@ -1,0 +1,6 @@
+# 이 파일을 application-local.yml 로 복사해서 쓰세요. 복사본은 커밋되지 않습니다.
+# 실행: ./gradlew bootRun --args='--spring.profiles.active=local'
+#      또는 IntelliJ 실행 구성의 Active profiles 에 local
+ai:
+  base-url: http://localhost:8000
+  internal-token: 로컬에서-쓸-토큰
