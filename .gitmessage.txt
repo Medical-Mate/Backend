@@ -26,5 +26,5 @@
 # · 한 커밋에는 하나의 논리적 변경만 담는다
 # · 변경 이유가 확인되지 않았다면 추측해서 채우지 않는다
 #
-# 로컬에서 미리 검사:
+# 규칙을 직접 확인하고 싶으면 (선택):
 #   .github/scripts/check-commit-messages.sh origin/main HEAD

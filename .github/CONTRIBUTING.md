@@ -133,17 +133,14 @@ feat: 주문 생성 시 재고 비관적 락 적용
 | 시점 | 검증 대상 | 수단 |
 |---|---|---|
 | PR 생성·업데이트 시 | 컴파일과 테스트 (`./gradlew build`) | GitHub Actions — `build` |
-| PR 생성·업데이트 시 | PR에 담긴 모든 커밋의 제목 | GitHub Actions — `commit-message` |
-| 머지 시 | 위 두 체크 통과, PR 필수, `main` 직접 푸시 금지 | Ruleset |
+| 머지 시 | 위 체크 통과, PR 필수, `main` 직접 푸시 금지 | Ruleset |
 
 자바에서는 **컴파일이 곧 타입 검사**이므로 별도 typecheck 단계를 두지 않습니다. `./gradlew build`에 컴파일과 테스트가 모두 포함됩니다.
 
-코드 스타일 검사(Spotless·Checkstyle)는 아직 넣지 않았습니다. 팀원이 늘거나 리뷰에서 포맷 지적이 반복되면 그때 도입합니다.
-
-**로컬 훅은 두지 않습니다.** `--no-verify`로 우회되어 실효가 낮고, Husky는 Node 의존성을 자바 저장소에 끌어옵니다. 실제 강제는 CI와 Ruleset이 담당합니다.
-
-커밋 메시지 규칙은 `.github/scripts/check-commit-messages.sh`가 검사합니다. 로컬에서 미리 확인하려면:
+**커밋 메시지는 CI에서 강제하지 않습니다.** Squash 머지라 히스토리에 남는 것은 PR 제목이고, 개별 커밋 제목을 막아 세울 실익이 크지 않다고 판단했습니다. 규칙은 사람이 지키고, 필요하면 아래 스크립트로 직접 확인합니다.
 
 ```bash
 .github/scripts/check-commit-messages.sh origin/main HEAD
 ```
+
+코드 스타일 검사(Spotless·Checkstyle)와 로컬 훅(Husky)도 넣지 않았습니다. 3주 일정에 룰셋 튜닝 시간이 아깝고, 로컬 훅은 `--no-verify`로 우회되어 실효가 낮습니다. 필요해지면 그때 도입합니다.

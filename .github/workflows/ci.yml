@@ -42,19 +42,3 @@ jobs:
           name: test-report
           path: build/reports/tests/test
           retention-days: 7
-
-  commit-message:
-    name: commit-message
-    runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
-    steps:
-      # 커밋 이력을 비교해야 하므로 전체를 받는다.
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: 커밋 메시지 규칙 검사
-        run: |
-          .github/scripts/check-commit-messages.sh \
-            "${{ github.event.pull_request.base.sha }}" \
-            "${{ github.event.pull_request.head.sha }}"
