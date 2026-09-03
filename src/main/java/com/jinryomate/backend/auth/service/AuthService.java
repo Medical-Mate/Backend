@@ -1,6 +1,7 @@
 package com.jinryomate.backend.auth.service;
 
 import com.jinryomate.backend.auth.client.KakaoClient;
+import com.jinryomate.backend.auth.client.KakaoProfile;
 import com.jinryomate.backend.auth.dto.AuthDtos.TokenResponse;
 import com.jinryomate.backend.auth.entity.Device;
 import com.jinryomate.backend.auth.entity.RefreshToken;
@@ -10,6 +11,8 @@ import com.jinryomate.backend.auth.repository.RefreshTokenRepository;
 import com.jinryomate.backend.auth.repository.UserRepository;
 import com.jinryomate.backend.global.error.ApiException;
 import com.jinryomate.backend.global.error.ErrorCode;
+import com.jinryomate.backend.profile.entity.Sex;
+import com.jinryomate.backend.profile.service.HealthProfileService;
 import java.time.Instant;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
@@ -27,12 +30,13 @@ public class AuthService {
     private final UserRepository userRepository;
     private final DeviceRepository deviceRepository;
     private final RefreshTokenRepository refreshTokenRepository;
+    private final HealthProfileService healthProfileService;
 
     /**
      * 카카오 로그인. 처음 온 회원번호면 가입시키고, 있으면 그 사용자로 로그인한다.
      *
-     * <p>온보딩 완료 여부는 아직 프로필 도메인이 없어 "신규 가입 여부"로 대신한다.
-     * 프로필이 생기면 그 존재 여부로 바꾼다.
+     * <p>동의항목으로 받은 이름·성별·출생연도가 있으면 프로필에 미리 채워 온보딩 입력을 줄인다.
+     * 값이 없어도(동의 거부, 검수 전) 정상 경로다 — 온보딩에서 직접 받으면 된다.
      */
     @Transactional
     public TokenResponse loginWithKakao(String kakaoAccessToken) {
@@ -42,10 +46,26 @@ public class AuthService {
         boolean isNew = existing.isEmpty();
         User user = existing.orElseGet(() -> userRepository.save(User.ofKakao(kakaoId)));
 
+        applyKakaoProfile(user, kakaoAccessToken);
+
         // 카카오 회원번호는 개인정보라 로그에 남기지 않는다. 내부 id만 남긴다.
         log.info("카카오 로그인 성공 userId={} isNew={}", user.getId(), isNew);
 
-        return issueTokens(user, isNew);
+        boolean onboardingRequired = !healthProfileService.isOnboardingCompleted(user.getId());
+        return issueTokens(user, onboardingRequired);
+    }
+
+    private void applyKakaoProfile(User user, String kakaoAccessToken) {
+        KakaoProfile profile = kakaoClient.fetchProfile(kakaoAccessToken);
+        if (profile == null) {
+            return;
+        }
+        healthProfileService.applyKakaoValues(
+                user,
+                profile.name(),
+                Sex.fromKakao(profile.gender()),
+                profile.birthYear(),
+                profile.birthMonthDay());
     }
 
     @Transactional
@@ -78,6 +98,7 @@ public class AuthService {
         User user = findUser(userId);
         Long kakaoId = user.getKakaoId();
 
+        healthProfileService.deleteByUser(user);
         refreshTokenRepository.deleteAllByUser(user);
         deviceRepository.deleteAllByUser(user);
         userRepository.delete(user);

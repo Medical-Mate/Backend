@@ -62,6 +62,26 @@ public class KakaoClient {
     }
 
     /**
+     * 동의항목으로 받은 프로필을 가져온다.
+     *
+     * <p>실패하거나 동의 항목이 없으면 {@code null}을 돌려준다. <b>로그인을 막지 않는다</b> —
+     * 프로필은 온보딩 입력으로도 채울 수 있으므로, 카카오 사정으로 로그인이 실패하면 안 된다.
+     */
+    public KakaoProfile fetchProfile(String kakaoAccessToken) {
+        try {
+            return restClient.get()
+                    .uri("/v2/user/me")
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + kakaoAccessToken)
+                    .retrieve()
+                    .body(KakaoProfile.class);
+        } catch (Exception e) {
+            log.info("카카오 프로필 조회 실패 — 온보딩 입력으로 진행합니다. {}",
+                    e.getClass().getSimpleName());
+            return null;
+        }
+    }
+
+    /**
      * 연결 끊기. 어드민 키가 설정돼 있을 때만 시도한다.
      *
      * <p>실패해도 예외를 던지지 않는다. 탈퇴 요청은 카카오 API 사정과 무관하게 처리돼야 한다.
