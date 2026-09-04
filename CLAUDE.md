@@ -1,3 +1,5 @@
+| 스키마 | Flyway 마이그레이션. `ddl-auto: validate` |
+| 테스트 DB | Testcontainers PostgreSQL — **Docker 필요** |
 # CLAUDE.md
 
 진료메이트 백엔드 저장소. 사람과 Claude Code가 함께 읽는 기준 문서입니다.
@@ -27,7 +29,10 @@
 | 빌드 | Gradle 8.14 (Wrapper) |
 | DB | PostgreSQL 16 |
 | 영속성 | Spring Data JPA 단독 |
-| 스키마 | `ddl-auto: update` — 안정되면 Flyway로 전환 |
+| 스키마 | Flyway 마이그레이션. `ddl-auto: validate` |
+| 인증 | Spring Security · jjwt 0.12.7 |
+| API 문서 | springdoc-openapi 2.9.0 (`local`·`dev` 프로필만) |
+| 테스트 DB | Testcontainers PostgreSQL — **Docker 필요** |
 
 ---
 
@@ -39,6 +44,10 @@ docker compose up -d          # 로컬 PostgreSQL
 ./gradlew build               # 컴파일 + 테스트
 ./gradlew test                # 테스트만
 ```
+
+**테스트에는 Docker 가 떠 있어야 합니다.** 테스트 DB 를 Testcontainers 로 띄우기 때문입니다. H2 를 쓰지 않는 이유는 Flyway 마이그레이션이 PostgreSQL 문법이라, H2 로 검증하면 마이그레이션이 깨져도 테스트가 통과하기 때문입니다.
+
+**스키마 변경은 마이그레이션 파일로만 합니다.** `src/main/resources/db/migration/` 에 `V2__...sql` 형태로 추가하세요. `ddl-auto` 는 `validate` 라 엔티티와 어긋나면 기동 시점에 실패합니다.
 
 로컬 전용 설정은 `src/main/resources/application-local.yml.example`을 복사해서 씁니다. 복사본은 커밋되지 않습니다.
 
@@ -162,8 +171,12 @@ AI 서비스가 준 카드는 그대로 저장하지 않습니다.
 
 ### 카카오 로그인
 
-- 동의항목은 **회원번호만**. 이름·나이·성별은 온보딩에서 직접 입력받습니다
+- 동의항목은 **회원번호 · 이름 · 성별 · 출생연도 · 생일**입니다 (비즈니스 앱 전환). 이메일·전화번호는 받지 않습니다
+- **생일과 출생연도는 별개 동의항목입니다.** 생일만 켜면 `MMDD`만 와서 나이를 만들 수 없습니다
+- **값이 없는 경우가 정상 경로입니다.** 선택 동의는 거부할 수 있고 검수 전에는 항목이 안 내려옵니다. 카카오 조회가 실패해도 로그인을 막지 않고, 온보딩 입력만으로 동작해야 합니다
+- 나이가 아니라 **출생연도 + 생일**을 저장합니다. 나이는 해가 바뀌면 낡고, 카카오 연령대(`30~39`)로는 카드의 `32세`를 못 만듭니다. **음력 생일은 나이 계산에서 제외**합니다 — 양력 변환 없이 쓰면 오히려 틀립니다
 - **앱이 보낸 카카오 토큰을 그대로 믿지 않습니다.** 서버가 카카오에 재검증하고, 토큰의 앱 ID가 우리 앱인지까지 확인한 뒤 자체 JWT를 발급합니다
+- refresh 토큰은 **해시로 저장**하고 쓰면 즉시 폐기합니다(회전)
 - 카카오 토큰은 저장하지 않습니다
 - `device`는 로그인 수단이 아니라 **푸시 대상**입니다 (`user` 1 : `device` N)
 

@@ -16,8 +16,8 @@ spring:
 
   jpa:
     hibernate:
-      # 스키마가 확정되기 전까지 update로 간다. 안정되면 Flyway로 고정한다.
-      ddl-auto: update
+      # 스키마는 Flyway 가 만든다. 엔티티와 어긋나면 기동 시점에 잡아낸다.
+      ddl-auto: validate
     open-in-view: false
     properties:
       hibernate:
