@@ -8,6 +8,12 @@ spring:
     virtual:
       enabled: true
 
+  # 사진 첨부. 서비스에서도 10MB로 막지만, 여기서 걸러야 큰 요청이 파싱 전에 끊긴다.
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 12MB
+
   datasource:
     url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/jinryomate
     username: jinryomate
