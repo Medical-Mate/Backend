@@ -15,6 +15,7 @@ import com.jinryomate.backend.global.error.ErrorCode;
 import com.jinryomate.backend.intake.repository.IntakeSessionRepository;
 import com.jinryomate.backend.profile.entity.Sex;
 import com.jinryomate.backend.profile.service.HealthProfileService;
+import com.jinryomate.backend.visit.repository.VisitRecordRepository;
 import java.time.Instant;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
@@ -35,6 +36,7 @@ public class AuthService {
     private final HealthProfileService healthProfileService;
     private final BriefingCardRepository briefingCardRepository;
     private final IntakeSessionRepository intakeSessionRepository;
+    private final VisitRecordRepository visitRecordRepository;
 
     /**
      * 카카오 로그인. 처음 온 회원번호면 가입시키고, 있으면 그 사용자로 로그인한다.
@@ -102,7 +104,8 @@ public class AuthService {
         User user = findUser(userId);
         Long kakaoId = user.getKakaoId();
 
-        // 카드 → 세션 → 프로필 순으로 지운다. 카드가 세션을 참조하고 있다.
+        // 기록 → 카드 → 세션 → 프로필 순으로 지운다. 뒤쪽이 앞쪽을 참조하고 있다.
+        visitRecordRepository.deleteAllByUser(user);
         briefingCardRepository.deleteAllByUser(user);
         intakeSessionRepository.deleteAllByUser(user);
         healthProfileService.deleteByUser(user);
