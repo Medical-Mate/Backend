@@ -33,6 +33,11 @@ src/main/resources/application-local.yml
 # Claude Code worktree (저장소 안에 생기지만 추적 대상 아님)
 .claude/worktrees/
 
+# bootRun 을 돌릴 때 나오는 로그. 실행 로그에 요청 값이 섞일 수 있다.
+boot.log
+boot.err
+*.log
+
 # OS
 .DS_Store
 Thumbs.db
