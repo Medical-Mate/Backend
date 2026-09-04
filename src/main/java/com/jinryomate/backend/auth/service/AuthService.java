@@ -10,7 +10,9 @@ import com.jinryomate.backend.auth.repository.DeviceRepository;
 import com.jinryomate.backend.auth.repository.RefreshTokenRepository;
 import com.jinryomate.backend.auth.repository.UserRepository;
 import com.jinryomate.backend.global.error.ApiException;
+import com.jinryomate.backend.card.repository.BriefingCardRepository;
 import com.jinryomate.backend.global.error.ErrorCode;
+import com.jinryomate.backend.intake.repository.IntakeSessionRepository;
 import com.jinryomate.backend.profile.entity.Sex;
 import com.jinryomate.backend.profile.service.HealthProfileService;
 import java.time.Instant;
@@ -31,6 +33,8 @@ public class AuthService {
     private final DeviceRepository deviceRepository;
     private final RefreshTokenRepository refreshTokenRepository;
     private final HealthProfileService healthProfileService;
+    private final BriefingCardRepository briefingCardRepository;
+    private final IntakeSessionRepository intakeSessionRepository;
 
     /**
      * 카카오 로그인. 처음 온 회원번호면 가입시키고, 있으면 그 사용자로 로그인한다.
@@ -98,6 +102,9 @@ public class AuthService {
         User user = findUser(userId);
         Long kakaoId = user.getKakaoId();
 
+        // 카드 → 세션 → 프로필 순으로 지운다. 카드가 세션을 참조하고 있다.
+        briefingCardRepository.deleteAllByUser(user);
+        intakeSessionRepository.deleteAllByUser(user);
         healthProfileService.deleteByUser(user);
         refreshTokenRepository.deleteAllByUser(user);
         deviceRepository.deleteAllByUser(user);
