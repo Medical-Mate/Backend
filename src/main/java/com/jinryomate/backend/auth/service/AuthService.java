@@ -88,7 +88,12 @@ public class AuthService {
 
         // 회전: 쓴 토큰은 즉시 막고 새로 발급한다. 탈취된 토큰의 수명을 줄인다.
         saved.revoke();
-        return issueTokens(saved.getUser(), false);
+
+        // 로그인과 같은 값을 계산한다. false 로 박아두면 앱 재실행 시 자동 로그인에서
+        // 온보딩을 안 끝낸 사용자가 빈 프로필로 홈에 들어간다.
+        User user = saved.getUser();
+        boolean onboardingRequired = !healthProfileService.isOnboardingCompleted(user.getId());
+        return issueTokens(user, onboardingRequired);
     }
 
     @Transactional

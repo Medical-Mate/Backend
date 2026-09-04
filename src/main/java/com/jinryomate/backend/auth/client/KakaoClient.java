@@ -52,7 +52,9 @@ public class KakaoClient {
         }
 
         // 다른 서비스에서 발급된 정상 카카오 토큰이 그대로 통과하는 것을 막는 유일한 방어선.
-        if (properties.appId() != null && !properties.appId().equals(info.appId())) {
+        // appId 는 KakaoProperties 에서 @NotNull 이라 여기까지 왔으면 반드시 값이 있다.
+        // null 검사를 두면 설정이 빠졌을 때 조용히 통과하게 된다.
+        if (!properties.appId().equals(info.appId())) {
             log.warn("다른 앱의 카카오 토큰 유입 — expected={}, actual={}",
                     properties.appId(), info.appId());
             throw new ApiException(ErrorCode.UNAUTHORIZED, "카카오 로그인에 실패했습니다.");

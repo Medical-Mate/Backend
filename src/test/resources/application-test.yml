@@ -4,3 +4,9 @@ spring:
   jpa:
     hibernate:
       ddl-auto: validate
+
+# 카카오 앱 ID. 테스트에서 카카오 API 는 목으로 대체하지만, 이 값이 없으면
+# KakaoProperties 의 @NotNull 에 걸려 컨텍스트가 아예 안 뜬다.
+# 그게 의도한 동작이다 — 설정이 빠지면 조용히 넘어가지 않고 즉시 실패한다.
+kakao:
+  app-id: 999999
