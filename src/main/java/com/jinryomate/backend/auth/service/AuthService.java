@@ -10,6 +10,7 @@ import com.jinryomate.backend.auth.repository.DeviceRepository;
 import com.jinryomate.backend.auth.repository.RefreshTokenRepository;
 import com.jinryomate.backend.auth.repository.UserRepository;
 import com.jinryomate.backend.global.error.ApiException;
+import com.jinryomate.backend.attachment.repository.AttachmentRepository;
 import com.jinryomate.backend.card.repository.BriefingCardRepository;
 import com.jinryomate.backend.global.error.ErrorCode;
 import com.jinryomate.backend.handoff.repository.ShareLinkRepository;
@@ -38,6 +39,7 @@ public class AuthService {
     private final BriefingCardRepository briefingCardRepository;
     private final IntakeSessionRepository intakeSessionRepository;
     private final VisitRecordRepository visitRecordRepository;
+    private final AttachmentRepository attachmentRepository;
     private final ShareLinkRepository shareLinkRepository;
 
     /**
@@ -106,8 +108,10 @@ public class AuthService {
         User user = findUser(userId);
         Long kakaoId = user.getKakaoId();
 
-        // 공유 링크 → 기록 → 카드 → 세션 → 프로필 순으로 지운다. 뒤쪽이 앞쪽을 참조하고 있다.
-        // 공유 링크를 먼저 지워야 한다. 카드를 참조하고 있어 남으면 삭제가 막힌다.
+        // 첨부·공유 링크 → 기록 → 카드 → 세션 → 프로필 순으로 지운다.
+        // 뒤쪽이 앞쪽을 참조하고 있어 순서를 바꾸면 외래키에 걸린다.
+        // 첨부는 기록·프로필을, 공유 링크는 카드를 참조한다. 둘 사이 순서는 상관없다.
+        attachmentRepository.deleteAllByUser(user);
         shareLinkRepository.deleteAllByUser(user);
         visitRecordRepository.deleteAllByUser(user);
         briefingCardRepository.deleteAllByUser(user);
