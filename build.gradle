@@ -60,3 +60,12 @@ tasks.withType(JavaCompile).configureEach {
 tasks.named('test') {
     useJUnitPlatform()
 }
+
+// 로컬 설정에는 실제 비밀값이 들어간다 (카카오 Admin 키, JWT 시크릿).
+// src/main/resources 에 있어서 그냥 두면 배포용 jar 안에 그대로 박힌다.
+//
+// bootJar 에서만 뺀다. processResources 는 건드리지 않으므로
+// bootRun 과 IDE 실행은 여전히 이 파일을 읽는다.
+tasks.named('bootJar') {
+    exclude '**/application-local.yml'
+}
