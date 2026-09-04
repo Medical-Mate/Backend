@@ -10,6 +10,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.jinryomate.backend.TestcontainersConfig;
 import com.jinryomate.backend.auth.client.KakaoClient;
 import com.jinryomate.backend.auth.client.KakaoProfile;
 import com.jinryomate.backend.auth.dto.AuthDtos.KakaoLoginRequest;
@@ -27,6 +28,7 @@ import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.context.annotation.Import;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -42,6 +44,7 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>카카오 API는 목으로 대체한다. 동의 거부(값 없음)와 동의 허용(값 있음)을 모두 확인한다 —
  * 값이 없는 경우가 예외가 아니라 정상 경로다.
  */
+@Import(TestcontainersConfig.class)
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
