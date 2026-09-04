@@ -1,6 +1,16 @@
 # 이 파일을 application-local.yml 로 복사해서 쓰세요. 복사본은 커밋되지 않습니다.
 # 실행: ./gradlew bootRun --args='--spring.profiles.active=local'
 #      또는 IntelliJ 실행 구성의 Active profiles 에 local
+# JWT 서명 키. application.yml 에는 기본값이 없어 여기서 줘야 서버가 뜹니다.
+#
+# 기본값을 두지 않는 이유는, 저장소에 있는 문자열로 서명하면 그걸 아는 누구나
+# 아무 사용자의 토큰이든 위조할 수 있기 때문입니다. 로그인은 멀쩡히 동작해서
+# 눈치채지 못합니다.
+auth:
+  jwt:
+    # 32바이트 이상. 로컬 전용이라 아무 값이나 되지만, 운영 값을 여기 쓰지 마세요.
+    secret: local-dev-secret-please-change-this-32bytes+
+
 ai:
   base-url: http://localhost:8000
   internal-token: 로컬에서-쓸-토큰

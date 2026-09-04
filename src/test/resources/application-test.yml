@@ -10,3 +10,9 @@ spring:
 # 그게 의도한 동작이다 — 설정이 빠지면 조용히 넘어가지 않고 즉시 실패한다.
 kakao:
   app-id: 999999
+
+# 테스트 전용 서명 키. application.yml 에는 기본값이 없어 여기서 줘야 컨텍스트가 뜬다.
+# 운영 값과 겹치지 않게 테스트임이 드러나는 문자열을 쓴다.
+auth:
+  jwt:
+    secret: test-only-signing-key-not-used-anywhere-else-32b+

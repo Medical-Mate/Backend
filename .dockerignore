@@ -12,6 +12,9 @@ out
 .env.*
 !.env.example
 
+# 로컬 설정. 실제 비밀값이 들어간다.
+src/main/resources/application-local.yml
+
 *.log
 logs/
 
