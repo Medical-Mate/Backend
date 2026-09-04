@@ -9,7 +9,6 @@ import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.core.env.Environment;
 import org.springframework.http.MediaType;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -29,16 +28,21 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 @RequiredArgsConstructor
 public class SecurityConfig {
 
-    /** API 문서를 여는 프로필. 그 외에서는 경로 자체를 열지 않는다. */
-    private static final String[] DOCS_PROFILES = {"local", "dev"};
-
+    /**
+     * API 문서 경로. 모든 프로필에서 연다.
+     *
+     * <p>예전에는 {@code local}·{@code dev} 에서만 열었다. 앱·AI 담당자가 배포된
+     * 서버를 보고 붙어야 하고, 발표에서도 API 를 보여줘야 해서 운영에서도 연다.
+     *
+     * <p>문서가 열려도 <b>엔드포인트는 여전히 JWT 를 요구한다.</b> 드러나는 것은
+     * 어떤 API 가 있는지이지 데이터가 아니다. 그 대가로 얻는 것이 더 크다고 봤다.
+     */
     private static final String[] DOCS_PATHS = {
             "/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs", "/v3/api-docs/**"
     };
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final ObjectMapper objectMapper;
-    private final Environment environment;
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
@@ -56,10 +60,8 @@ public class SecurityConfig {
                     // 공유 링크(S6). 인증 대신 토큰 만료가 방어선이다.
                     auth.requestMatchers("/s/**").permitAll();
 
-                    // API 문서는 개발 프로필에서만. 운영에서는 이 경로가 열리지 않는다.
-                    if (environment.matchesProfiles(DOCS_PROFILES)) {
-                        auth.requestMatchers(DOCS_PATHS).permitAll();
-                    }
+                    // API 문서. 운영 포함 모든 환경에서 연다.
+                    auth.requestMatchers(DOCS_PATHS).permitAll();
 
                     // --- 나머지는 전부 인증 필요 ---
                     auth.anyRequest().authenticated();

@@ -31,7 +31,7 @@
 | 영속성 | Spring Data JPA 단독 |
 | 스키마 | Flyway 마이그레이션. `ddl-auto: validate` |
 | 인증 | Spring Security · jjwt 0.12.7 |
-| API 문서 | springdoc-openapi 2.9.0 (`local`·`dev` 프로필만) |
+| API 문서 | springdoc-openapi 2.9.0 (운영 포함 전 환경 공개) |
 | 테스트 DB | Testcontainers PostgreSQL — **Docker 필요** |
 
 ---
