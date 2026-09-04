@@ -146,6 +146,14 @@ public class BriefingCard {
 
     private Instant confirmedAt;
 
+    /**
+     * 환자가 이 카드를 의사에게 보여준 시각.
+     *
+     * <p>S5 진료 후 기록을 재촉할 근거가 이 값이다. 전달한 적 없는 카드에
+     * "진료 어떠셨어요"를 물으면 안 된다.
+     */
+    private Instant handedOffAt;
+
     // --- 생성 ---
 
     private BriefingCard(User user, IntakeSession session) {
@@ -228,6 +236,20 @@ public class BriefingCard {
         this.questions = new ArrayList<>(source.questions);
         this.suggestedDepartment = source.suggestedDepartment;
         this.evidence = new LinkedHashMap<>(source.evidence);
+    }
+
+    // --- 전달 ---
+
+    /** 확정된 카드만 의사에게 보여줄 수 있다. 초안을 의사가 보면 안 된다. */
+    public boolean isHandoffReady() {
+        return status == CardStatus.CONFIRMED;
+    }
+
+    /** 처음 보여준 시각만 남긴다. 다시 열었다고 진료 시각이 뒤로 밀리지는 않는다. */
+    public void markHandedOff() {
+        if (handedOffAt == null) {
+            this.handedOffAt = Instant.now();
+        }
     }
 
     public boolean isOwnedBy(Long userId) {
