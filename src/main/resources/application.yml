@@ -58,6 +58,12 @@ logging:
   level:
     com.jinryomate.backend: DEBUG
 
+# 공유 링크. 인증 없이 열리는 주소라 만료가 유일한 방어선이다.
+# 앱이 S6 화면에 들어올 때마다 새로 발급하므로 짧아도 불편하지 않다.
+handoff:
+  share-ttl: ${SHARE_TTL:24h}
+  public-base-url: ${PUBLIC_BASE_URL:http://localhost:8080}
+
 # JWT. 시크릿은 환경변수로만 주입한다 (HS256이라 32바이트 이상 필요).
 auth:
   jwt:
