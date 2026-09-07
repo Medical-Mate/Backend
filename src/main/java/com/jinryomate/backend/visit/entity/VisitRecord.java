@@ -5,8 +5,6 @@ import com.jinryomate.backend.card.entity.BriefingCard;
 import jakarta.persistence.*;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.util.ArrayList;
-import java.util.List;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -68,10 +66,6 @@ public class VisitRecord {
     @Column(length = 2000)
     private String rawNote;
 
-    @OneToMany(mappedBy = "visitRecord", cascade = CascadeType.ALL, orphanRemoval = true)
-    @OrderBy("seq ASC")
-    private List<ComprehensionCheck> checks = new ArrayList<>();
-
     @Column(nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 
@@ -92,19 +86,6 @@ public class VisitRecord {
         this.result = result;
         this.prescription = prescription;
         this.rawNote = rawNote;
-    }
-
-    public void addCheck(ComprehensionCheck check) {
-        checks.add(check);
-    }
-
-    public int nextSeq() {
-        return checks.size() + 1;
-    }
-
-    /** 아직 답하지 않은 문항 수. 앱이 "3문항 중 2"를 표시하는 데 쓴다. */
-    public long answeredCount() {
-        return checks.stream().filter(ComprehensionCheck::isAnswered).count();
     }
 
     public boolean isOwnedBy(Long userId) {

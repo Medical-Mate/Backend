@@ -3,7 +3,6 @@ package com.jinryomate.backend.handoff;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.BDDMockito.given;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -36,7 +35,11 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
-/** 진료실 전달(S4)과 공유 링크(S6) 통합 테스트. */
+/**
+ * 진료실 전달 (화면 1f).
+ *
+ * <p>환자가 자기 화면을 의사에게 보여준다. 공유 링크는 새 와이어프레임에서 보류가 되어 뺐다.
+ */
 @Import(TestcontainersConfig.class)
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -62,11 +65,9 @@ class HandoffApiTest {
         token = "Bearer " + login().accessToken();
     }
 
-    // ---------- S4 진료실 전달 ----------
-
     @Test
     @DisplayName("확정하지 않은 카드는 의사에게 보여줄 수 없다")
-    void 미확정_카드_전달_거부() throws Exception {
+    void 미확정_카드_거부() throws Exception {
         long cardId = createCard();
 
         mockMvc.perform(get("/api/cards/" + cardId + "/handoff").header("Authorization", token))
@@ -113,130 +114,32 @@ class HandoffApiTest {
         assertThat(cardRepository.findById(cardId).orElseThrow().getHandedOffAt()).isNotNull();
     }
 
-    // ---------- S6 공유 링크 ----------
-
     @Test
-    @DisplayName("링크를 발급하면 토큰과 주소가 함께 온다")
-    void 링크_발급() throws Exception {
+    @DisplayName("남의 카드는 열 수 없고, 토큰이 없으면 401이다")
+    void 접근_제어() throws Exception {
         long cardId = confirmedCard();
-
-        mockMvc.perform(post("/api/cards/" + cardId + "/share").header("Authorization", token))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.shareLinkId").exists())
-                // 128비트를 Base64URL 로 적으면 22자다.
-                .andExpect(jsonPath("$.token").value(org.hamcrest.Matchers.hasLength(22)))
-                .andExpect(jsonPath("$.url").exists())
-                .andExpect(jsonPath("$.expiresAt").exists())
-                .andExpect(jsonPath("$.viewCount").value(0));
-    }
-
-    @Test
-    @DisplayName("확정하지 않은 카드로는 링크를 만들 수 없다")
-    void 미확정_카드_링크_거부() throws Exception {
-        long cardId = createCard();
-
-        mockMvc.perform(post("/api/cards/" + cardId + "/share").header("Authorization", token))
-                .andExpect(status().isBadRequest());
-    }
-
-    @Test
-    @DisplayName("공유된 카드는 로그인 없이 열린다")
-    void 공개_열람() throws Exception {
-        String shareToken = issueShareToken(confirmedCard());
-
-        // Authorization 헤더가 없다.
-        mockMvc.perform(get("/s/" + shareToken))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.patient.name").value("김서연"))
-                .andExpect(jsonPath("$.title").exists());
-    }
-
-    @Test
-    @DisplayName("공유 응답에 내부 식별자가 새지 않는다")
-    void 공개_응답_식별자_비노출() throws Exception {
-        String shareToken = issueShareToken(confirmedCard());
-
-        mockMvc.perform(get("/s/" + shareToken))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.cardId").doesNotExist())
-                .andExpect(jsonPath("$.sessionId").doesNotExist())
-                .andExpect(jsonPath("$.meta").doesNotExist());
-    }
-
-    @Test
-    @DisplayName("열람하면 횟수가 오른다")
-    void 열람_기록() throws Exception {
-        long cardId = confirmedCard();
-        String shareToken = issueShareToken(cardId);
-
-        mockMvc.perform(get("/s/" + shareToken)).andExpect(status().isOk());
-        mockMvc.perform(get("/s/" + shareToken)).andExpect(status().isOk());
-
-        mockMvc.perform(get("/api/me/share-links").header("Authorization", token))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].viewCount").value(2))
-                .andExpect(jsonPath("$[0].viewedAt").exists());
-    }
-
-    @Test
-    @DisplayName("폐기한 링크는 더 이상 열리지 않는다")
-    void 폐기() throws Exception {
-        long cardId = confirmedCard();
-        String body = issueShare(cardId);
-        long shareLinkId = objectMapper.readTree(body).path("shareLinkId").asLong();
-        String shareToken = objectMapper.readTree(body).path("token").asText();
-
-        mockMvc.perform(delete("/api/share-links/" + shareLinkId).header("Authorization", token))
-                .andExpect(status().isNoContent());
-
-        // 폐기·만료·없음을 모두 404 로 묶는다. 구분해 알려주면 토큰 존재가 새어 나간다.
-        mockMvc.perform(get("/s/" + shareToken))
-                .andExpect(status().isNotFound());
-    }
-
-    @Test
-    @DisplayName("없는 토큰도 404다")
-    void 없는_토큰() throws Exception {
-        mockMvc.perform(get("/s/AAAAAAAAAAAAAAAAAAAAAA"))
-                .andExpect(status().isNotFound());
-    }
-
-    @Test
-    @DisplayName("남의 카드로는 링크를 만들 수 없고 남의 링크는 폐기할 수 없다")
-    void 소유권() throws Exception {
-        long cardId = confirmedCard();
-        long shareLinkId = objectMapper.readTree(issueShare(cardId)).path("shareLinkId").asLong();
-
         String otherToken = loginAsOther();
 
-        mockMvc.perform(post("/api/cards/" + cardId + "/share").header("Authorization", otherToken))
-                .andExpect(status().isNotFound());
         mockMvc.perform(get("/api/cards/" + cardId + "/handoff").header("Authorization", otherToken))
                 .andExpect(status().isNotFound());
-        mockMvc.perform(delete("/api/share-links/" + shareLinkId).header("Authorization", otherToken))
-                .andExpect(status().isNotFound());
+        mockMvc.perform(get("/api/cards/" + cardId + "/handoff"))
+                .andExpect(status().isUnauthorized());
     }
 
     @Test
-    @DisplayName("전달 화면은 토큰이 있어야 열린다")
-    void 인증_필요() throws Exception {
-        mockMvc.perform(get("/api/cards/1/handoff"))
+    @DisplayName("공유 링크 경로는 더 이상 열리지 않는다")
+    void 공유_링크_제거됨() throws Exception {
+        // 예전에는 인증 없이 열리던 경로다. 개방을 걷어냈으므로 이제 시큐리티에서 막힌다.
+        // 핸들러가 없어 404 가 아니라, 인증 요구에 먼저 걸려 401 이 된다.
+        mockMvc.perform(get("/s/AAAAAAAAAAAAAAAAAAAAAA"))
                 .andExpect(status().isUnauthorized());
-        mockMvc.perform(get("/api/me/share-links"))
-                .andExpect(status().isUnauthorized());
+
+        // 토큰이 있어도 핸들러가 없다.
+        mockMvc.perform(get("/api/me/share-links").header("Authorization", token))
+                .andExpect(status().isNotFound());
     }
 
     // ---------- helpers ----------
-
-    private String issueShare(long cardId) throws Exception {
-        return mockMvc.perform(post("/api/cards/" + cardId + "/share").header("Authorization", token))
-                .andExpect(status().isOk())
-                .andReturn().getResponse().getContentAsString();
-    }
-
-    private String issueShareToken(long cardId) throws Exception {
-        return objectMapper.readTree(issueShare(cardId)).path("token").asText();
-    }
 
     private String loginAsOther() throws Exception {
         given(kakaoClient.resolveKakaoId(anyString())).willReturn(OTHER_KAKAO_ID);

@@ -3,7 +3,6 @@ package com.jinryomate.backend.handoff.dto;
 import com.jinryomate.backend.card.entity.BriefingCard;
 import com.jinryomate.backend.card.entity.Department;
 import com.jinryomate.backend.card.entity.Medication;
-import com.jinryomate.backend.handoff.entity.ShareLink;
 import com.jinryomate.backend.profile.entity.FieldStatus;
 import com.jinryomate.backend.profile.entity.Sex;
 import java.time.Instant;
@@ -62,33 +61,4 @@ public final class HandoffDtos {
         }
     }
 
-    // ---------- 공유 링크 ----------
-
-    /**
-     * 링크를 막 발급했을 때. {@code url} 은 앱이 그대로 공유하면 되는 주소다.
-     *
-     * <p>{@code cardId} 를 담지 않는다. 공유될 값에 내부 식별자를 실을 이유가 없다.
-     */
-    public record ShareLinkResponse(
-            Long shareLinkId,
-            String token,
-            String url,
-            Instant expiresAt,
-            Instant revokedAt,
-            Instant viewedAt,
-            int viewCount,
-            Instant createdAt
-    ) {
-        public static ShareLinkResponse of(ShareLink link, String baseUrl) {
-            return new ShareLinkResponse(
-                    link.getId(),
-                    link.getToken(),
-                    baseUrl + "/s/" + link.getToken(),
-                    link.getExpiresAt(),
-                    link.getRevokedAt(),
-                    link.getViewedAt(),
-                    link.getViewCount(),
-                    link.getCreatedAt());
-        }
-    }
 }

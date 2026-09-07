@@ -22,6 +22,37 @@ public final class CardDtos {
 
     public record TextField(FieldStatus status, String text) {}
 
+    /**
+     * 기록 탭의 목록 항목 (화면 1j).
+     *
+     * <p>목록에는 본문을 담지 않는다. 증상·복용약이 든 카드를 목록마다 통째로 실어 나를
+     * 이유가 없다. 상세는 {@code GET /api/cards/{id}} 로 본다.
+     *
+     * @param visited    진료를 마쳤는지. 카드의 {@code DRAFT}/{@code CONFIRMED} 와는 다른 축이라
+     *                   컬럼을 두지 않고 <b>진료 기록이 붙었는지</b>로 판단한다.
+     *                   같은 사실을 두 곳에 적으면 어긋난다
+     * @param clinicName 진료 기록의 병원명. 병원명은 선택 입력이라
+     *                   <b>진료를 마쳤어도 비어 있을 수 있다</b>. {@code visited} 의 근거로 쓰지 않는다
+     */
+    public record CardSummary(
+            Long cardId,
+            String title,
+            CardStatus status,
+            boolean visited,
+            String clinicName,
+            Instant createdAt
+    ) {
+        public static CardSummary of(BriefingCard c, boolean visited, String clinicName) {
+            return new CardSummary(
+                    c.getId(),
+                    c.getTitle(),
+                    c.getStatus(),
+                    visited,
+                    clinicName,
+                    c.getCreatedAt());
+        }
+    }
+
     // ---------- 요청 ----------
 
     /**

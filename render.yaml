@@ -55,10 +55,6 @@ services:
       - key: KAKAO_ADMIN_KEY
         sync: false
 
-      # --- 공개 주소. 공유 링크(/s/{token})를 만들 때 앞에 붙는다 ---
-      # 배포 후 실제 주소로 바꾼다. 틀리면 링크가 열리지 않는다.
-      - key: PUBLIC_BASE_URL
-        sync: false
 
       # --- AI 서비스. 배포 위치가 정해지면 채운다 ---
       # 지금은 스텁이라 호출하지 않으므로 비어 있어도 동작한다.

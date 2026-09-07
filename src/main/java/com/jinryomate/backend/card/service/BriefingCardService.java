@@ -3,6 +3,7 @@ package com.jinryomate.backend.card.service;
 import com.jinryomate.backend.ai.client.AiCardClient;
 import com.jinryomate.backend.ai.dto.AiCardResult;
 import com.jinryomate.backend.card.dto.CardDtos.CardResponse;
+import com.jinryomate.backend.card.dto.CardDtos.CardSummary;
 import com.jinryomate.backend.card.dto.CardDtos.TextFieldRequest;
 import com.jinryomate.backend.card.dto.CardDtos.UpdateCardRequest;
 import com.jinryomate.backend.card.entity.BriefingCard;
@@ -15,7 +16,10 @@ import com.jinryomate.backend.intake.service.IntakeSessionService;
 import com.jinryomate.backend.profile.entity.FieldStatus;
 import com.jinryomate.backend.profile.entity.HealthProfile;
 import com.jinryomate.backend.profile.repository.HealthProfileRepository;
+import com.jinryomate.backend.visit.repository.VisitRecordRepository;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -31,6 +35,15 @@ public class BriefingCardService {
     private final IntakeSessionService intakeSessionService;
     private final AiCardClient aiCardClient;
     private final CardContentValidator validator;
+
+    /**
+     * 목록에 "진료 완료"와 병원명을 붙이는 데만 쓴다.
+     *
+     * <p>{@code visit} 은 이미 {@code card} 에 기대고 있어서 방향이 하나 더 생긴다.
+     * 다만 읽기 전용 조회이고 리포지토리라 생성자 순환이 생기지 않는다.
+     * 홈 요약(화면 1n)도 같은 조합을 필요로 하므로, 그때 조합 전용 자리로 옮길지 다시 본다.
+     */
+    private final VisitRecordRepository visitRecordRepository;
 
     /**
      * 문답을 카드로 만든다.
@@ -70,6 +83,29 @@ public class BriefingCardService {
     @Transactional(readOnly = true)
     public CardResponse get(Long userId, Long cardId) {
         return CardResponse.from(findOwned(userId, cardId));
+    }
+
+    /**
+     * 기록 탭의 "브리핑 카드" 목록 (화면 1j). 최근 작성 순.
+     *
+     * <p>진료 기록을 카드마다 따로 조회하면 카드 수만큼 쿼리가 나간다(N+1).
+     * 이 사용자의 기록을 한 번에 가져와 카드에 붙인다.
+     *
+     * <p>월별 그룹({@code 2026년 9월})은 앱이 묶는다. 서버가 그룹까지 만들면 응답이 화면에
+     * 묶여, 홈 화면처럼 "최근 3건"만 쓰는 곳에서 재사용할 수 없다.
+     */
+    @Transactional(readOnly = true)
+    public List<CardSummary> list(Long userId) {
+        Map<Long, String> clinicByCardId = new HashMap<>();
+        visitRecordRepository.findAllByUserIdOrderByVisitedOnDescIdDesc(userId)
+                .forEach(v -> clinicByCardId.put(v.getCard().getId(), v.getClinicName()));
+
+        return cardRepository.findAllByUserIdOrderByCreatedAtDescIdDesc(userId).stream()
+                // 병원명이 null 이어도 기록은 있을 수 있다. 키가 있는지로 판단한다.
+                .map(c -> CardSummary.of(c,
+                        clinicByCardId.containsKey(c.getId()),
+                        clinicByCardId.get(c.getId())))
+                .toList();
     }
 
     /**
