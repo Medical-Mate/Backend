@@ -113,9 +113,42 @@ public class AuthService {
         User user = findUser(userId);
         Long kakaoId = user.getKakaoId();
 
-        // 첨부·일정 → 기록 → 카드 → 세션 → 프로필 순으로 지운다.
-        // 뒤쪽이 앞쪽을 참조하고 있어 순서를 바꾸면 외래키에 걸린다.
-        // 첨부는 기록·프로필을, 일정은 카드를 참조한다. 둘 사이 순서는 상관없다.
+        deleteAllData(user);
+
+        // 로컬 삭제 후에 호출한다. 카카오 쪽이 실패해도 탈퇴는 완료돼야 한다.
+        kakaoClient.unlink(kakaoId);
+        log.info("탈퇴 완료 userId={}", userId);
+    }
+
+    /**
+     * 카카오에서 연결을 끊었을 때. 연결 해제 웹훅이 부른다.
+     *
+     * <p>이미 카카오 쪽에서 끊긴 상태이므로 {@code unlink} 를 부르지 않는다.
+     *
+     * <p><b>없는 회원번호여도 조용히 넘어간다.</b> 웹훅은 재전송될 수 있고, 우리가 먼저
+     * 탈퇴 처리한 뒤에 도착할 수도 있다. 그때 오류를 내면 카카오가 실패로 보고 재시도한다.
+     */
+    @Transactional
+    public void withdrawByKakaoId(Long kakaoId) {
+        userRepository.findByKakaoId(kakaoId).ifPresentOrElse(
+                user -> {
+                    Long userId = user.getId();
+                    deleteAllData(user);
+                    log.info("카카오 연결 해제로 삭제 userId={}", userId);
+                },
+                () -> log.info("카카오 연결 해제 — 이미 없는 회원이라 넘어간다"));
+    }
+
+    /**
+     * 이 사용자의 데이터를 전부 지운다.
+     *
+     * <p>첨부·일정 → 기록 → 카드 → 세션 → 프로필 순이다. 뒤쪽이 앞쪽을 참조하고 있어
+     * 순서를 바꾸면 외래키에 걸린다. 첨부는 기록·프로필을, 일정은 카드를 참조한다 —
+     * 둘 사이 순서는 상관없다.
+     *
+     * <p>도메인이 늘면 여기에 줄을 더한다. {@code WithdrawCascadeTest} 가 먼저 깨진다.
+     */
+    private void deleteAllData(User user) {
         attachmentRepository.deleteAllByUser(user);
         appointmentRepository.deleteAllByUser(user);
         visitRecordRepository.deleteAllByUser(user);
@@ -125,10 +158,6 @@ public class AuthService {
         refreshTokenRepository.deleteAllByUser(user);
         deviceRepository.deleteAllByUser(user);
         userRepository.delete(user);
-
-        // 로컬 삭제 후에 호출한다. 카카오 쪽이 실패해도 탈퇴는 완료돼야 한다.
-        kakaoClient.unlink(kakaoId);
-        log.info("탈퇴 완료 userId={}", userId);
     }
 
     @Transactional
