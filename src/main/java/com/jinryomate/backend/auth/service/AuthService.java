@@ -11,7 +11,6 @@ import com.jinryomate.backend.auth.repository.RefreshTokenRepository;
 import com.jinryomate.backend.auth.repository.UserRepository;
 import com.jinryomate.backend.global.error.ApiException;
 import com.jinryomate.backend.appointment.repository.AppointmentRepository;
-import com.jinryomate.backend.attachment.repository.AttachmentRepository;
 import com.jinryomate.backend.card.repository.BriefingCardRepository;
 import com.jinryomate.backend.global.error.ErrorCode;
 import com.jinryomate.backend.intake.repository.IntakeSessionRepository;
@@ -39,7 +38,6 @@ public class AuthService {
     private final BriefingCardRepository briefingCardRepository;
     private final IntakeSessionRepository intakeSessionRepository;
     private final VisitRecordRepository visitRecordRepository;
-    private final AttachmentRepository attachmentRepository;
     private final AppointmentRepository appointmentRepository;
 
     /**
@@ -142,14 +140,12 @@ public class AuthService {
     /**
      * 이 사용자의 데이터를 전부 지운다.
      *
-     * <p>첨부·일정 → 기록 → 카드 → 세션 → 프로필 순이다. 뒤쪽이 앞쪽을 참조하고 있어
-     * 순서를 바꾸면 외래키에 걸린다. 첨부는 기록·프로필을, 일정은 카드를 참조한다 —
-     * 둘 사이 순서는 상관없다.
+     * <p>일정 → 기록 → 카드 → 세션 → 프로필 순이다. 뒤쪽이 앞쪽을 참조하고 있어
+     * 순서를 바꾸면 외래키에 걸린다. 일정은 카드를 참조한다.
      *
      * <p>도메인이 늘면 여기에 줄을 더한다. {@code WithdrawCascadeTest} 가 먼저 깨진다.
      */
     private void deleteAllData(User user) {
-        attachmentRepository.deleteAllByUser(user);
         appointmentRepository.deleteAllByUser(user);
         visitRecordRepository.deleteAllByUser(user);
         briefingCardRepository.deleteAllByUser(user);

@@ -4,14 +4,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.BDDMockito.given;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jinryomate.backend.TestcontainersConfig;
-import com.jinryomate.backend.attachment.repository.AttachmentRepository;
+import com.jinryomate.backend.appointment.dto.AppointmentDtos.CreateAppointmentRequest;
+import com.jinryomate.backend.appointment.repository.AppointmentRepository;
 import com.jinryomate.backend.auth.client.KakaoClient;
 import com.jinryomate.backend.auth.dto.AuthDtos.KakaoLoginRequest;
 import com.jinryomate.backend.auth.dto.AuthDtos.TokenResponse;
@@ -28,6 +28,7 @@ import com.jinryomate.backend.profile.repository.HealthProfileRepository;
 import com.jinryomate.backend.visit.dto.VisitDtos.CreateVisitRequest;
 import com.jinryomate.backend.visit.repository.VisitRecordRepository;
 import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -37,7 +38,6 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
-import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
@@ -47,7 +47,7 @@ import org.springframework.transaction.annotation.Transactional;
  * 데이터를 다 채운 상태에서 탈퇴한다.
  *
  * <p>{@code AuthApiTest} 의 탈퇴 테스트는 로그인 직후에 지워서 <b>삭제 순서를 건드리지 않는다</b>.
- * 첨부는 기록·프로필을, 공유 링크는 카드를 참조하므로 순서가 틀리면 외래키에 걸리는데,
+ * 일정은 카드를, 카드는 문답 세션을 참조하므로 순서가 틀리면 외래키에 걸리는데,
  * 빈 사용자로는 그게 드러나지 않는다.
  *
  * <p>도메인이 늘어 {@code withdraw()} 에 줄이 붙을 때마다 여기가 먼저 깨져야 한다.
@@ -60,7 +60,6 @@ import org.springframework.transaction.annotation.Transactional;
 class WithdrawCascadeTest {
 
     private static final long KAKAO_ID = 5566778899L;
-    private static final byte[] IMAGE_BYTES = "가짜-이미지-바이트".getBytes();
 
     @Autowired MockMvc mockMvc;
     @Autowired ObjectMapper objectMapper;
@@ -70,7 +69,7 @@ class WithdrawCascadeTest {
     @Autowired IntakeSessionRepository sessionRepository;
     @Autowired BriefingCardRepository cardRepository;
     @Autowired VisitRecordRepository visitRepository;
-    @Autowired AttachmentRepository attachmentRepository;
+    @Autowired AppointmentRepository appointmentRepository;
 
     @MockitoBean KakaoClient kakaoClient;
 
@@ -84,21 +83,22 @@ class WithdrawCascadeTest {
     }
 
     @Test
-    @DisplayName("프로필·카드·기록·첨부·공유 링크가 다 있어도 탈퇴가 끝까지 지운다")
+    @DisplayName("프로필·문답·카드·기록·일정이 다 있어도 탈퇴가 끝까지 지운다")
     void 전체_삭제() throws Exception {
         completeOnboarding();
-        uploadProfileAttachment();
 
         long cardId = confirmedCard();
 
-        long visitId = createVisit(cardId);
-        uploadVisitAttachment(visitId);
+        createVisit(cardId);
+
+        // 카드에 매달린 일정이어야 FK 순서가 드러난다. 카드를 먼저 지우면 여기서 걸린다.
+        createAppointment(cardId);
 
         // 여기까지가 환자 한 명이 S1~S6 를 다 거친 상태다.
         assertThat(profileRepository.count()).isOne();
         assertThat(cardRepository.count()).isOne();
         assertThat(visitRepository.count()).isOne();
-        assertThat(attachmentRepository.count()).isEqualTo(2);
+        assertThat(appointmentRepository.count()).isOne();
 
         mockMvc.perform(delete("/api/me").header("Authorization", token))
                 .andExpect(status().isNoContent());
@@ -108,26 +108,19 @@ class WithdrawCascadeTest {
         assertThat(sessionRepository.count()).isZero();
         assertThat(cardRepository.count()).isZero();
         assertThat(visitRepository.count()).isZero();
-        assertThat(attachmentRepository.count()).isZero();
+        assertThat(appointmentRepository.count()).isZero();
     }
 
     // ---------- helpers ----------
 
-    private MockMultipartFile image(String filename) {
-        return new MockMultipartFile("file", filename, "image/jpeg", IMAGE_BYTES);
-    }
-
-    private void uploadProfileAttachment() throws Exception {
-        mockMvc.perform(multipart("/api/me/health-profile/attachments")
-                        .file(image("bag.jpg"))
-                        .header("Authorization", token))
-                .andExpect(status().isOk());
-    }
-
-    private void uploadVisitAttachment(long visitId) throws Exception {
-        mockMvc.perform(multipart("/api/visits/" + visitId + "/attachments")
-                        .file(image("prescription.jpg"))
-                        .header("Authorization", token))
+    private void createAppointment(long cardId) throws Exception {
+        mockMvc.perform(post("/api/me/appointments")
+                        .header("Authorization", token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new CreateAppointmentRequest(
+                                "○○정형외과", "정형외과", "재진",
+                                LocalDate.now().plusDays(7).atStartOfDay(ZoneOffset.UTC).toInstant(),
+                                cardId))))
                 .andExpect(status().isOk());
     }
 
