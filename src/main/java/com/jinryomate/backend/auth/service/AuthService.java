@@ -10,6 +10,7 @@ import com.jinryomate.backend.auth.repository.DeviceRepository;
 import com.jinryomate.backend.auth.repository.RefreshTokenRepository;
 import com.jinryomate.backend.auth.repository.UserRepository;
 import com.jinryomate.backend.global.error.ApiException;
+import com.jinryomate.backend.appointment.repository.AppointmentRepository;
 import com.jinryomate.backend.attachment.repository.AttachmentRepository;
 import com.jinryomate.backend.card.repository.BriefingCardRepository;
 import com.jinryomate.backend.global.error.ErrorCode;
@@ -39,6 +40,7 @@ public class AuthService {
     private final IntakeSessionRepository intakeSessionRepository;
     private final VisitRecordRepository visitRecordRepository;
     private final AttachmentRepository attachmentRepository;
+    private final AppointmentRepository appointmentRepository;
 
     /**
      * 카카오 로그인. 처음 온 회원번호면 가입시키고, 있으면 그 사용자로 로그인한다.
@@ -111,9 +113,11 @@ public class AuthService {
         User user = findUser(userId);
         Long kakaoId = user.getKakaoId();
 
-        // 첨부 → 기록 → 카드 → 세션 → 프로필 순으로 지운다.
+        // 첨부·일정 → 기록 → 카드 → 세션 → 프로필 순으로 지운다.
         // 뒤쪽이 앞쪽을 참조하고 있어 순서를 바꾸면 외래키에 걸린다.
+        // 첨부는 기록·프로필을, 일정은 카드를 참조한다. 둘 사이 순서는 상관없다.
         attachmentRepository.deleteAllByUser(user);
+        appointmentRepository.deleteAllByUser(user);
         visitRecordRepository.deleteAllByUser(user);
         briefingCardRepository.deleteAllByUser(user);
         intakeSessionRepository.deleteAllByUser(user);

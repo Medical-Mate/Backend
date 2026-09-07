@@ -77,9 +77,10 @@ com.jinryomate.backend
 ├── auth/       카카오 로그인 · JWT · device(푸시 대상)
 ├── profile/    온보딩, 건강 프로필          S1
 ├── intake/     부위 짚기, 증상 문답 세션      S1.5 · S2
-├── card/       브리핑 카드                 S3
-├── handoff/    진료실 전달 · 공유 링크      S4 · S6
-└── visit/      진료 후 기록, 되묻기          S5
+├── card/          브리핑 카드                    S3
+├── handoff/       진료실 전달(화면 보여주기)      1f
+├── visit/         진료 후 기록 · 기록 목록        1p · 1j
+└── appointment/   진료 예정 일정 · 캘린더         1r · 1n
 ```
 
 `global`에 도메인 로직이 들어오면 잘못 놓인 것입니다. 이 패키지는 방치하면 잡동사니가 쌓이는 자리입니다.
