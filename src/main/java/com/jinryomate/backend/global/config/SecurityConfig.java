@@ -58,6 +58,10 @@ public class SecurityConfig {
                     auth.requestMatchers("/api/auth/kakao", "/api/auth/refresh").permitAll();
                     auth.requestMatchers("/api/health", "/actuator/health").permitAll();
 
+                    // 카카오 연결 해제 웹훅. 카카오는 우리 JWT 를 갖고 있지 않다.
+                    // 대신 컨트롤러가 어드민 키와 app_id 를 대조한다 — 그게 유일한 방어선이다.
+                    auth.requestMatchers("/webhooks/kakao/**").permitAll();
+
                     // API 문서. 운영 포함 모든 환경에서 연다.
                     auth.requestMatchers(DOCS_PATHS).permitAll();
 
