@@ -10,8 +10,6 @@ import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
-import org.springframework.web.multipart.MaxUploadSizeExceededException;
-import org.springframework.web.multipart.support.MissingServletRequestPartException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 @Slf4j
@@ -56,24 +54,16 @@ public class GlobalExceptionHandler {
         return build(ErrorCode.INVALID_REQUEST, message);
     }
 
-    /** 필수 파라미터나 multipart 파일이 빠졌을 때. */
-    @ExceptionHandler({MissingServletRequestParameterException.class,
-                       MissingServletRequestPartException.class})
-    public ResponseEntity<ErrorResponse> handleMissingPart(Exception e) {
+    /**
+     * 필수 쿼리 파라미터가 빠졌을 때.
+     *
+     * <p>지금은 필수 파라미터를 쓰는 엔드포인트가 없어 걸릴 일이 없다. 그래도 남긴다 —
+     * 앞으로 하나라도 생기면 500 이 아니라 400 으로 나가야 한다.
+     */
+    @ExceptionHandler(MissingServletRequestParameterException.class)
+    public ResponseEntity<ErrorResponse> handleMissingParam(Exception e) {
         log.warn("[INVALID_REQUEST] 필수 값 누락: {}", e.getClass().getSimpleName());
         return build(ErrorCode.INVALID_REQUEST, "필수 값이 빠졌습니다.");
-    }
-
-    /**
-     * 업로드 용량 초과.
-     *
-     * <p>{@code AttachmentService} 에도 같은 검사가 있지만, 스프링의 multipart 한도가
-     * 먼저 걸려 서비스 코드까지 오지 못한다. 여기서 같은 안내를 해야 앱이 쓸 수 있다.
-     */
-    @ExceptionHandler(MaxUploadSizeExceededException.class)
-    public ResponseEntity<ErrorResponse> handleTooLarge(MaxUploadSizeExceededException e) {
-        log.warn("[INVALID_REQUEST] 업로드 용량 초과");
-        return build(ErrorCode.INVALID_REQUEST, "사진은 한 장에 10MB까지 올릴 수 있습니다.");
     }
 
     @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
