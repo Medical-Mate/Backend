@@ -80,7 +80,8 @@ com.jinryomate.backend
 ├── card/          브리핑 카드                    S3
 ├── handoff/       진료실 전달(화면 보여주기)      1f
 ├── visit/         진료 후 기록 · 기록 목록        1p · 1j
-└── appointment/   진료 예정 일정 · 캘린더         1r · 1n
+├── appointment/   진료 예정 일정 · 캘린더         1r · 1n
+└── home/          홈 요약 (여러 도메인을 모은다)   1n
 ```
 
 `global`에 도메인 로직이 들어오면 잘못 놓인 것입니다. 이 패키지는 방치하면 잡동사니가 쌓이는 자리입니다.
