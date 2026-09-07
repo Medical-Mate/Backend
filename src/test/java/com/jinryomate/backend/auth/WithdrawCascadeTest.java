@@ -17,7 +17,6 @@ import com.jinryomate.backend.auth.dto.AuthDtos.KakaoLoginRequest;
 import com.jinryomate.backend.auth.dto.AuthDtos.TokenResponse;
 import com.jinryomate.backend.auth.repository.UserRepository;
 import com.jinryomate.backend.card.repository.BriefingCardRepository;
-import com.jinryomate.backend.handoff.repository.ShareLinkRepository;
 import com.jinryomate.backend.intake.dto.IntakeDtos.StartSessionRequest;
 import com.jinryomate.backend.intake.repository.IntakeSessionRepository;
 import com.jinryomate.backend.profile.dto.ProfileDtos.HealthProfileRequest;
@@ -72,7 +71,6 @@ class WithdrawCascadeTest {
     @Autowired BriefingCardRepository cardRepository;
     @Autowired VisitRecordRepository visitRepository;
     @Autowired AttachmentRepository attachmentRepository;
-    @Autowired ShareLinkRepository shareLinkRepository;
 
     @MockitoBean KakaoClient kakaoClient;
 
@@ -92,7 +90,6 @@ class WithdrawCascadeTest {
         uploadProfileAttachment();
 
         long cardId = confirmedCard();
-        issueShareLink(cardId);
 
         long visitId = createVisit(cardId);
         uploadVisitAttachment(visitId);
@@ -102,7 +99,6 @@ class WithdrawCascadeTest {
         assertThat(cardRepository.count()).isOne();
         assertThat(visitRepository.count()).isOne();
         assertThat(attachmentRepository.count()).isEqualTo(2);
-        assertThat(shareLinkRepository.count()).isOne();
 
         mockMvc.perform(delete("/api/me").header("Authorization", token))
                 .andExpect(status().isNoContent());
@@ -113,7 +109,6 @@ class WithdrawCascadeTest {
         assertThat(cardRepository.count()).isZero();
         assertThat(visitRepository.count()).isZero();
         assertThat(attachmentRepository.count()).isZero();
-        assertThat(shareLinkRepository.count()).isZero();
     }
 
     // ---------- helpers ----------
@@ -133,11 +128,6 @@ class WithdrawCascadeTest {
         mockMvc.perform(multipart("/api/visits/" + visitId + "/attachments")
                         .file(image("prescription.jpg"))
                         .header("Authorization", token))
-                .andExpect(status().isOk());
-    }
-
-    private void issueShareLink(long cardId) throws Exception {
-        mockMvc.perform(post("/api/cards/" + cardId + "/share").header("Authorization", token))
                 .andExpect(status().isOk());
     }
 

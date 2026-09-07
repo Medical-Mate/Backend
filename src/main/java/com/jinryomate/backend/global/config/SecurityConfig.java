@@ -57,8 +57,6 @@ public class SecurityConfig {
                     // --- 무인증으로 여는 경로 ---
                     auth.requestMatchers("/api/auth/kakao", "/api/auth/refresh").permitAll();
                     auth.requestMatchers("/api/health", "/actuator/health").permitAll();
-                    // 공유 링크(S6). 인증 대신 토큰 만료가 방어선이다.
-                    auth.requestMatchers("/s/**").permitAll();
 
                     // API 문서. 운영 포함 모든 환경에서 연다.
                     auth.requestMatchers(DOCS_PATHS).permitAll();

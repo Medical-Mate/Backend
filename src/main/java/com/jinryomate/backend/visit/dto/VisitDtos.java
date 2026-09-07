@@ -1,11 +1,8 @@
 package com.jinryomate.backend.visit.dto;
 
-import com.jinryomate.backend.visit.entity.ComprehensionCheck;
 import com.jinryomate.backend.visit.entity.VisitRecord;
-import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import java.time.LocalDate;
-import java.util.List;
 
 /** 진료 후 기록의 요청·응답. */
 public final class VisitDtos {
@@ -39,29 +36,7 @@ public final class VisitDtos {
             String rawNote
     ) {}
 
-    public record AnswerRequest(
-            @NotBlank(message = "답변이 필요합니다.")
-            @Size(max = 500, message = "500자 이내로 입력해주세요.")
-            String answer
-    ) {}
-
     // ---------- 응답 ----------
-
-    /**
-     * @param correct    맞았는지. 틀려도 다음 문항으로 넘어간다
-     * @param correction 환자에게 보여줄 정정 문구
-     */
-    public record AnswerResponse(Long checkId, boolean correct, String correction, Progress progress) {}
-
-    public record Progress(long answered, int total) {}
-
-    public record CheckResponse(Long checkId, int seq, String question, String userAnswer, Boolean correct) {
-        public static CheckResponse from(ComprehensionCheck c) {
-            // 정답(expectedAnswer)은 내려보내지 않는다. 답하기 전에 보이면 되묻기가 의미 없다.
-            return new CheckResponse(c.getId(), c.getSeq(), c.getQuestion(),
-                    c.getUserAnswer(), c.getCorrect());
-        }
-    }
 
     /** 와이어프레임의 요약 카드. */
     public record VisitResponse(
@@ -72,9 +47,7 @@ public final class VisitDtos {
             String whatWasDone,
             String result,
             String prescription,
-            String rawNote,
-            List<CheckResponse> checks,
-            Progress progress
+            String rawNote
     ) {
         public static VisitResponse from(VisitRecord v) {
             return new VisitResponse(
@@ -85,9 +58,30 @@ public final class VisitDtos {
                     v.getWhatWasDone(),
                     v.getResult(),
                     v.getPrescription(),
-                    v.getRawNote(),
-                    v.getChecks().stream().map(CheckResponse::from).toList(),
-                    new Progress(v.answeredCount(), v.getChecks().size()));
+                    v.getRawNote());
+        }
+    }
+
+    /**
+     * 기록 탭의 목록 항목 (화면 1j).
+     *
+     * <p>목록에는 원문({@code rawNote})을 담지 않는다. 증상·복용약이 섞인 긴 텍스트라
+     * 목록마다 실어 나를 이유가 없다. 상세는 {@code GET /api/visits/{id}} 로 본다.
+     */
+    public record VisitSummary(
+            Long visitId,
+            Long cardId,
+            String cardTitle,
+            String clinicName,
+            LocalDate visitedOn
+    ) {
+        public static VisitSummary from(VisitRecord v) {
+            return new VisitSummary(
+                    v.getId(),
+                    v.getCard().getId(),
+                    v.getCard().getTitle(),
+                    v.getClinicName(),
+                    v.getVisitedOn());
         }
     }
 }

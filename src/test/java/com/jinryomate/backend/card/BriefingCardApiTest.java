@@ -218,6 +218,73 @@ class BriefingCardApiTest {
     void 무인증_차단() throws Exception {
         mockMvc.perform(get("/api/cards/1"))
                 .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/me/cards"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("카드 목록은 최근 작성 순이고 본문을 담지 않는다")
+    void 목록() throws Exception {
+        createCard();
+        long recent = createCard();
+
+        mockMvc.perform(get("/api/me/cards").header("Authorization", token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$[0].cardId").value((int) recent))
+                .andExpect(jsonPath("$[0].title").exists())
+                .andExpect(jsonPath("$[0].createdAt").exists())
+                // 증상·복용약이 든 카드를 목록마다 통째로 실어 나를 이유가 없다.
+                .andExpect(jsonPath("$[0].onset").doesNotExist())
+                .andExpect(jsonPath("$[0].medications").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("진료 기록이 붙기 전에는 visited가 false다")
+    void 목록_진료_전() throws Exception {
+        createCard();
+
+        mockMvc.perform(get("/api/me/cards").header("Authorization", token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].visited").value(false))
+                .andExpect(jsonPath("$[0].clinicName").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("진료 기록이 붙으면 visited가 true가 되고 병원명이 따라온다")
+    void 목록_진료_완료() throws Exception {
+        long cardId = createCard();
+        mockMvc.perform(post("/api/cards/" + cardId + "/confirm").header("Authorization", token))
+                .andExpect(status().isOk());
+        mockMvc.perform(post("/api/cards/" + cardId + "/visit")
+                        .header("Authorization", token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"clinicName\":\"서울OO병원 내과\",\"rawNote\":\"피검사 했어요\"}"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/me/cards").header("Authorization", token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].visited").value(true))
+                .andExpect(jsonPath("$[0].clinicName").value("서울OO병원 내과"));
+    }
+
+    @Test
+    @DisplayName("병원명이 비어 있어도 진료를 마친 것으로 본다")
+    void 목록_병원명_없이_진료_완료() throws Exception {
+        // 병원명은 선택 입력이다. clinicName 이 null 이라고 진료 전으로 보면 안 된다.
+        long cardId = createCard();
+        mockMvc.perform(post("/api/cards/" + cardId + "/confirm").header("Authorization", token))
+                .andExpect(status().isOk());
+        mockMvc.perform(post("/api/cards/" + cardId + "/visit")
+                        .header("Authorization", token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"rawNote\":\"병원 이름은 안 적었어요\"}"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/me/cards").header("Authorization", token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].visited").value(true))
+                .andExpect(jsonPath("$[0].clinicName").doesNotExist());
     }
 
     // ---------- helpers ----------
@@ -266,5 +333,11 @@ class BriefingCardApiTest {
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
         return objectMapper.readTree(body);
+    }
+
+    /** 온보딩부터 카드 생성까지 한 번에. 목록 테스트가 여러 장을 만들 때 쓴다. */
+    private long createCard() throws Exception {
+        completeOnboarding();
+        return generateCard(startSession()).path("cardId").asLong();
     }
 }

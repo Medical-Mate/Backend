@@ -1,11 +1,13 @@
 package com.jinryomate.backend.card.web;
 
 import com.jinryomate.backend.card.dto.CardDtos.CardResponse;
+import com.jinryomate.backend.card.dto.CardDtos.CardSummary;
 import com.jinryomate.backend.card.dto.CardDtos.UpdateCardRequest;
 import com.jinryomate.backend.card.service.BriefingCardService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -42,6 +44,24 @@ public class BriefingCardController {
     public CardResponse generate(@AuthenticationPrincipal Long userId,
                                  @PathVariable Long sessionId) {
         return briefingCardService.generate(userId, sessionId);
+    }
+
+    @Operation(
+            summary = "브리핑 카드 목록",
+            description = """
+                    기록 탭의 "브리핑 카드" 쪽입니다 (화면 1j). 최근 작성 순으로 옵니다.
+
+                    `visited` 가 진료를 마쳤는지입니다. 카드의 `status`(DRAFT/CONFIRMED)와는
+                    **다른 축**이라 컬럼을 두지 않고 진료 기록이 붙었는지로 판단합니다.
+
+                    `clinicName` 은 병원명이 선택 입력이라 **진료를 마쳤어도 비어 있을 수 있습니다.**
+                    "진료 완료" 뱃지는 `visited` 로 판단하세요.
+
+                    목록에는 본문이 담기지 않습니다. 상세는 `GET /api/cards/{id}` 로 봅니다.
+                    """)
+    @GetMapping("/me/cards")
+    public List<CardSummary> list(@AuthenticationPrincipal Long userId) {
+        return briefingCardService.list(userId);
     }
 
     @Operation(summary = "카드 조회")

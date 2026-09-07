@@ -62,7 +62,7 @@ class ApiDocsExposureTest {
                     .andExpect(status().isUnauthorized());
             mockMvc.perform(get("/api/cards/1"))
                     .andExpect(status().isUnauthorized());
-            mockMvc.perform(get("/api/me/share-links"))
+            mockMvc.perform(get("/api/me/cards"))
                     .andExpect(status().isUnauthorized());
         }
 
