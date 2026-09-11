@@ -1,6 +1,8 @@
 package com.jinryomate.backend.global.error;
 
 import com.jinryomate.backend.global.web.RequestIdFilter;
+import jakarta.validation.ConstraintViolation;
+import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -30,6 +32,23 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleValidation(MethodArgumentNotValidException e) {
         String message = e.getBindingResult().getFieldErrors().stream()
                 .map(f -> f.getField() + ": " + f.getDefaultMessage())
+                .findFirst()
+                .orElse(ErrorCode.INVALID_REQUEST.getDefaultMessage());
+        log.warn("[INVALID_REQUEST] {}", message);
+        return build(ErrorCode.INVALID_REQUEST, message);
+    }
+
+    /**
+     * 쿼리·경로 값이 제약을 어겼을 때. {@code @Validated} 가 붙은 컨트롤러에서 나온다.
+     *
+     * <p>본문 검증({@code MethodArgumentNotValidException})과 <b>다른 예외다.</b> 스프링이
+     * 던지는 것이 아니라 Jakarta 검증이 던져서, 본문 쪽 핸들러로는 안 잡힌다. 이것도 없으면
+     * catch-all 을 타고 500 이 된다 — #44 에서 고친 것과 같은 부류다.
+     */
+    @ExceptionHandler(ConstraintViolationException.class)
+    public ResponseEntity<ErrorResponse> handleConstraintViolation(ConstraintViolationException e) {
+        String message = e.getConstraintViolations().stream()
+                .map(ConstraintViolation::getMessage)
                 .findFirst()
                 .orElse(ErrorCode.INVALID_REQUEST.getDefaultMessage());
         log.warn("[INVALID_REQUEST] {}", message);
