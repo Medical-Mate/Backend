@@ -116,6 +116,35 @@ class AppointmentApiTest {
     }
 
     @Test
+    @DisplayName("예정 일시가 없으면 400")
+    void 일시_필수() throws Exception {
+        mockMvc.perform(post("/api/me/appointments")
+                        .header("Authorization", token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new CreateAppointmentRequest(
+                                "서울OO병원", null, null, null, null))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("INVALID_REQUEST"));
+    }
+
+    @Test
+    @DisplayName("필수는 병원명과 일시뿐이고 나머지는 비워도 된다")
+    void 나머지는_선택() throws Exception {
+        // 캘린더에서 급히 적는 경로다. 진료과·목적까지 강제하면 그 자리에서 막힌다.
+        // 필수를 늘리려면 이 테스트가 먼저 깨져야 한다.
+        mockMvc.perform(post("/api/me/appointments")
+                        .header("Authorization", token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new CreateAppointmentRequest(
+                                "서울OO병원", null, null, kst(2026, 9, 12, 10, 30), null))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.clinicName").value("서울OO병원"))
+                .andExpect(jsonPath("$.department").doesNotExist())
+                .andExpect(jsonPath("$.purpose").doesNotExist())
+                .andExpect(jsonPath("$.cardId").doesNotExist());
+    }
+
+    @Test
     @DisplayName("월별 조회는 그 달 것만 가져온다")
     void 월별_조회() throws Exception {
         create("9월 병원", kst(2026, 9, 12, 10, 30));
