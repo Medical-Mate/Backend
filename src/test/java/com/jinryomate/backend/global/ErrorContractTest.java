@@ -103,6 +103,44 @@ class ErrorContractTest {
     }
 
     @Test
+    @DisplayName("읽을 수 없는 Content-Type은 415다")
+    void 미디어타입_불일치() throws Exception {
+        // 앱이 헤더를 잘못 붙였을 때 415 를 받으면 바로 자기 요청을 고친다.
+        // 500 이 나가면 백엔드 장애로 보여 문의가 온다.
+        mockMvc.perform(put("/api/me/health-profile")
+                        .header("Authorization", token)
+                        .contentType(MediaType.TEXT_PLAIN)
+                        .content("이름"))
+                .andExpect(status().isUnsupportedMediaType())
+                .andExpect(jsonPath("$.error.code").value("UNSUPPORTED_MEDIA_TYPE"))
+                .andExpect(jsonPath("$.meta.requestId").exists());
+    }
+
+    @Test
+    @DisplayName("만들 수 없는 Accept는 406이다")
+    void 응답형식_불일치() throws Exception {
+        mockMvc.perform(get("/api/health").accept(MediaType.IMAGE_PNG))
+                .andExpect(status().isNotAcceptable())
+                .andExpect(jsonPath("$.error.code").value("NOT_ACCEPTABLE"));
+    }
+
+    @Test
+    @DisplayName("미디어 타입 오류에도 응답 형태가 같다")
+    void 미디어타입_응답형태() throws Exception {
+        // 앱이 오류 분기를 하나만 두면 되도록 형태를 통일한 것이 이 프로젝트의 결정이다.
+        // 스프링 기본 ProblemDetail 이 섞이면 그 결정이 깨진다.
+        mockMvc.perform(put("/api/me/health-profile")
+                        .header("Authorization", token)
+                        .contentType(MediaType.MULTIPART_FORM_DATA)
+                        .content("아무거나"))
+                .andExpect(status().isUnsupportedMediaType())
+                .andExpect(jsonPath("$.error.code").exists())
+                .andExpect(jsonPath("$.error.message").exists())
+                .andExpect(jsonPath("$.error.retryable").value(false))
+                .andExpect(jsonPath("$.meta.requestId").exists());
+    }
+
+    @Test
     @DisplayName("없는 경로는 404다")
     void 없는_경로() throws Exception {
         mockMvc.perform(get("/api/no-such-path").header("Authorization", token))
