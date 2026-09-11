@@ -67,7 +67,7 @@ public class BriefingCardService {
 
         HealthProfile profile = profileRepository.findByUserId(userId).orElse(null);
 
-        CardAssembler.Assembled assembled = assembler.assemble(session.getAiCard(), session.getQuestions());
+        CardAssembler.Assembled assembled = assembler.assemble(session);
         CardContentValidator.Result validated = validator.validate(assembled.content());
 
         BriefingCard card = BriefingCard.draft(session.getUser(), session);

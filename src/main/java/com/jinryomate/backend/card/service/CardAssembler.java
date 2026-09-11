@@ -8,6 +8,7 @@ import com.jinryomate.backend.card.entity.CardAxis;
 import com.jinryomate.backend.card.entity.CardContent;
 import com.jinryomate.backend.global.error.ApiException;
 import com.jinryomate.backend.global.error.ErrorCode;
+import com.jinryomate.backend.intake.entity.IntakeSession;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -38,11 +39,13 @@ public class CardAssembler {
     public record Assembled(CardContent content, AiCard.Provenance provenance) {}
 
     /**
-     * @param aiCardJson 세션에 보관해둔 원문
-     * @param questions  환자가 4단계에서 적어둔 "물어볼 것". 카드에 스냅샷으로 박는다
+     * 세션에 쌓인 것을 카드 본문으로 만든다.
+     *
+     * <p>대부분은 AI 가 준 카드 그대로이고, <b>통증 강도만 우리가 채운다</b>
+     * ({@link #fillSeverity}).
      */
-    public Assembled assemble(String aiCardJson, List<String> questions) {
-        AiCard card = parse(aiCardJson);
+    public Assembled assemble(IntakeSession session) {
+        AiCard card = parse(session.getAiCard());
 
         Map<String, CardAxis> axes = new LinkedHashMap<>();
         // 계약의 8축을 먼저 깔아둔다. AI 가 빠뜨린 축이 있어도 화면에 자리가 남아야
@@ -52,6 +55,8 @@ public class CardAssembler {
         if (card.axes() != null) {
             card.axes().forEach((name, axis) -> axes.put(name, toAxis(name, axis)));
         }
+
+        fillSeverity(axes, session);
 
         List<String> departments = new ArrayList<>();
         String source = null;
@@ -68,13 +73,46 @@ public class CardAssembler {
                 axes,
                 card.redFlags() == null ? List.of() : card.redFlags(),
                 card.patientNotes() == null ? List.of() : card.patientNotes(),
-                questions == null ? List.of() : questions,
+                session.getQuestions() == null ? List.of() : session.getQuestions(),
                 departments,
                 source,
                 card.completeness(),
                 card.minimallyComplete());
 
         return new Assembled(content, card.provenance());
+    }
+
+    /**
+     * 통증 강도 축을 우리가 채운다. 화면 3단계({@code 1d}) 슬라이더 값이다.
+     *
+     * <p><b>AI 로 보낼 길이 없어서 우리가 채운다.</b> 계약상 폼 값은 턴 요청의
+     * {@code selections} 로 보내는데, 강도는 <b>문답이 끝난 뒤</b> 화면이라 그때는 이미
+     * {@code ended} 다. 종료 뒤 턴은 마무리 문장만 돌려주고 카드를 건드리지 않는다 —
+     * 실제로 보내 보고 확인했다. 그대로 두면 강도가 카드에 <b>영영 안 들어간다</b>.
+     *
+     * <p>모양은 계약의 {@code selection} 규약을 그대로 따른다 — 근거가
+     * {@code "[선택] 3 (꽤 아파요)"} 이고 {@code source} 가 {@code SELECTION} 이다.
+     * 우리가 만든 새 규칙이 아니다.
+     *
+     * <p><b>AI 가 종료 뒤 {@code selections} 를 받아주면 이 메서드를 지운다.</b> 문의해 뒀다.
+     */
+    private void fillSeverity(Map<String, CardAxis> axes, IntakeSession session) {
+        if (session.getSeverityLevel() == null) {
+            return;
+        }
+
+        // 라벨은 앱이 보낸 디자인 카피다. 없으면 숫자만 쓴다 — 우리가 문구를 만들지 않는다.
+        String label = session.getSeverityLabel();
+        String value = label == null || label.isBlank()
+                ? String.valueOf(session.getSeverityLevel())
+                : session.getSeverityLevel() + " (" + label + ")";
+
+        axes.put("severity", CardAxis.of(
+                "severity",
+                AxisStatus.FILLED,
+                value,
+                List.of("[선택] " + value),
+                AxisSource.SELECTION));
     }
 
     private AiCard parse(String json) {

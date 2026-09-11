@@ -116,6 +116,40 @@ class BriefingCardApiTest {
     }
 
     @Test
+    @DisplayName("통증 강도가 카드의 severity 축에 실린다")
+    void 강도_축() throws Exception {
+        // 강도는 문답이 끝난 뒤 화면이라 AI 로 보낼 길이 없다. 종료 뒤 selections 는
+        // 카드를 건드리지 않는다(실측). 그대로 두면 영영 안 들어가서 우리가 채운다.
+        completeOnboarding();
+        long sessionId = startSessionWithUtterance();
+
+        mockMvc.perform(put("/api/sessions/" + sessionId + "/severity")
+                        .header("Authorization", token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"level\":3,\"label\":\"꽤 아파요\"}"))
+                .andExpect(status().isOk());
+
+        long cardId = generateCard(sessionId).path("cardId").asLong();
+
+        mockMvc.perform(get("/api/cards/" + cardId).header("Authorization", token))
+                .andExpect(jsonPath("$.axes.severity.status").value("FILLED"))
+                .andExpect(jsonPath("$.axes.severity.value").value("3 (꽤 아파요)"))
+                // 계약의 selection 규약을 그대로 따른다. 우리가 만든 규칙이 아니다.
+                .andExpect(jsonPath("$.axes.severity.source").value("SELECTION"))
+                .andExpect(jsonPath("$.axes.severity.evidence[0]").value("[선택] 3 (꽤 아파요)"));
+    }
+
+    @Test
+    @DisplayName("강도를 안 고르면 severity 축은 비어 있다")
+    void 강도_없으면_빈_축() throws Exception {
+        completeOnboarding();
+        long cardId = generateCard(startSessionWithUtterance()).path("cardId").asLong();
+
+        mockMvc.perform(get("/api/cards/" + cardId).header("Authorization", token))
+                .andExpect(jsonPath("$.axes.severity.status").value("NOT_ASKED"));
+    }
+
+    @Test
     @DisplayName("알레르기가 카드에 실린다")
     void 알레르기_스냅샷() throws Exception {
         // 시안의 카드는 이 값을 경고 면 맨 위에 올린다("처방 전에 꼭 확인해 주세요").
