@@ -61,10 +61,21 @@ public class IntakeSession {
      *
      * <p>부위 마스터가 아직 없어 지금은 형식만 본다. 마스터가 생기면 대조를 붙인다.
      */
-    @ElementCollection(fetch = FetchType.LAZY)
-    @CollectionTable(name = "intake_session_sites", joinColumns = @JoinColumn(name = "session_id"))
-    @Column(name = "site_code", nullable = false, length = 64)
-    private List<String> siteCodes = new ArrayList<>();
+    /**
+     * 부위 마스터의 노드 id. {@code ANC:001}(앵커) · {@code SUR:032}(구역).
+     *
+     * <p><b>하나만 받는다.</b> AI 계약이 세션 시작에 부위 하나를 받는다. 부위 여러 개는
+     * AI 저장소 #8 에서 팀 결정 대기 중이고, 정해지면 양쪽 계약을 함께 고친다.
+     *
+     * <p>부위를 건너뛸 수 있어 비어 있을 수 있다.
+     */
+    @Column(length = 40)
+    private String siteNodeId;
+
+    /** 좌우. {@code laterality} 가 {@code left_right} 인 부위에만 붙는다. */
+    @Enumerated(EnumType.STRING)
+    @Column(length = 8)
+    private Side side;
 
     /** 사람이 읽는 표현. 예: {@code 손가락 관절(오른손)}. 문답 첫 문장에 그대로 들어간다. */
     @Column(length = 100)
@@ -143,17 +154,16 @@ public class IntakeSession {
 
     private Instant completedAt;
 
-    private IntakeSession(User user, List<String> siteCodes, String siteText) {
+    private IntakeSession(User user, String siteNodeId, Side side, String siteText) {
         this.user = user;
-        if (siteCodes != null) {
-            this.siteCodes.addAll(siteCodes);
-        }
+        this.siteNodeId = siteNodeId;
+        this.side = side;
         this.siteText = siteText;
     }
 
     /** S1.5에서 부위를 짚고 시작한다. 부위를 건너뛰면 비어 있을 수 있다. */
-    public static IntakeSession start(User user, List<String> siteCodes, String siteText) {
-        return new IntakeSession(user, siteCodes, siteText);
+    public static IntakeSession start(User user, String siteNodeId, Side side, String siteText) {
+        return new IntakeSession(user, siteNodeId, side, siteText);
     }
 
     /** 다음 메시지 순번. 카드의 evidence 가 이 번호를 참조한다. */

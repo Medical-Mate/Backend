@@ -16,6 +16,7 @@ import com.jinryomate.backend.auth.dto.AuthDtos.KakaoLoginRequest;
 import com.jinryomate.backend.auth.dto.AuthDtos.TokenResponse;
 import com.jinryomate.backend.intake.dto.IntakeDtos.SendMessageRequest;
 import com.jinryomate.backend.intake.dto.IntakeDtos.StartSessionRequest;
+import com.jinryomate.backend.intake.entity.Side;
 import com.jinryomate.backend.intake.entity.IntakeMessage;
 import com.jinryomate.backend.intake.repository.IntakeSessionRepository;
 import com.jinryomate.backend.profile.dto.ProfileDtos.HealthProfileRequest;
@@ -79,6 +80,58 @@ class IntakeTurnApiTest {
                 .andExpect(jsonPath("$.messages[0].text").isNotEmpty())
                 .andExpect(jsonPath("$.progress.current").value(0))
                 .andExpect(jsonPath("$.progress.total").value(20));
+    }
+
+    @Test
+    @DisplayName("부위 마스터에 없는 코드는 400이다")
+    void 없는_부위() throws Exception {
+        // AI 도 같은 검증을 하지만 그대로 넘기면 문답을 시작한 뒤에 422 가 돌아온다.
+        // 앱은 이미 화면을 넘긴 뒤라 되돌리기가 어렵다.
+        mockMvc.perform(post("/api/sessions")
+                        .header("Authorization", token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(
+                                new StartSessionRequest("SUR:999", null, "없는 곳"))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("INVALID_REQUEST"));
+    }
+
+    @Test
+    @DisplayName("좌우가 없는 부위에 좌우를 보내면 400이다")
+    void 좌우_없는_부위() throws Exception {
+        // 34곳 중 13곳이 laterality: none 이다. 머리에는 좌우가 없다.
+        mockMvc.perform(post("/api/sessions")
+                        .header("Authorization", token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(
+                                new StartSessionRequest("ANC:001", Side.LEFT, "머리"))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.message").value(org.hamcrest.Matchers.containsString("좌우")));
+    }
+
+    @Test
+    @DisplayName("부위 없이 좌우만 보내면 400이다")
+    void 부위_없이_좌우만() throws Exception {
+        // 무엇의 좌우인지 알 수 없다.
+        mockMvc.perform(post("/api/sessions")
+                        .header("Authorization", token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(
+                                new StartSessionRequest(null, Side.RIGHT, null))))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("부위를 건너뛰어도 시작할 수 있다")
+    void 부위_없이_시작() throws Exception {
+        // 와이어프레임에 "부위 짚기"를 건너뛰는 경로가 있다.
+        mockMvc.perform(post("/api/sessions")
+                        .header("Authorization", token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(
+                                new StartSessionRequest(null, null, null))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.siteNodeId").doesNotExist());
     }
 
     @Test
@@ -226,7 +279,7 @@ class IntakeTurnApiTest {
                 .header("Authorization", token)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(
-                        new StartSessionRequest(List.of("abdomen"), "복부")));
+                        new StartSessionRequest("SUR:032", null, "아랫배")));
     }
 
     private long startAndGetId() throws Exception {

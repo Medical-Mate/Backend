@@ -19,6 +19,7 @@ import com.jinryomate.backend.auth.dto.AuthDtos.TokenResponse;
 import com.jinryomate.backend.card.dto.CardDtos.AxisEdit;
 import com.jinryomate.backend.card.dto.CardDtos.UpdateCardRequest;
 import com.jinryomate.backend.intake.dto.IntakeDtos.StartSessionRequest;
+import com.jinryomate.backend.intake.entity.Side;
 import com.jinryomate.backend.profile.dto.ProfileDtos.HealthProfileRequest;
 import com.jinryomate.backend.profile.dto.ProfileDtos.ListFieldRequest;
 import com.jinryomate.backend.profile.entity.FieldStatus;
@@ -72,7 +73,7 @@ class BriefingCardApiTest {
                         .header("Authorization", token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(
-                                new StartSessionRequest(List.of("hand_finger_joint_R"), "손가락 관절(오른손)"))))
+                                new StartSessionRequest("SUR:072", Side.RIGHT, "손(오른쪽)"))))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error.code").value("INVALID_REQUEST"));
     }
@@ -86,11 +87,12 @@ class BriefingCardApiTest {
                         .header("Authorization", token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(
-                                new StartSessionRequest(List.of("hand_finger_joint_R"), "손가락 관절(오른손)"))))
+                                new StartSessionRequest("SUR:072", Side.RIGHT, "손(오른쪽)"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("IN_PROGRESS"))
-                .andExpect(jsonPath("$.siteText").value("손가락 관절(오른손)"))
-                .andExpect(jsonPath("$.siteCodes[0]").value("hand_finger_joint_R"))
+                .andExpect(jsonPath("$.siteText").value("손(오른쪽)"))
+                .andExpect(jsonPath("$.siteNodeId").value("SUR:072"))
+                .andExpect(jsonPath("$.side").value("RIGHT"))
                 // 화면의 "2 / 4" 가 아니라 대화 턴 상한이다. 그 넷은 화면 단계고 앱이 안다.
                 .andExpect(jsonPath("$.progress.total").value(20))
                 // 세션을 만들면 AI 첫 질문이 이미 들어 있다.
@@ -195,7 +197,7 @@ class BriefingCardApiTest {
         mockMvc.perform(get("/api/cards/" + cardId).header("Authorization", token))
                 .andExpect(jsonPath("$.status").value("CONFIRMED"))
                 // 확정본의 본문은 새 버전을 만들어도 바뀌지 않는다.
-                .andExpect(jsonPath("$.chiefComplaint").value("손가락 관절(오른손)"));
+                .andExpect(jsonPath("$.chiefComplaint").value("손(오른쪽)"));
     }
 
     @Test
@@ -326,7 +328,7 @@ class BriefingCardApiTest {
                         .header("Authorization", token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(
-                                new StartSessionRequest(List.of("hand_finger_joint_R"), "손가락 관절(오른손)"))))
+                                new StartSessionRequest("SUR:072", Side.RIGHT, "손(오른쪽)"))))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
         return objectMapper.readTree(body).path("sessionId").asLong();

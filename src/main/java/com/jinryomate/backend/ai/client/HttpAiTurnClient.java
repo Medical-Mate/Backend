@@ -49,13 +49,22 @@ public class HttpAiTurnClient implements AiTurnClient {
     /**
      * 문답을 시작한다.
      *
-     * <p>부위를 함께 보내지 않는다. {@code selections} 에 부위를 어떤 모양으로 싣는지가
-     * 아직 안 정해졌고(좌우를 어떻게 표현하는지), 형식을 지어내면 AI 가 조용히 무시하거나
-     * 거부한다. 정해지면 여기에 붙인다.
+     * <p><b>부위는 여기서 보낸다. {@code selections} 가 아니다.</b> {@code selections} 는 문답
+     * 중간에 고른 값(통증 강도 같은 칩)을 넣는 자리이고, 부위는 인체도에서 문답 시작 전에
+     * 정해진다.
+     *
+     * <p>좌우는 코드에 박지 않고 {@code side} 로 따로 보낸다. {@code SUR:051}(어깨) 하나가
+     * 좌우를 다 덮는다.
      */
     @Override
     public AiTurnResult start(IntakeSession session) {
         ObjectNode body = objectMapper.createObjectNode();
+        if (session.getSiteNodeId() != null) {
+            body.put("site_node_id", session.getSiteNodeId());
+        }
+        if (session.getSide() != null) {
+            body.put("side", session.getSide().toContract());
+        }
         return call(START_PATH, body, "세션 시작");
     }
 

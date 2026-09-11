@@ -15,6 +15,7 @@ import com.jinryomate.backend.auth.client.KakaoClient;
 import com.jinryomate.backend.auth.dto.AuthDtos.KakaoLoginRequest;
 import com.jinryomate.backend.auth.dto.AuthDtos.TokenResponse;
 import com.jinryomate.backend.intake.dto.IntakeDtos.StartSessionRequest;
+import com.jinryomate.backend.intake.entity.Side;
 import com.jinryomate.backend.profile.dto.ProfileDtos.HealthProfileRequest;
 import com.jinryomate.backend.profile.dto.ProfileDtos.ListFieldRequest;
 import com.jinryomate.backend.profile.dto.ProfileDtos.TextFieldRequest;
@@ -84,7 +85,7 @@ class HomeApiTest {
                 .andExpect(status().isOk())
                 // 화면의 "복부 통증 · 3단계 중 2단계까지 답했어요"가 이 셋으로 만들어진다.
                 .andExpect(jsonPath("$.inProgressSession.sessionId").exists())
-                .andExpect(jsonPath("$.inProgressSession.siteText").value("손가락 관절(오른손)"))
+                .andExpect(jsonPath("$.inProgressSession.siteText").value("손(오른쪽)"))
                 .andExpect(jsonPath("$.inProgressSession.progressCurrent").exists())
                 .andExpect(jsonPath("$.inProgressSession.progressTotal").exists());
     }
@@ -167,7 +168,7 @@ class HomeApiTest {
                         .header("Authorization", token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(
-                                new StartSessionRequest(List.of("hand_finger_joint_R"), "손가락 관절(오른손)"))))
+                                new StartSessionRequest("SUR:072", Side.RIGHT, "손(오른쪽)"))))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
         return objectMapper.readTree(body).path("sessionId").asLong();

@@ -33,12 +33,20 @@ public class IntakeSessionController {
             description = """
                     S1.5에서 짚은 부위와 함께 문답을 시작합니다. 부위는 건너뛸 수 있습니다.
 
+                    **부위는 `siteNodeId` 하나입니다.** 부위 마스터(`body-map`)의 id 를 그대로
+                    보냅니다 — `ANC:001`(앵커) · `SUR:032`(구역). 없는 id 는 400입니다.
+                    부위 여러 개는 아직 정해지지 않았습니다.
+
+                    **좌우는 코드에 박지 말고 `side` 로 보냅니다.** `LEFT` · `RIGHT` · `BOTH`.
+                    `SUR:072`(손) 하나가 좌우를 다 덮습니다. **좌우가 없는 부위 13곳
+                    (머리·배 등)에 보내면 400입니다** — 앱이 `body-map` 의 `laterality` 로
+                    미리 거르면 안 봐도 됩니다. 부위 없이 좌우만 보내도 400입니다.
+
                     **나이·성별이 없으면 400입니다.** 이 둘은 의사용 카드 헤더에 반드시 찍혀서,
                     없으면 문답을 다 해도 카드가 성립하지 않습니다.
                     `GET /api/me/health-profile` 의 `canStartIntake` 로 미리 확인할 수 있습니다.
 
-                    `siteText` 는 사람이 읽는 표현입니다. 예: `손가락 관절(오른손)`.
-                    문답 첫 문장에 그대로 들어갑니다.
+                    `siteText` 는 사람이 읽는 표현입니다. 예: `손(오른쪽)`.
                     """)
     @PostMapping
     public SessionResponse start(@AuthenticationPrincipal Long userId,
