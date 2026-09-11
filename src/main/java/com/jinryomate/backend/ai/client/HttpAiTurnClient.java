@@ -2,13 +2,16 @@ package com.jinryomate.backend.ai.client;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.jinryomate.backend.ai.dto.AiTurnResult;
+import com.jinryomate.backend.ai.dto.PatientProfile;
 import com.jinryomate.backend.global.error.ApiException;
 import com.jinryomate.backend.global.error.ErrorCode;
 import com.jinryomate.backend.global.web.RequestIdFilter;
 import com.jinryomate.backend.intake.entity.IntakeSession;
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatusCode;
@@ -139,6 +142,41 @@ public class HttpAiTurnClient implements AiTurnClient {
                 throw new ApiException(ErrorCode.UPSTREAM_ERROR, "잠시 후 다시 시도해주세요.");
             }
         }
+    }
+
+    /**
+     * 문답이 끝난 뒤 질문 후보를 받아온다.
+     *
+     * <p><b>발화를 보내지 않는다.</b> 이미 끝난 문답이라 다음 질문이 필요 없고, 카드도
+     * 바뀌지 않는다. {@code question_candidates} 만 채워서 돌아온다.
+     *
+     * <p>건강정보는 <b>여기서만</b> 나간다. 매 턴 보내면 요청 본문에 그것이 남는 표면이
+     * 스무 배가 된다.
+     */
+    @Override
+    public AiTurnResult requestQuestionCandidates(IntakeSession session, PatientProfile profile) {
+        ObjectNode body = objectMapper.createObjectNode();
+        body.set("state", readState(session));
+        body.put("question_candidates", true);
+
+        if (profile != null) {
+            ObjectNode patient = body.putObject("patient_profile");
+            // 값이 null 인 항목은 키째 뺀다. 계약에 "모르겠다" 자리가 없어서,
+            // 빈 배열로 넣으면 "없다"가 되어 확인 질문이 안 나간다.
+            putIfPresent(patient, "medications", profile.medications());
+            putIfPresent(patient, "conditions", profile.conditions());
+            putIfPresent(patient, "allergies", profile.allergies());
+        }
+
+        return call(TURN_PATH, body, "질문 후보");
+    }
+
+    private void putIfPresent(ObjectNode node, String name, List<String> values) {
+        if (values == null) {
+            return;
+        }
+        ArrayNode array = node.putArray(name);
+        values.forEach(array::add);
     }
 
     private AiTurnResult post(String path, byte[] body, String requestId) {

@@ -2,6 +2,7 @@ package com.jinryomate.backend.ai.client;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.jinryomate.backend.ai.dto.AiTurnResult;
+import com.jinryomate.backend.ai.dto.PatientProfile;
 import com.jinryomate.backend.intake.entity.IntakeSession;
 
 /**
@@ -33,4 +34,21 @@ public interface AiTurnClient {
      * @param extractionMeta 폰 모델·프롬프트 버전. {@code extraction} 과 함께 온다
      */
     AiTurnResult turn(IntakeSession session, String utterance, JsonNode extraction, JsonNode extractionMeta);
+
+    /**
+     * 문답이 끝난 뒤 질문 후보를 받아온다. 화면 {@code 1i} 가 쓴다.
+     *
+     * <p><b>종료 뒤에 따로 부른다.</b> 계약은 종료 턴 요청에 얹으라고 하지만, 어느 턴이
+     * 마지막인지는 <b>응답의 {@code ended} 를 봐야 알 수 있다</b> — 보내는 시점에는 모른다.
+     * 매 턴 켜 두면 건강정보를 매 턴 실어 보내게 되어, AI 쪽이 422 로 막으려던 그 상태가
+     * 그대로 생긴다.
+     *
+     * <p>종료 뒤 호출이 실제로 후보를 만들어 주는 것은 확인했다. 발화 없이 상태만 보낸다.
+     *
+     * <p><b>Bedrock 호출이 한 번 더 든다.</b> 문답 하나에 한 번이고, 그 비용은 우리 크레딧에서
+     * 나간다 — 그래서 켜는 시점을 우리가 쥔다.
+     *
+     * @param profile 건강정보. 없으면 {@code null} — 그때는 카드 축만으로 질문을 만든다
+     */
+    AiTurnResult requestQuestionCandidates(IntakeSession session, PatientProfile profile);
 }
