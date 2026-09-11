@@ -1,5 +1,7 @@
 package com.jinryomate.backend.intake.dto;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.jinryomate.backend.intake.entity.AiProfile;
 import com.jinryomate.backend.intake.entity.IntakeMessage;
 import com.jinryomate.backend.intake.entity.IntakeSession;
 import com.jinryomate.backend.intake.entity.Side;
@@ -29,6 +31,14 @@ public final class IntakeDtos {
             @Size(max = 40, message = "부위 코드가 너무 깁니다.")
             String siteNodeId,
 
+            /**
+             * 추출을 어디서 돌리는지. 비우면 {@code SERVER} 다.
+             *
+             * <p><b>앱이 정한다.</b> 폰에 모델을 들고 있는지는 기기 사정이라 서버가 알 수 없다.
+             * {@code ONDEVICE} 면 문답도 달라진다 — 첫 자유 발화 없이 첫 축 질문부터 시작한다.
+             */
+            AiProfile profile,
+
             /** 좌우. 좌우가 없는 부위(머리·배 등 13곳)에 보내면 400이다. */
             Side side,
 
@@ -52,7 +62,21 @@ public final class IntakeDtos {
             String text,
 
             /** 비우면 {@code TEXT} 로 본다. */
-            IntakeMessage.InputMethod inputMethod
+            IntakeMessage.InputMethod inputMethod,
+
+            /**
+             * 폰 안에서 돌린 추출 결과. 온디바이스 프로필에서만 보낸다.
+             *
+             * <p><b>우리는 열어보지 않고 AI 에 그대로 넘긴다.</b> 형식은 AI 계약이 정하고,
+             * 우리가 구조를 읽기 시작하면 AI 쪽 변경이 우리를 깨뜨린다.
+             *
+             * <p><b>저장하지 않는다.</b> 증상 텍스트가 든 중간 산출물이고, 카드에 근거가
+             * 이미 남으므로 우리가 또 들고 있을 이유가 없다.
+             */
+            JsonNode extraction,
+
+            /** 어떤 폰 모델·프롬프트가 만들었는지. 카드의 {@code provenance} 가 이 값으로 갱신된다. */
+            JsonNode extractionMeta
     ) {}
 
     /**

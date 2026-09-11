@@ -54,7 +54,7 @@ public class IntakeSessionService {
         validateSite(request.siteNodeId(), request.side());
 
         IntakeSession session = sessionRepository.save(IntakeSession.start(
-                user, request.siteNodeId(), request.side(), request.siteText()));
+                user, request.siteNodeId(), request.side(), request.siteText(), request.profile()));
 
         // 첫 질문을 여기서 받아 대화에 넣는다. 앱이 세션을 만든 뒤 또 호출하지 않아도
         // 바로 화면을 그릴 수 있다. AI 계약상 이 호출은 LLM 을 쓰지 않는다.
@@ -89,7 +89,8 @@ public class IntakeSessionService {
 
         session.addMessage(IntakeMessage.fromUser(session, request.text(), request.inputMethod()));
 
-        AiTurnResult result = aiTurnClient.turn(session, request.text());
+        AiTurnResult result = aiTurnClient.turn(
+                session, request.text(), request.extraction(), request.extractionMeta());
         session.rememberState(result.state());
         session.rememberCard(result.card());
         session.addMessage(IntakeMessage.fromAi(session, result.reply()));

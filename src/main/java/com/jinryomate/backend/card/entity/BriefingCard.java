@@ -209,7 +209,15 @@ public class BriefingCard {
      * 여기서 하는 일은 있는 값 둘 중 하나를 고르는 것뿐이다.
      */
     public String displayTitle() {
-        return title != null && !title.isBlank() ? title : chiefComplaint;
+        if (title != null && !title.isBlank()) {
+            return title;
+        }
+        if (chiefComplaint != null && !chiefComplaint.isBlank()) {
+            return chiefComplaint;
+        }
+        // 문답을 시작만 하고 아무 말도 안 한 카드다. 부위라도 없으면 목록에서
+        // 자기 카드를 못 찾는다.
+        return session == null ? null : session.getSiteText();
     }
 
     /** 축 이름으로 찾아 쓰기 좋게. 순서는 AI 가 준 그대로 유지한다. */

@@ -57,11 +57,6 @@ public class IntakeSession {
     private Status status = Status.IN_PROGRESS;
 
     /**
-     * S1.5에서 짚은 부위 코드.
-     *
-     * <p>부위 마스터가 아직 없어 지금은 형식만 본다. 마스터가 생기면 대조를 붙인다.
-     */
-    /**
      * 부위 마스터의 노드 id. {@code ANC:001}(앵커) · {@code SUR:032}(구역).
      *
      * <p><b>하나만 받는다.</b> AI 계약이 세션 시작에 부위 하나를 받는다. 부위 여러 개는
@@ -76,6 +71,15 @@ public class IntakeSession {
     @Enumerated(EnumType.STRING)
     @Column(length = 8)
     private Side side;
+
+    /**
+     * 추출을 어디서 돌리는지. 앱이 정해 보내고 우리는 AI 에 그대로 넘긴다.
+     *
+     * <p>세션 시작에 한 번 정해지고 턴마다 바뀌지 않아서 여기 둔다.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 16)
+    private AiProfile aiProfile = AiProfile.SERVER;
 
     /** 사람이 읽는 표현. 예: {@code 손가락 관절(오른손)}. 문답 첫 문장에 그대로 들어간다. */
     @Column(length = 100)
@@ -154,16 +158,18 @@ public class IntakeSession {
 
     private Instant completedAt;
 
-    private IntakeSession(User user, String siteNodeId, Side side, String siteText) {
+    private IntakeSession(User user, String siteNodeId, Side side, String siteText, AiProfile aiProfile) {
         this.user = user;
         this.siteNodeId = siteNodeId;
         this.side = side;
         this.siteText = siteText;
+        this.aiProfile = aiProfile == null ? AiProfile.SERVER : aiProfile;
     }
 
     /** S1.5에서 부위를 짚고 시작한다. 부위를 건너뛰면 비어 있을 수 있다. */
-    public static IntakeSession start(User user, String siteNodeId, Side side, String siteText) {
-        return new IntakeSession(user, siteNodeId, side, siteText);
+    public static IntakeSession start(User user, String siteNodeId, Side side, String siteText,
+                                      AiProfile aiProfile) {
+        return new IntakeSession(user, siteNodeId, side, siteText, aiProfile);
     }
 
     /** 다음 메시지 순번. 카드의 evidence 가 이 번호를 참조한다. */
