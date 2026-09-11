@@ -31,11 +31,11 @@ EC2 는 $120 ÷ $19.74 = 6.1개월로 딱 맞아떨어져 **AI 비용이 들어�
 | | 컨테이너 한도 | 실사용 |
 |---|---|---|
 | 백엔드 (`-Xmx320m`) | 640MB | ~500MB |
-| AI (FastAPI + boto3) | 512MB | ~300MB |
+| AI (FastAPI + boto3) | 192MB | ~46MB |
 | Postgres (`shared_buffers=128MB`) | 400MB | ~250MB |
 | Caddy | 64MB | ~30MB |
 | OS | — | ~120MB |
-| **합계** | 1,616MB | **~1,200MB (59%)** |
+| **합계** | 1,296MB | **~950MB (46%)** |
 
 **1GB 로는 안 됩니다.** 셋을 합치면 ~990MB 로 한도에 붙어 발표 중 OOM 위험이 있습니다.
 
@@ -50,7 +50,7 @@ aws lightsail create-instances \
   --instance-names jinryomate \
   --availability-zone ap-northeast-2a \
   --blueprint-id ubuntu_24_04 \
-  --bundle-id medium_3_0
+  --bundle-id small_3_0   # 2 vCPU · 2GB · 60GB · 3TB · $12/월
 
 aws lightsail allocate-static-ip --static-ip-name jinryomate-ip
 aws lightsail attach-static-ip --static-ip-name jinryomate-ip --instance-name jinryomate
@@ -100,7 +100,7 @@ echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
 ```bash
 openssl rand -base64 48   # JWT_SECRET
 openssl rand -base64 24   # POSTGRES_PASSWORD
-openssl rand -base64 32   # AI_INTERNAL_TOKEN
+openssl rand -base64 32   # MEDIMATE_HMAC_SECRET (당분간 비워둡니다)
 ```
 
 ### 5. 띄우기
@@ -215,3 +215,27 @@ docker compose -f docker-compose.prod.yml exec -T postgres \
 - [ ] 예산 알림 설정 확인
 - [ ] DB 덤프 한 번
 - [ ] Render 서비스 정지
+
+---
+
+## 겪은 문제
+
+**user-data 가 `bash` 가 아니라 `sh` 로 실행됩니다.** shebang 을 `#!/bin/bash` 로 써도 Lightsail 이
+dash 로 돌려서 `set -o pipefail` 에서 죽습니다. cloud-init 로그에 이렇게 남습니다.
+
+```
+part-001: 18: set: Illegal option -o pipefail
+```
+
+user-data 에서는 bash 전용 문법을 쓰지 말거나, 아예 SSH 로 붙어서 설치하세요. 후자가 결과를
+바로 볼 수 있어 낫습니다.
+
+**AWS CLI 는 `file://` 파라미터를 시스템 로캘로 읽습니다.** 한글 주석이 든 UTF-8 파일을 넘기면
+한국어 Windows 에서 cp949 로 디코드하려다 실패합니다.
+
+```
+Error parsing parameter '--user-data': ... text contents could not be decoded
+```
+
+`PYTHONUTF8=1` 은 안 통합니다 (CLI v2 는 고정 바이너리입니다). CLI 로 넘기는 파일은 ASCII 로
+쓰세요.
