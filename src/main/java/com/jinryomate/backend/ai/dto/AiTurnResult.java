@@ -13,10 +13,14 @@ package com.jinryomate.backend.ai.dto;
  * @param state     다음 턴에 그대로 실어 보낼 값. <b>열어보지 않는다.</b>
  *                  AI 계약이 불투명하게 다루라고 명시했고, 내부 구조에 의존하는 순간
  *                  AI 쪽 변경이 우리를 깨뜨린다
+ * @param card      <b>매 턴 딸려 오는 진료 전 카드</b>의 JSON 원문. 카드만 따로 만드는
+ *                  경로는 계약에 없다. 여기서는 문자열로 들고만 있다가 세션에 보관하고,
+ *                  카드를 만들 시점에 {@link AiCard} 로 푼다 — 턴마다 파싱할 이유가 없다
  */
 public record AiTurnResult(
         String reply,
         boolean ended,
         String endReason,
-        String state
+        String state,
+        String card
 ) {}

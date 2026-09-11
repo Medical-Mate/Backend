@@ -24,6 +24,11 @@ public class StubAiTurnClient implements AiTurnClient {
 
     static final String STUB_STATE = "{\"stub\":true}";
 
+    /** AI 계약의 SOCRATES 8축. 순서까지 실제와 같게 둔다. */
+    private static final List<String> AXES = List.of(
+            "site", "onset", "character", "radiation",
+            "associated", "time_course", "exacerbating_relieving", "severity");
+
     /**
      * 물어볼 축의 순서. AI 계약의 8축 중 앞쪽 넷을 흉내 낸다.
      *
@@ -43,7 +48,7 @@ public class StubAiTurnClient implements AiTurnClient {
                 ? "어디가 어떻게 불편해서 오셨는지 편하게 말씀해 주세요."
                 : session.getSiteText() + "이(가) 불편하시군요. " + QUESTIONS.get(0);
 
-        return new AiTurnResult(opening, false, null, STUB_STATE);
+        return new AiTurnResult(opening, false, null, STUB_STATE, card(session, null));
     }
 
     @Override
@@ -53,9 +58,49 @@ public class StubAiTurnClient implements AiTurnClient {
                 .filter(m -> m.getRole() == IntakeMessage.Role.USER)
                 .count();
 
+        String card = card(session, utterance);
         if (answered >= QUESTIONS.size()) {
-            return new AiTurnResult(CLOSING, true, "complete", STUB_STATE);
+            return new AiTurnResult(CLOSING, true, "complete", STUB_STATE, card);
         }
-        return new AiTurnResult(QUESTIONS.get((int) answered), false, null, STUB_STATE);
+        return new AiTurnResult(QUESTIONS.get((int) answered), false, null, STUB_STATE, card);
+    }
+
+    /**
+     * 실제 계약과 <b>모양이 같은</b> 카드를 만든다.
+     *
+     * <p>값은 가짜지만 구조는 진짜여야 한다. 축 8개를 {@code not_asked} 로 깔고 발화가 있으면
+     * {@code site} 만 채운다 — 1턴째 카드가 대부분 {@code not_asked} 인 실제 동작을 그대로
+     * 흉내 내야, 3값으로 검증하다 터지는 것 같은 문제가 스텁에서도 드러난다.
+     */
+    private String card(IntakeSession session, String utterance) {
+        String complaint = utterance == null ? session.getSiteText() : utterance;
+
+        StringBuilder axes = new StringBuilder();
+        for (String axis : AXES) {
+            if (!axes.isEmpty()) {
+                axes.append(',');
+            }
+            boolean filled = "site".equals(axis) && complaint != null;
+            axes.append("\"").append(axis).append("\":{\"status\":\"")
+                    .append(filled ? "filled" : "not_asked")
+                    .append("\",\"value\":").append(filled ? quote(complaint) : "null")
+                    .append(",\"evidence\":").append(filled ? "[" + quote(complaint) + "]" : "[]")
+                    .append("}");
+        }
+
+        return "{\"card_type\":\"previsit\",\"chief_complaint\":" + quote(complaint)
+                + ",\"axes\":{" + axes + "}"
+                + ",\"red_flags\":[],\"patient_notes\":[]"
+                + ",\"minimally_complete\":false,\"completeness\":" + (complaint == null ? "0.0" : "0.125")
+                + ",\"department_guidance\":null"
+                + ",\"provenance\":{\"prompt_version\":\"stub\",\"model_id\":\"stub\",\"ontology_snapshot\":null}}";
+    }
+
+    private static String quote(String s) {
+        if (s == null) {
+            return "null";
+        }
+        return "\"" + s.replace("\\", "\\\\").replace("\"", "\\\"")
+                .replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t") + "\"";
     }
 }

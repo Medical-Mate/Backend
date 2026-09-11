@@ -79,7 +79,7 @@ public final class VisitDtos {
             return new VisitSummary(
                     v.getId(),
                     v.getCard().getId(),
-                    v.getCard().getTitle(),
+                    v.getCard().displayTitle(),
                     v.getClinicName(),
                     v.getVisitedOn());
         }

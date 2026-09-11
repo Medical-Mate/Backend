@@ -80,7 +80,7 @@ public final class AppointmentDtos {
                     a.getScheduledAt(),
                     a.getStatus(),
                     a.getCard() == null ? null : a.getCard().getId(),
-                    a.getCard() == null ? null : a.getCard().getTitle());
+                    a.getCard() == null ? null : a.getCard().displayTitle());
         }
     }
 }

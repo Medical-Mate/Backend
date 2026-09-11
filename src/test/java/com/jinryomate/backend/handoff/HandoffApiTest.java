@@ -84,7 +84,10 @@ class HandoffApiTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.patient.name").value("김서연"))
                 .andExpect(jsonPath("$.title").exists())
-                .andExpect(jsonPath("$.onset.status").exists())
+                // 8축이 전부 자리를 차지한다. 아직 안 물어본 축도 not_asked 로 남아야
+                // 의사가 "안 물어본 것"과 "모른다고 한 것"을 구별한다.
+                .andExpect(jsonPath("$.axes.onset.status").exists())
+                .andExpect(jsonPath("$.axes.severity.status").value("NOT_ASKED"))
                 .andExpect(jsonPath("$.confirmedAt").exists());
     }
 
@@ -97,7 +100,10 @@ class HandoffApiTest {
                 .andExpect(status().isOk())
                 // 의사에게 AI 파이프라인 버전을 보여줄 이유가 없다.
                 .andExpect(jsonPath("$.meta").doesNotExist())
-                .andExpect(jsonPath("$.evidence").doesNotExist())
+                .andExpect(jsonPath("$.completeness").doesNotExist())
+                // evidence 는 반대로 남긴다. 의사가 "정말 저렇게 말했나"를 확인하는 근거라
+                // 내부 추적값이 아니라 진료실에서 쓰는 값이다.
+                .andExpect(jsonPath("$.axes.site.evidence").exists())
                 .andExpect(jsonPath("$.sessionId").doesNotExist())
                 .andExpect(jsonPath("$.rejectedFields").doesNotExist());
     }
