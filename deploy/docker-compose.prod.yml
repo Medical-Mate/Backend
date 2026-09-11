@@ -22,7 +22,7 @@ services:
     environment:
       # 예: 1-2-3-4.sslip.io — 그 IP 로 해석되는 공개 호스트명이다.
       PUBLIC_HOST: ${PUBLIC_HOST:?PUBLIC_HOST 가 필요합니다}
-      ACME_EMAIL: ${ACME_EMAIL:-}
+
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data       # 발급받은 인증서. 지우면 재발급 한도에 걸릴 수 있다.

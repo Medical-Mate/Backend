@@ -5,12 +5,20 @@
 # 카카오 웹훅이 HTTPS 를 요구하는데 이걸로 충족된다.
 
 {
-	# 발급 실패·만료 경고를 받을 주소. 비워두면 익명으로 발급받는다.
-	email {$ACME_EMAIL}
-
 	# 관리 API 를 밖으로 열지 않는다.
 	admin off
 }
+
+# ACME 연락처 주소는 여기에 두지 않는다.
+#
+# email {$ACME_EMAIL} 로 두면 그 변수가 비었을 때 지시어에 인자가 없어져
+# Caddyfile 파싱이 통째로 실패한다 — 컨테이너가 재시작만 반복하고 HTTPS 가 안 뜬다.
+# Caddyfile 에는 "값이 있으면 쓰고 없으면 건너뛰기" 문법이 없다.
+#
+# 주소 없이도 인증서는 정상 발급된다(익명 발급). 만료 경고 메일을 받고 싶으면
+# 아래 한 줄을 위 블록 안에 직접 적는다.
+#
+#     email you@example.com
 
 {$PUBLIC_HOST} {
 	encode zstd gzip
