@@ -1,0 +1,131 @@
+# 운영 구성. Lightsail 인스턴스 한 대에 전부 올린다.
+#
+# 이미지는 여기서 빌드하지 않는다. 2GB 서버에서 Gradle 을 돌리면 OOM 으로 죽는다.
+# GitHub Actions 가 GHCR 에 올린 것을 pull 만 한다.
+#
+#   docker compose -f docker-compose.prod.yml pull
+#   docker compose -f docker-compose.prod.yml up -d
+#
+# 비밀값은 같은 디렉터리의 .env 에서 읽는다. 그 파일은 커밋되지 않는다.
+name: jinryomate
+
+services:
+  # ---------- 진입점 ----------
+  # 인터넷에 열리는 유일한 컨테이너다. TLS 를 여기서 끝내고 뒤로는 평문으로 넘긴다.
+  # 인증서는 Caddy 가 Let's Encrypt 에서 자동 발급·갱신한다.
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"     # ACME 인증과 HTTPS 리다이렉트에 필요하다. 닫으면 인증서 발급이 실패한다.
+      - "443:443"
+    environment:
+      # 예: 1-2-3-4.sslip.io — 그 IP 로 해석되는 공개 호스트명이다.
+      PUBLIC_HOST: ${PUBLIC_HOST:?PUBLIC_HOST 가 필요합니다}
+      ACME_EMAIL: ${ACME_EMAIL:-}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data       # 발급받은 인증서. 지우면 재발급 한도에 걸릴 수 있다.
+      - caddy-config:/config
+    mem_limit: 64m
+    depends_on:
+      - backend
+
+  # ---------- 백엔드 ----------
+  backend:
+    image: ghcr.io/medical-mate/backend:latest
+    restart: unless-stopped
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${POSTGRES_DB:-jinryomate}
+      DB_USERNAME: ${POSTGRES_USER:-jinryomate}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD 가 필요합니다}
+
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET 이 필요합니다}
+
+      # 앱 ID 가 없으면 서버가 아예 뜨지 않는다 — 남의 앱 토큰을 걸러내는 방어선이다.
+      KAKAO_APP_ID: ${KAKAO_APP_ID:?KAKAO_APP_ID 가 필요합니다}
+      KAKAO_ADMIN_KEY: ${KAKAO_ADMIN_KEY:-}
+
+      # 같은 Docker 네트워크 안이라 컨테이너 이름으로 부른다. 인터넷을 타지 않는다.
+      AI_BASE_URL: http://ai:8000
+      # AI 쪽은 HMAC 서명(MEDIMATE_HMAC_SECRET)을 기대한다. 백엔드에 실제 클라이언트를
+      # 붙일 때 같은 값을 넣고 서명을 구현한다. 그때까지 양쪽 모두 비워둔다.
+      AI_INTERNAL_TOKEN: ${MEDIMATE_HMAC_SECRET:-}
+
+      # Dockerfile 의 -XX:MaxRAMPercentage 는 컨테이너가 여럿이면 계산이 어긋난다.
+      # -Xmx 를 명시하면 MaxRAMPercentage 는 무시된다.
+      JAVA_TOOL_OPTIONS: "-Xmx320m -XX:MaxMetaspaceSize=128m"
+    mem_limit: 640m
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/api/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 90s   # 콜드 스타트가 느리다. 짧게 잡으면 기동 중에 unhealthy 가 된다.
+
+  # ---------- AI ----------
+  # 모델 가중치를 들고 있지 않아 GPU 가 필요 없다. 무상태라 볼륨도 DB 도 없다 —
+  # 세션 상태는 백엔드가 들고 다닌다.
+  #
+  # 포트를 열지 않는다. 백엔드만 내부망으로 접근한다.
+  #
+  # AI 이미지가 준비되기 전에는 띄우지 않아도 된다. 백엔드가 StubAiCardClient 로 동작한다.
+  ai:
+    image: ${AI_IMAGE:-ghcr.io/medical-mate/ai:latest}
+    restart: unless-stopped
+    environment:
+      # 요청 서명 검증. AI 쪽 문서상 비우면 검증을 생략한다.
+      # 백엔드에 실제 클라이언트를 붙일 때 서명을 함께 구현하고 그때 값을 넣는다.
+      MEDIMATE_HMAC_SECRET: ${MEDIMATE_HMAC_SECRET:-}
+
+      # 기본 모델은 OpenAI 다. Bedrock 으로 갈아타면 이 키가 필요 없어진다.
+      MEDIMATE_PROVIDER: ${MEDIMATE_PROVIDER:-openai}
+      MEDIMATE_MODEL: ${MEDIMATE_MODEL:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+
+      # Bedrock 으로 갈 때만 쓴다. Lightsail 은 인스턴스에 IAM 역할을 붙일 수 없어
+      # 키를 넣는다 — boto3 는 환경변수를 역할과 똑같이 취급하므로 AI 코드는 그대로다.
+      AWS_REGION: ${BEDROCK_REGION:-ap-northeast-2}
+      AWS_ACCESS_KEY_ID: ${BEDROCK_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${BEDROCK_SECRET_ACCESS_KEY:-}
+
+    # AI 쪽 실측 RSS 가 46MB 다(인터프리터 13.6 + 앱 30.7 + 온톨로지 1.6).
+    # 문서의 "512MB~1GB" 는 넉넉히 잡은 번들 기준이라 그대로 쓰면 낭비다.
+    mem_limit: 192m
+    profiles: ["ai"]   # AI 이미지가 준비되면 --profile ai 로 함께 띄운다.
+
+  # ---------- DB ----------
+  # 포트를 호스트에 열지 않는다. 백엔드만 내부망으로 붙는다.
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-jinryomate}
+      POSTGRES_USER: ${POSTGRES_USER:-jinryomate}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD 가 필요합니다}
+    # 2GB 를 넷이 나눠 쓴다. 기본값(shared_buffers 128MB, max_connections 100)이면
+    # 연결당 예약분까지 합쳐 예상보다 많이 잡는다. 백엔드 풀이 10 이라 30 이면 넉넉하다.
+    command: >
+      postgres
+      -c shared_buffers=128MB
+      -c max_connections=30
+      -c work_mem=2MB
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-jinryomate} -d ${POSTGRES_DB:-jinryomate}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    mem_limit: 400m
+
+volumes:
+  pgdata:
+  caddy-data:
+  caddy-config:

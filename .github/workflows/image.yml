@@ -1,0 +1,54 @@
+# 컨테이너 이미지를 빌드해 GHCR 에 올린다.
+#
+# 서버에서 빌드하지 않는 이유: Lightsail 2GB 에 컨테이너가 넷 올라가는데
+# 거기서 Gradle 을 돌리면 OOM 으로 죽는다. 빌드는 여기서, 서버는 pull 만.
+name: image
+
+on:
+  push:
+    branches: [main]
+  # 롤백이나 재배포용으로 손으로도 돌릴 수 있게 둔다.
+  workflow_dispatch:
+
+concurrency:
+  group: image-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  push:
+    name: build and push
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: GHCR 로그인
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # GHCR 은 경로에 대문자를 받지 않는다. 조직명이 Medical-Mate 라 그대로 쓰면 푸시가 실패한다.
+      - name: 이미지 이름을 소문자로
+        run: |
+          echo "IMAGE=ghcr.io/$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')/backend" >> "$GITHUB_ENV"
+
+      - name: 빌드와 푸시
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          # Lightsail 표준 번들은 x86 이다. ARM 으로 만들면 서버에서 안 뜬다.
+          platforms: linux/amd64
+          push: true
+          # latest 는 서버가 당기는 태그, sha 는 롤백할 때 짚는 태그다.
+          tags: |
+            ${{ env.IMAGE }}:latest
+            ${{ env.IMAGE }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
