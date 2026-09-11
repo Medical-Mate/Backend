@@ -3,6 +3,7 @@ package com.jinryomate.backend.handoff.dto;
 import com.jinryomate.backend.card.entity.AxisSource;
 import com.jinryomate.backend.card.entity.AxisStatus;
 import com.jinryomate.backend.card.entity.BriefingCard;
+import com.jinryomate.backend.profile.entity.FieldStatus;
 import com.jinryomate.backend.profile.entity.Sex;
 import java.time.Instant;
 import java.util.LinkedHashMap;
@@ -43,7 +44,10 @@ public final class HandoffDtos {
             DepartmentGuidance departmentGuidance,
             Instant confirmedAt
     ) {
-        public record Patient(String name, Integer age, Sex sex) {}
+        public record Patient(String name, Integer age, Sex sex, Allergies allergies) {}
+
+        /** 시안의 카드는 이 값을 <b>경고 면 맨 위</b>에 올린다("처방 전에 꼭 확인해 주세요"). */
+        public record Allergies(FieldStatus status, String text) {}
 
         public record Axis(AxisStatus status, String value, List<String> evidence, AxisSource source) {}
 
@@ -56,7 +60,8 @@ public final class HandoffDtos {
                     new Axis(a.getStatus(), a.getValue(), List.copyOf(a.getEvidence()), a.getSource())));
 
             return new HandoffView(
-                    new Patient(c.getPatientName(), c.getPatientAge(), c.getPatientSex()),
+                    new Patient(c.getPatientName(), c.getPatientAge(), c.getPatientSex(),
+                            new Allergies(c.getAllergiesStatus(), c.getAllergiesText())),
                     c.displayTitle(),
                     c.getChiefComplaint(),
                     axes,
