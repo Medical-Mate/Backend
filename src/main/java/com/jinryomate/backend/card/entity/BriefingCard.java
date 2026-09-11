@@ -2,6 +2,7 @@ package com.jinryomate.backend.card.entity;
 
 import com.jinryomate.backend.auth.entity.User;
 import com.jinryomate.backend.intake.entity.IntakeSession;
+import com.jinryomate.backend.profile.entity.FieldStatus;
 import com.jinryomate.backend.profile.entity.Sex;
 import jakarta.persistence.*;
 import java.time.Instant;
@@ -72,6 +73,25 @@ public class BriefingCard {
     @Enumerated(EnumType.STRING)
     @Column(length = 16)
     private Sex patientSex;
+
+    /**
+     * 알레르기. 프로필 값을 카드 만들 때 <b>박아둔다</b>.
+     *
+     * <p>참조가 아니라 스냅샷인 이유는 이름·나이·성별과 같다 — 나중에 프로필을 고쳐도
+     * 의사가 본 카드는 그대로여야 한다. 알레르기는 그중에서도 바뀌면 안 되는 값이다.
+     *
+     * <p>시안의 카드는 이 값을 <b>경고 면 맨 위</b>에 올린다("처방 전에 꼭 확인해 주세요").
+     * 의사에게 보여주는 한 장이 안전 정보를 얻으려고 API 를 두 번 부르게 하면 안 된다.
+     *
+     * <p>{@code status} 가 3값인 것이 여기서 값을 한다 — {@code NONE}("없어요")과
+     * {@code UNKNOWN}("본인 확인 못 함")은 의사에게 전혀 다른 말이다.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(length = 16)
+    private FieldStatus allergiesStatus;
+
+    @Column(length = 200)
+    private String allergiesText;
 
     // --- 카드 본문 ---
 
@@ -170,10 +190,13 @@ public class BriefingCard {
         return new BriefingCard(user, session);
     }
 
-    public void applyPatientSnapshot(String name, Integer age, Sex sex) {
+    public void applyPatientSnapshot(String name, Integer age, Sex sex,
+                                     FieldStatus allergiesStatus, String allergiesText) {
         this.patientName = name;
         this.patientAge = age;
         this.patientSex = sex;
+        this.allergiesStatus = allergiesStatus;
+        this.allergiesText = allergiesText;
     }
 
     public void applyContent(CardContent content) {
@@ -246,7 +269,7 @@ public class BriefingCard {
         BriefingCard next = new BriefingCard(user, session);
         next.version = this.version + 1;
         next.parentCard = this;
-        next.applyPatientSnapshot(patientName, patientAge, patientSex);
+        next.applyPatientSnapshot(patientName, patientAge, patientSex, allergiesStatus, allergiesText);
         next.applyTrace(promptVersion, modelId, ontologySnapshot, aiRequestId);
         next.title = title;
         next.chiefComplaint = chiefComplaint;

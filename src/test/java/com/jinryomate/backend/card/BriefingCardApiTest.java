@@ -116,6 +116,47 @@ class BriefingCardApiTest {
     }
 
     @Test
+    @DisplayName("알레르기가 카드에 실린다")
+    void 알레르기_스냅샷() throws Exception {
+        // 시안의 카드는 이 값을 경고 면 맨 위에 올린다("처방 전에 꼭 확인해 주세요").
+        // 의사에게 보여주는 한 장이 안전 정보를 얻으려고 API 를 두 번 부르게 하면 안 된다.
+        completeOnboarding();
+        long cardId = generateCard(startSession()).path("cardId").asLong();
+
+        mockMvc.perform(get("/api/cards/" + cardId).header("Authorization", token))
+                .andExpect(jsonPath("$.patient.allergies.status").value("UNKNOWN"));
+
+        // 의사가 보는 화면에도 실려야 한다.
+        mockMvc.perform(post("/api/cards/" + cardId + "/confirm").header("Authorization", token))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/cards/" + cardId + "/handoff").header("Authorization", token))
+                .andExpect(jsonPath("$.patient.allergies.status").value("UNKNOWN"));
+    }
+
+    @Test
+    @DisplayName("프로필의 알레르기를 나중에 고쳐도 이미 만든 카드는 그대로다")
+    void 알레르기도_스냅샷이다() throws Exception {
+        completeOnboarding();
+        long cardId = generateCard(startSession()).path("cardId").asLong();
+
+        // "잘 모르겠어요" 였던 것을 "없어요" 로 바꾼다.
+        mockMvc.perform(put("/api/me/health-profile")
+                        .header("Authorization", token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new HealthProfileRequest(
+                                "김서연", 1994, "03-03", Sex.FEMALE,
+                                new ListFieldRequest(FieldStatus.KNOWN, List.of("이부프로펜")),
+                                new ListFieldRequest(FieldStatus.NONE, List.of()),
+                                new com.jinryomate.backend.profile.dto.ProfileDtos.TextFieldRequest(
+                                        FieldStatus.NONE, null)))))
+                .andExpect(status().isOk());
+
+        // 의사가 본 카드는 그대로여야 한다.
+        mockMvc.perform(get("/api/cards/" + cardId).header("Authorization", token))
+                .andExpect(jsonPath("$.patient.allergies.status").value("UNKNOWN"));
+    }
+
+    @Test
     @DisplayName("프로필을 나중에 고쳐도 이미 만든 카드의 인적사항은 그대로다")
     void 인적사항_스냅샷() throws Exception {
         completeOnboarding();

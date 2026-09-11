@@ -71,10 +71,14 @@ public class BriefingCardService {
         CardContentValidator.Result validated = validator.validate(assembled.content());
 
         BriefingCard card = BriefingCard.draft(session.getUser(), session);
+        // 알레르기도 여기서 박는다. 의사에게 보여주는 한 장이 안전 정보를 얻으려고
+        // API 를 두 번 부르게 하면 안 된다.
         card.applyPatientSnapshot(
                 profile == null ? null : profile.getName(),
                 profile == null ? null : profile.age(),
-                profile == null ? null : profile.getSex());
+                profile == null ? null : profile.getSex(),
+                profile == null ? null : profile.getAllergiesStatus(),
+                profile == null ? null : profile.getAllergies());
         card.applyContent(validated.content());
         if (assembled.provenance() != null) {
             card.applyTrace(

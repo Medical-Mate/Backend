@@ -5,6 +5,7 @@ import com.jinryomate.backend.card.entity.AxisStatus;
 import com.jinryomate.backend.card.entity.BriefingCard;
 import com.jinryomate.backend.card.entity.CardAxis;
 import com.jinryomate.backend.card.entity.CardStatus;
+import com.jinryomate.backend.profile.entity.FieldStatus;
 import com.jinryomate.backend.profile.entity.Sex;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -145,7 +146,14 @@ public final class CardDtos {
             Instant createdAt,
             Instant confirmedAt
     ) {
-        public record Patient(String name, Integer age, Sex sex) {}
+        /**
+         * @param allergies 시안의 카드는 이 값을 경고 면 맨 위에 올린다.
+         *                  {@code status} 가 {@code NONE}("없어요")인지 {@code UNKNOWN}
+         *                  ("본인 확인 못 함")인지가 의사에게 전혀 다른 말이다
+         */
+        public record Patient(String name, Integer age, Sex sex, Allergies allergies) {}
+
+        public record Allergies(FieldStatus status, String text) {}
 
         /**
          * 진료과 안내.
@@ -177,7 +185,8 @@ public final class CardDtos {
                     c.getVersion(),
                     c.getParentCard() == null ? null : c.getParentCard().getId(),
                     c.getSession().getId(),
-                    new Patient(c.getPatientName(), c.getPatientAge(), c.getPatientSex()),
+                    new Patient(c.getPatientName(), c.getPatientAge(), c.getPatientSex(),
+                            new Allergies(c.getAllergiesStatus(), c.getAllergiesText())),
                     c.getTitle(),
                     c.getChiefComplaint(),
                     axes,
