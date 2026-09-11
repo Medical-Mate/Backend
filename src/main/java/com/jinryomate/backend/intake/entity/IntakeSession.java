@@ -85,6 +85,19 @@ public class IntakeSession {
     @Column(columnDefinition = "TEXT")
     private String aiState;
 
+    /**
+     * AI 가 마지막 턴에 준 카드 원문.
+     *
+     * <p><b>카드는 매 턴 오지만 턴마다 카드 행을 만들지는 않는다.</b> 그러면 버전 체인이
+     * 의미를 잃는다 — 환자가 고치지도 않았는데 버전이 스무 개가 된다. 여기 덮어써 두었다가
+     * 앱이 카드를 요청할 때 이 값으로 만든다.
+     *
+     * <p>{@code aiState} 와 달리 <b>이건 열어본다.</b> 화면에 보여줄 값이 들어 있기 때문이다.
+     * 다만 파싱은 카드를 만들 때 한 번만 한다.
+     */
+    @Column(columnDefinition = "TEXT")
+    private String aiCard;
+
     /** 왜 끝났는지. {@code stop} · {@code complete} · {@code max_turns} · {@code budget}. */
     @Column(length = 16)
     private String endReason;
@@ -158,6 +171,18 @@ public class IntakeSession {
     /** AI 가 준 state 를 통째로 덮어쓴다. 턴마다 호출된다. */
     public void rememberState(String aiState) {
         this.aiState = aiState;
+    }
+
+    /**
+     * AI 가 준 카드를 통째로 덮어쓴다. 턴마다 호출된다.
+     *
+     * <p>{@code null} 이면 덮어쓰지 않는다. 카드가 빠진 응답 하나 때문에 쌓아둔 것을
+     * 잃으면 안 된다.
+     */
+    public void rememberCard(String aiCard) {
+        if (aiCard != null) {
+            this.aiCard = aiCard;
+        }
     }
 
     public void complete() {

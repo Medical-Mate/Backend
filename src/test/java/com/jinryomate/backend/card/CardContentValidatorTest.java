@@ -2,11 +2,11 @@ package com.jinryomate.backend.card;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.jinryomate.backend.card.entity.AxisStatus;
+import com.jinryomate.backend.card.entity.CardAxis;
 import com.jinryomate.backend.card.entity.CardContent;
-import com.jinryomate.backend.card.entity.Department;
-import com.jinryomate.backend.card.entity.Medication;
 import com.jinryomate.backend.card.service.CardContentValidator;
-import com.jinryomate.backend.profile.entity.FieldStatus;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.DisplayName;
@@ -17,142 +17,136 @@ import org.junit.jupiter.api.Test;
  *
  * <p>스프링 없이 도는 순수 로직 테스트다. 규칙이 와이어프레임과 낭독 모드에서 나온 것이라
  * 무엇이 왜 걸리는지가 여기 남아야 한다.
+ *
+ * <p><b>검증에 걸려도 예외를 던지지 않는다.</b> 카드 생성이 통째로 실패하면 환자가 한
+ * 문답이 날아간다. 걸린 값만 {@code UNKNOWN} 으로 낮추고 무엇이 걸렸는지 목록으로 돌려준다.
  */
 class CardContentValidatorTest {
 
     private final CardContentValidator validator = new CardContentValidator();
 
     @Test
-    @DisplayName("제목에 진단명이 들어가면 걸러내고 기본 제목으로 바꾼다")
-    void 진단명_금지() {
-        CardContentValidator.Result result = validator.validate(content("류마티스 의심"));
+    @DisplayName("제목은 검증하지 않는다")
+    void 제목_무검증() {
+        // AI 가 부위 + 기간을 결정론으로 조합해 만든다. LLM 을 거치지 않는 값의 조합이라
+        // 병명이 들어갈 경로 자체가 없다 — 검사를 느슨하게 한 게 아니라 대상이 없다.
+        CardContentValidator.Result result = validator.validate(content(c -> {}, "왼쪽 무릎 · 3일"));
 
-        assertThat(result.content().title()).isEqualTo("증상 정리");
-        assertThat(result.rejectedFields()).contains("title(진단명)");
+        assertThat(result.content().title()).isEqualTo("왼쪽 무릎 · 3일");
+        assertThat(result.rejectedFields()).isEmpty();
     }
 
     @Test
-    @DisplayName("정상 제목은 그대로 통과한다")
-    void 정상_제목() {
-        CardContentValidator.Result result = validator.validate(content("손가락 경직·부종"));
+    @DisplayName("아직 안 물어본 축이 대부분이어도 통과한다")
+    void 기본값_not_asked() {
+        // 1턴째 카드는 8축 중 대부분이 not_asked 다. 3값으로 검증하면 여기서 전부 떨어진다.
+        CardContentValidator.Result result = validator.validate(content(axes -> {
+            axes.put("site", CardAxis.of("site", AxisStatus.FILLED, "왼쪽 무릎", List.of("왼쪽 무릎이"), null));
+            axes.put("onset", CardAxis.notAsked("onset"));
+            axes.put("severity", CardAxis.notAsked("severity"));
+        }, "왼쪽 무릎"));
 
-        assertThat(result.content().title()).isEqualTo("손가락 경직·부종");
-        assertThat(result.hasRejection()).isFalse();
+        assertThat(result.rejectedFields()).isEmpty();
+        assertThat(result.content().axes().get("onset").getStatus()).isEqualTo(AxisStatus.NOT_ASKED);
     }
 
     @Test
-    @DisplayName("제목이 20자를 넘으면 잘라서라도 남긴다")
-    void 제목_길이() {
-        CardContentValidator.Result result = validator.validate(content("가".repeat(30)));
+    @DisplayName("축 값이 80자를 넘으면 모르겠다로 낮춘다")
+    void 축_길이() {
+        // 80자는 낭독 모드 큰 글자 기준이다. 넘으면 화면에서 잘린다.
+        String tooLong = "아".repeat(81);
+        CardContentValidator.Result result = validator.validate(content(axes ->
+                axes.put("onset", CardAxis.of("onset", AxisStatus.FILLED, tooLong, List.of("어제"), null)),
+                "제목"));
 
-        assertThat(result.content().title()).hasSize(20);
-        assertThat(result.rejectedFields()).contains("title(길이)");
+        assertThat(result.content().axes().get("onset").getStatus()).isEqualTo(AxisStatus.UNKNOWN);
+        assertThat(result.content().axes().get("onset").getValue()).isNull();
+        assertThat(result.rejectedFields()).contains("axes.onset");
     }
 
     @Test
-    @DisplayName("텍스트가 80자를 넘으면 UNKNOWN으로 낮춘다")
-    void 텍스트_길이() {
-        CardContent raw = new CardContent(
-                "손가락 경직",
-                FieldStatus.KNOWN, "가".repeat(100),
-                FieldStatus.UNKNOWN, null,
-                FieldStatus.UNKNOWN, null, List.of(),
-                FieldStatus.UNKNOWN, List.of(),
-                FieldStatus.UNKNOWN, null,
-                List.of(), null, Map.of());
+    @DisplayName("값이 있다면서 비어 있으면 모르겠다로 낮춘다")
+    void 빈_값() {
+        // 화면에 빈 줄이 찍히느니 모른다고 하는 편이 정직하다.
+        CardContentValidator.Result result = validator.validate(content(axes ->
+                axes.put("character", CardAxis.of("character", AxisStatus.FILLED, "  ", List.of(), null)),
+                "제목"));
 
-        CardContentValidator.Result result = validator.validate(raw);
-
-        // 버리는 게 아니라 환자가 직접 채우도록 UNKNOWN 으로 남긴다.
-        assertThat(result.content().onsetStatus()).isEqualTo(FieldStatus.UNKNOWN);
-        assertThat(result.content().onsetText()).isNull();
-        assertThat(result.rejectedFields()).contains("onset(길이)");
+        assertThat(result.content().axes().get("character").getStatus()).isEqualTo(AxisStatus.UNKNOWN);
+        assertThat(result.rejectedFields()).contains("axes.character");
     }
 
     @Test
-    @DisplayName("NONE과 UNKNOWN은 값 없이도 그대로 보존된다")
-    void 세_값_상태_보존() {
-        CardContent raw = new CardContent(
-                "손가락 경직",
-                FieldStatus.NONE, null,
-                FieldStatus.UNKNOWN, null,
-                FieldStatus.UNKNOWN, null, List.of(),
-                FieldStatus.UNKNOWN, List.of(),
-                FieldStatus.NONE, null,
-                List.of(), null, Map.of());
+    @DisplayName("질문이 40자를 넘으면 그것만 버린다")
+    void 질문_길이() {
+        CardContentValidator.Result result = validator.validate(content(
+                axes -> {}, "제목",
+                List.of("짧은 질문인가요?", "가".repeat(41)),
+                List.of()));
 
-        CardContentValidator.Result result = validator.validate(raw);
-
-        // "없어요"를 "잘 모르겠어요"로 뭉개면 카드 문구가 달라진다.
-        assertThat(result.content().onsetStatus()).isEqualTo(FieldStatus.NONE);
-        assertThat(result.content().allergiesStatus()).isEqualTo(FieldStatus.NONE);
-        assertThat(result.hasRejection()).isFalse();
-    }
-
-    @Test
-    @DisplayName("질문은 3개까지만 남고 40자를 넘으면 버린다")
-    void 질문_제한() {
-        CardContent raw = new CardContent(
-                "손가락 경직",
-                FieldStatus.UNKNOWN, null,
-                FieldStatus.UNKNOWN, null,
-                FieldStatus.UNKNOWN, null, List.of(),
-                FieldStatus.UNKNOWN, List.of(),
-                FieldStatus.UNKNOWN, null,
-                List.of("검사가 필요한가요?", "진통제 계속 먹어도 되나요?", "재방문 기준은?",
-                        "네 번째 질문", "가".repeat(50)),
-                null, Map.of());
-
-        CardContentValidator.Result result = validator.validate(raw);
-
-        assertThat(result.content().questions()).hasSize(3);
-        assertThat(result.content().questions()).containsExactly(
-                "검사가 필요한가요?", "진통제 계속 먹어도 되나요?", "재방문 기준은?");
+        assertThat(result.content().questions()).containsExactly("짧은 질문인가요?");
         assertThat(result.rejectedFields()).contains("questions");
     }
 
     @Test
-    @DisplayName("복용약이 KNOWN이 아니면 항목을 비운다")
-    void 복용약_상태_불일치() {
-        CardContent raw = new CardContent(
-                "손가락 경직",
-                FieldStatus.UNKNOWN, null,
-                FieldStatus.UNKNOWN, null,
-                FieldStatus.UNKNOWN, null, List.of(),
-                FieldStatus.NONE, List.of(new Medication("이부프로펜", null)),
-                FieldStatus.UNKNOWN, null,
-                List.of(), null, Map.of());
+    @DisplayName("질문이 3개를 넘으면 앞에서 자른다")
+    void 질문_개수() {
+        // 버리지 않고 앞에서 자르는 이유 — AI 가 순서로 중요도를 표현한다.
+        CardContentValidator.Result result = validator.validate(content(
+                axes -> {}, "제목",
+                List.of("하나", "둘", "셋", "넷"),
+                List.of()));
 
-        CardContentValidator.Result result = validator.validate(raw);
-
-        // "없어요"라고 해놓고 약이 들어 있으면 카드가 앞뒤가 안 맞는다.
-        assertThat(result.content().medications()).isEmpty();
+        assertThat(result.content().questions()).containsExactly("하나", "둘", "셋");
+        assertThat(result.rejectedFields()).contains("questions");
     }
 
     @Test
-    @DisplayName("진료과는 enum 값 그대로 통과한다")
-    void 진료과() {
-        CardContent raw = new CardContent(
-                "손가락 경직",
-                FieldStatus.UNKNOWN, null,
-                FieldStatus.UNKNOWN, null,
-                FieldStatus.UNKNOWN, null, List.of(),
-                FieldStatus.UNKNOWN, List.of(),
-                FieldStatus.UNKNOWN, null,
-                List.of(), Department.ORTHOPEDICS, Map.of());
+    @DisplayName("진료과는 목록 밖이면 거부한다")
+    void 진료과_목록() {
+        // enum 을 버린 것이 검증을 버린 것은 아니다. 하나로 좁히지 않을 뿐이다.
+        CardContentValidator.Result result = validator.validate(content(
+                axes -> {}, "제목", List.of(),
+                List.of("내과", "소화기내과", "점집")));
 
-        assertThat(validator.validate(raw).content().suggestedDepartment())
-                .isEqualTo(Department.ORTHOPEDICS);
+        assertThat(result.content().departmentGuidance()).containsExactly("내과", "소화기내과");
+        assertThat(result.rejectedFields()).contains("departmentGuidance");
     }
 
-    private CardContent content(String title) {
+    @Test
+    @DisplayName("진료과가 여러 개여도 하나로 좁히지 않는다")
+    void 진료과_배열() {
+        // 아랫배(SUR:032)는 넷이 붙는다. 하나로 고르는 순간 그게 감별이 된다.
+        CardContentValidator.Result result = validator.validate(content(
+                axes -> {}, "제목", List.of(),
+                List.of("내과", "소화기내과", "산부인과", "비뇨의학과")));
+
+        assertThat(result.content().departmentGuidance()).hasSize(4);
+        assertThat(result.rejectedFields()).isEmpty();
+    }
+
+    // ---------- helpers ----------
+
+    private CardContent content(java.util.function.Consumer<Map<String, CardAxis>> axes, String title) {
+        return content(axes, title, List.of(), List.of());
+    }
+
+    private CardContent content(java.util.function.Consumer<Map<String, CardAxis>> axesSetup,
+                                String title,
+                                List<String> questions,
+                                List<String> departments) {
+        Map<String, CardAxis> axes = new LinkedHashMap<>();
+        axesSetup.accept(axes);
         return new CardContent(
                 title,
-                FieldStatus.UNKNOWN, null,
-                FieldStatus.UNKNOWN, null,
-                FieldStatus.UNKNOWN, null, List.of(),
-                FieldStatus.UNKNOWN, List.of(),
-                FieldStatus.UNKNOWN, null,
-                List.of(), null, Map.of());
+                "왼쪽 무릎이 계단 내려갈 때 아파요",
+                axes,
+                List.of(),
+                List.of(),
+                questions,
+                departments,
+                "팀 결정 2026-09-04, 의료인 자문 확인 전",
+                0.375,
+                false);
     }
 }

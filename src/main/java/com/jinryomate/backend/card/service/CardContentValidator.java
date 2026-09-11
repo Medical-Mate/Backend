@@ -1,163 +1,113 @@
 package com.jinryomate.backend.card.service;
 
+import com.jinryomate.backend.card.entity.AxisStatus;
+import com.jinryomate.backend.card.entity.CardAxis;
 import com.jinryomate.backend.card.entity.CardContent;
-import com.jinryomate.backend.card.entity.Department;
-import com.jinryomate.backend.card.entity.Medication;
-import com.jinryomate.backend.profile.entity.FieldStatus;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
-
-import java.util.regex.Pattern;
-import lombok.extern.slf4j.Slf4j;
+import java.util.Map;
+import java.util.Set;
 import org.springframework.stereotype.Component;
 
 /**
- * AI가 준 카드를 저장 전에 검증한다.
+ * AI 가 준 카드를 저장 전에 검증한다.
  *
- * <p><b>걸린 필드를 버리되 카드 생성은 살린다.</b> 통째로 실패시키면 환자가 6문항을
- * 답한 문답이 그대로 날아간다. 걸린 필드는 {@link FieldStatus#UNKNOWN}으로 낮춰
- * 환자가 S3 화면에서 직접 채우게 한다.
+ * <p><b>카드 생성이 통째로 실패해서 문답이 날아가는 일은 없어야 한다.</b> 그래서 걸린 값을
+ * 예외로 던지지 않고 {@link AxisStatus#UNKNOWN} 으로 낮춰 저장하고, 어느 것이 걸렸는지
+ * 목록으로 돌려준다. 앱은 그 목록을 보고 "이 항목은 직접 채워주세요"를 띄운다.
  *
- * <p>규칙은 와이어프레임과 낭독 모드에서 나온 것이라 임의로 바꾸면 안 된다.
+ * <p><b>재요청은 하지 않는다.</b> 카드는 축 값이 쌓인 {@code state} 를 직렬화한 것이라
+ * 같은 {@code state} 면 같은 카드가 바이트까지 같게 나온다 — 다시 불러도 결과가 같다.
+ * 검증에 걸렸다면 그건 AI 쪽 출력이 규격을 벗어난 것이고, 재요청이 아니라 버그 제보 대상이다.
  */
-@Slf4j
 @Component
 public class CardContentValidator {
 
-    static final int TITLE_MAX = 20;
-    static final int TEXT_MAX = 80;
-    static final int QUESTION_MAX_COUNT = 3;
-    static final int QUESTION_MAX_LENGTH = 40;
+    /** 낭독 모드 큰 글자 기준. 이보다 길면 화면에서 잘린다. */
+    private static final int MAX_AXIS_VALUE = 80;
+
+    private static final int MAX_QUESTIONS = 3;
+    private static final int MAX_QUESTION_LENGTH = 40;
 
     /**
-     * 카드에 찍히면 안 되는 표현.
+     * 온톨로지에 등장하는 진료과 전부.
      *
-     * <p>카드는 진단서가 아니다. "이거 류마티스인가요?"에 AI가 답하지 않는 것과 같은 이유로,
-     * 제목에 병명이 들어가면 환자가 진단으로 받아들인다.
+     * <p><b>enum 을 버렸다고 검증까지 버린 것은 아니다.</b> 하나로 좁히지 않을 뿐,
+     * 값이 이 목록 밖이면 거부한다. 늘어나면 AI 담당이 먼저 알려준다.
      */
-    private static final Pattern DIAGNOSIS_TERMS = Pattern.compile(
-            "(류마티스|관절염|디스크|골절|암|염증|증후군|장애|질환|병증|염$|증$|" +
-            "당뇨|고혈압|천식|위염|장염|폐렴|결핵|골다공증|통풍)");
+    private static final Set<String> DEPARTMENTS = Set.of(
+            "가정의학과", "내과", "비뇨의학과", "산부인과", "소화기내과", "신경과", "신경외과",
+            "심장내과", "안과", "이비인후과", "정형외과", "피부과", "호흡기내과");
 
-    /** 검증 결과. 무엇이 걸렸는지 남겨 재요청 여부를 판단한다. */
-    public record Result(CardContent content, List<String> rejectedFields) {
-        public boolean hasRejection() {
-            return !rejectedFields.isEmpty();
-        }
-    }
+    public record Result(CardContent content, List<String> rejectedFields) {}
 
-    public Result validate(CardContent raw) {
+    public Result validate(CardContent content) {
         List<String> rejected = new ArrayList<>();
 
-        String title = validateTitle(raw.title(), rejected);
+        Map<String, CardAxis> axes = new LinkedHashMap<>();
+        content.axes().forEach((name, axis) -> axes.put(name, checkAxis(name, axis, rejected)));
 
-        Field onset = validateTextField("onset", raw.onsetStatus(), raw.onsetText(), rejected);
-        Field pattern = validateTextField("pattern", raw.patternStatus(), raw.patternText(), rejected);
-        Field site = validateTextField("site", raw.siteStatus(), raw.siteText(), rejected);
-        Field allergies = validateTextField("allergies", raw.allergiesStatus(), raw.allergiesText(), rejected);
-
-        List<String> questions = validateQuestions(raw.questions(), rejected);
-        // 진료과는 enum 이라 여기 도달한 값은 이미 목록 안에 있다.
-        // enum 밖의 문자열은 AI 응답을 읽는 단계에서 null 로 떨어진다.
-        Department department = raw.suggestedDepartment();
-
-        FieldStatus medicationsStatus = raw.medicationsStatus() == null
-                ? FieldStatus.UNKNOWN : raw.medicationsStatus();
-        List<Medication> medications = medicationsStatus == FieldStatus.KNOWN
-                ? safeList(raw.medications()) : List.of();
-
-        CardContent content = new CardContent(
-                title,
-                onset.status(), onset.text(),
-                pattern.status(), pattern.text(),
-                site.status(), site.text(), safeList(raw.siteCodes()),
-                medicationsStatus, medications,
-                allergies.status(), allergies.text(),
-                questions,
-                department,
-                raw.evidence() == null ? new LinkedHashMap<>() : new LinkedHashMap<>(raw.evidence()));
-
-        if (!rejected.isEmpty()) {
-            // 필드 이름만 남긴다. 값은 증상 텍스트라 로그에 남기지 않는다.
-            log.warn("카드 검증에서 걸린 필드: {}", rejected);
+        List<String> questions = new ArrayList<>();
+        for (String q : content.questions()) {
+            if (q == null || q.isBlank()) {
+                continue;
+            }
+            if (q.length() > MAX_QUESTION_LENGTH) {
+                rejected.add("questions");
+                continue;
+            }
+            questions.add(q);
         }
-        return new Result(content, rejected);
-    }
+        if (questions.size() > MAX_QUESTIONS) {
+            // 넘치면 버리지 않고 앞에서 자른다. AI 가 순서로 중요도를 표현하기 때문이다.
+            rejected.add("questions");
+            questions = new ArrayList<>(questions.subList(0, MAX_QUESTIONS));
+        }
 
-    private record Field(FieldStatus status, String text) {}
+        List<String> departments = new ArrayList<>();
+        for (String d : content.departmentGuidance()) {
+            if (DEPARTMENTS.contains(d)) {
+                departments.add(d);
+            } else {
+                rejected.add("departmentGuidance");
+            }
+        }
+
+        CardContent checked = new CardContent(
+                content.title(),
+                content.chiefComplaint(),
+                axes,
+                List.copyOf(content.redFlags()),
+                List.copyOf(content.patientNotes()),
+                List.copyOf(questions),
+                List.copyOf(departments),
+                content.departmentGuidanceSource(),
+                content.completeness(),
+                content.minimallyComplete());
+
+        return new Result(checked, List.copyOf(rejected));
+    }
 
     /**
-     * 제목은 비울 수 없다. 카드에 제목이 없으면 의사가 무엇을 보는지 알 수 없어서,
-     * 걸리면 잘라서라도 남긴다.
+     * 축 하나를 검증한다.
+     *
+     * <p>{@code title} 은 검증하지 않는다. AI 가 부위 + 기간을 결정론으로 조합해 만들어
+     * <b>병명이 들어갈 경로가 없다</b>. 검사를 느슨하게 한 것이 아니라 검사할 대상이 없다.
      */
-    private String validateTitle(String title, List<String> rejected) {
-        if (title == null || title.isBlank()) {
-            rejected.add("title");
-            return "증상 정리";
+    private CardAxis checkAxis(String name, CardAxis axis, List<String> rejected) {
+        String value = axis.getValue();
+        if (value != null && value.length() > MAX_AXIS_VALUE) {
+            rejected.add("axes." + name);
+            return CardAxis.of(name, AxisStatus.UNKNOWN, null, List.of(), axis.getSource());
         }
-        String trimmed = title.trim();
-        if (DIAGNOSIS_TERMS.matcher(trimmed).find()) {
-            rejected.add("title(진단명)");
-            return "증상 정리";
-        }
-        if (trimmed.length() > TITLE_MAX) {
-            rejected.add("title(길이)");
-            return trimmed.substring(0, TITLE_MAX);
-        }
-        return trimmed;
-    }
 
-    private Field validateTextField(String name, FieldStatus status, String text, List<String> rejected) {
-        if (status == null) {
-            return new Field(FieldStatus.UNKNOWN, null);
+        // 값이 있다면서 비어 있으면 화면에 빈 줄이 찍힌다. 모른다고 하는 편이 정직하다.
+        if (axis.getStatus() == AxisStatus.FILLED && (value == null || value.isBlank())) {
+            rejected.add("axes." + name);
+            return CardAxis.of(name, AxisStatus.UNKNOWN, null, List.of(), axis.getSource());
         }
-        if (status != FieldStatus.KNOWN) {
-            // "없어요"/"잘 모르겠어요"는 값이 없는 게 정상이다.
-            return new Field(status, null);
-        }
-        if (text == null || text.isBlank()) {
-            rejected.add(name);
-            return new Field(FieldStatus.UNKNOWN, null);
-        }
-        String trimmed = text.trim();
-        if (trimmed.length() > TEXT_MAX) {
-            rejected.add(name + "(길이)");
-            return new Field(FieldStatus.UNKNOWN, null);
-        }
-        return new Field(FieldStatus.KNOWN, trimmed);
-    }
 
-    /** 최대 3개, 각 40자. 넘치는 것은 버리고 통과한 것만 남긴다. */
-    private List<String> validateQuestions(List<String> questions, List<String> rejected) {
-        if (questions == null || questions.isEmpty()) {
-            return List.of();
-        }
-        List<String> kept = new ArrayList<>();
-        boolean dropped = false;
-        for (String q : questions) {
-            if (q == null || q.isBlank()) {
-                dropped = true;
-                continue;
-            }
-            String trimmed = q.trim();
-            if (trimmed.length() > QUESTION_MAX_LENGTH) {
-                dropped = true;
-                continue;
-            }
-            if (kept.size() >= QUESTION_MAX_COUNT) {
-                dropped = true;
-                continue;
-            }
-            kept.add(trimmed);
-        }
-        if (dropped) {
-            rejected.add("questions");
-        }
-        return List.copyOf(kept);
-    }
-
-    private <T> List<T> safeList(List<T> list) {
-        return list == null ? List.of() : List.copyOf(list);
+        return axis.copy();
     }
 }

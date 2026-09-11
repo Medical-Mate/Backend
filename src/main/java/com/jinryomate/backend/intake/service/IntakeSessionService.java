@@ -58,6 +58,7 @@ public class IntakeSessionService {
         // 바로 화면을 그릴 수 있다. AI 계약상 이 호출은 LLM 을 쓰지 않는다.
         AiTurnResult opening = aiTurnClient.start(session);
         session.rememberState(opening.state());
+        session.rememberCard(opening.card());
         session.addMessage(IntakeMessage.fromAi(session, opening.reply()));
 
         // 부위·증상은 민감정보라 값을 로그에 남기지 않는다.
@@ -88,6 +89,7 @@ public class IntakeSessionService {
 
         AiTurnResult result = aiTurnClient.turn(session, request.text());
         session.rememberState(result.state());
+        session.rememberCard(result.card());
         session.addMessage(IntakeMessage.fromAi(session, result.reply()));
 
         if (result.ended()) {

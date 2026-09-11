@@ -16,7 +16,7 @@ import com.jinryomate.backend.TestcontainersConfig;
 import com.jinryomate.backend.auth.client.KakaoClient;
 import com.jinryomate.backend.auth.dto.AuthDtos.KakaoLoginRequest;
 import com.jinryomate.backend.auth.dto.AuthDtos.TokenResponse;
-import com.jinryomate.backend.card.dto.CardDtos.TextFieldRequest;
+import com.jinryomate.backend.card.dto.CardDtos.AxisEdit;
 import com.jinryomate.backend.card.dto.CardDtos.UpdateCardRequest;
 import com.jinryomate.backend.intake.dto.IntakeDtos.StartSessionRequest;
 import com.jinryomate.backend.profile.dto.ProfileDtos.HealthProfileRequest;
@@ -110,7 +110,7 @@ class BriefingCardApiTest {
         assertThat(card.path("patient").path("name").asText()).isEqualTo("김서연");
         assertThat(card.path("patient").path("sex").asText()).isEqualTo("FEMALE");
         // 어떤 파이프라인이 만들었는지 남아야 추적이 된다.
-        assertThat(card.path("meta").path("pipelineVersion").asText()).isNotBlank();
+        assertThat(card.path("meta").path("promptVersion").asText()).isNotBlank();
     }
 
     @Test
@@ -131,7 +131,7 @@ class BriefingCardApiTest {
     }
 
     @Test
-    @DisplayName("제목에 진단명을 넣으면 환자가 넣어도 막힌다")
+    @DisplayName("환자가 넣은 질문도 길이 제한에 걸린다")
     void 수정에도_검증_적용() throws Exception {
         completeOnboarding();
         long cardId = generateCard(startSession()).path("cardId").asLong();
@@ -140,10 +140,10 @@ class BriefingCardApiTest {
                         .header("Authorization", token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new UpdateCardRequest(
-                                "류마티스", null, null, null, null, null))))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.title").value("증상 정리"))
-                .andExpect(jsonPath("$.rejectedFields[0]").value("title(진단명)"));
+                                null, null, List.of("가".repeat(41)), null))))
+                // AI 가 준 값은 unknown 으로 낮춰 저장하지만, 환자가 직접 넣은 값은 400 으로
+                // 되돌린다. 환자는 화면에서 바로 고칠 수 있어 조용히 버리면 오히려 혼란스럽다.
+                .andExpect(status().isBadRequest());
     }
 
     @Test
@@ -156,14 +156,15 @@ class BriefingCardApiTest {
                         .header("Authorization", token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new UpdateCardRequest(
-                                "손가락 경직·부종",
-                                new TextFieldRequest(FieldStatus.KNOWN, "3주 전 시작"),
-                                null, null, null, null))))
+                                null,
+                                List.of(new AxisEdit("onset", "3주 전 시작")),
+                                null, null))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.cardId").value(cardId))
                 .andExpect(jsonPath("$.version").value(1))
-                .andExpect(jsonPath("$.title").value("손가락 경직·부종"))
-                .andExpect(jsonPath("$.onset.text").value("3주 전 시작"));
+                .andExpect(jsonPath("$.axes.onset.value").value("3주 전 시작"))
+                .andExpect(jsonPath("$.axes.onset.source").value("PATIENT_EDIT"))
+                .andExpect(jsonPath("$.axes.onset.evidence[0]").value("[환자 수정] 3주 전 시작"));
     }
 
     @Test
@@ -180,7 +181,7 @@ class BriefingCardApiTest {
                         .header("Authorization", token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new UpdateCardRequest(
-                                "바뀐 제목", null, null, null, null, null))))
+                                "바뀐 증상 설명", null, null, null))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.version").value(2))
                 .andExpect(jsonPath("$.status").value("DRAFT"))
@@ -193,7 +194,8 @@ class BriefingCardApiTest {
         // 의사가 본 카드는 그대로 남아야 한다.
         mockMvc.perform(get("/api/cards/" + cardId).header("Authorization", token))
                 .andExpect(jsonPath("$.status").value("CONFIRMED"))
-                .andExpect(jsonPath("$.title").value("손가락 관절(오른손) 증상"));
+                // 확정본의 본문은 새 버전을 만들어도 바뀌지 않는다.
+                .andExpect(jsonPath("$.chiefComplaint").value("손가락 관절(오른손)"));
     }
 
     @Test

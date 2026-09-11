@@ -2,7 +2,6 @@ package com.jinryomate.backend.card.entity;
 
 import com.jinryomate.backend.auth.entity.User;
 import com.jinryomate.backend.intake.entity.IntakeSession;
-import com.jinryomate.backend.profile.entity.FieldStatus;
 import com.jinryomate.backend.profile.entity.Sex;
 import jakarta.persistence.*;
 import java.time.Instant;
@@ -10,6 +9,8 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -17,13 +18,17 @@ import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
 /**
- * 브리핑 카드. 화면 S3.
+ * 브리핑 카드. 화면 S3({@code 1e}).
  *
  * <p>환자 인적사항은 <b>만든 시점 값을 그대로 박아둔다</b>. 프로필을 참조하면 나중에
  * 이름을 고쳤을 때 이미 확정된 카드까지 바뀐다. 의사가 본 카드는 그대로 남아야 한다.
  *
  * <p>{@link CardStatus#CONFIRMED} 이후의 변경은 이 행을 고치지 않고
  * {@link #newVersion()} 으로 새 행을 만든다. {@code version} 과 {@code parentCard} 로 체인이 된다.
+ *
+ * <p><b>본문은 AI 계약의 축 구조를 그대로 담는다.</b> 컬럼 여덟 벌로 펼치지 않는 이유는
+ * 축이 늘거나 줄 때마다 마이그레이션이 필요해지고, "축마다 같은 세 값을 갖는다"는 구조가
+ * 스키마에서 사라지기 때문이다.
  */
 @Entity
 @Table(name = "briefing_cards")
@@ -70,72 +75,72 @@ public class BriefingCard {
 
     // --- 카드 본문 ---
 
-    @Column(nullable = false, length = 20)
+    /**
+     * AI 가 부위 + 기간을 결정론으로 조합해 만든다({@code 왼쪽 무릎 · 3일}).
+     *
+     * <p><b>우리가 검증하지 않는다.</b> LLM 을 거치지 않는 값의 조합이라 병명이 들어갈
+     * 경로가 없다. 아직 안 내려와서 null 일 수 있다.
+     */
+    @Column(length = 40)
     private String title;
 
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 16)
-    private FieldStatus onsetStatus = FieldStatus.UNKNOWN;
+    /** 환자가 말한 그대로. <b>줄이지 않는다</b> — 줄이는 순간 환자 말이 아니다. */
+    @Column(columnDefinition = "text")
+    private String chiefComplaint;
 
-    @Column(length = 80)
-    private String onsetText;
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = "briefing_card_axes", joinColumns = @JoinColumn(name = "card_id"))
+    private List<CardAxis> axes = new ArrayList<>();
 
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 16)
-    private FieldStatus patternStatus = FieldStatus.UNKNOWN;
-
-    @Column(length = 80)
-    private String patternText;
-
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 16)
-    private FieldStatus siteStatus = FieldStatus.UNKNOWN;
-
-    @Column(length = 80)
-    private String siteText;
-
+    /** 의료인 자문 전 자리. 지금은 빈 배열로 온다. */
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(columnDefinition = "jsonb")
-    private List<String> siteCodes = new ArrayList<>();
+    private List<String> redFlags = new ArrayList<>();
 
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 16)
-    private FieldStatus medicationsStatus = FieldStatus.UNKNOWN;
-
+    /** 축 밖으로 새는 환자 말. 버리면 "타이레놀 먹었어요" 같은 게 사라진다. */
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(columnDefinition = "jsonb")
-    private List<Medication> medications = new ArrayList<>();
+    private List<String> patientNotes = new ArrayList<>();
 
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 16)
-    private FieldStatus allergiesStatus = FieldStatus.UNKNOWN;
-
-    @Column(length = 80)
-    private String allergiesText;
-
-    /** 환자가 묻고 싶어 하는 것. 최대 3개. */
+    /** 환자가 의사에게 묻고 싶어 하는 것. 최대 3개. 확정 시점의 스냅샷이다. */
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(columnDefinition = "jsonb")
     private List<String> questions = new ArrayList<>();
 
-    @Enumerated(EnumType.STRING)
-    @Column(length = 32)
-    private Department suggestedDepartment;
-
-    /** 필드별 근거 메시지 순번. 예: {@code {"onset": [12, 14]}}. */
+    /**
+     * 진료과 안내. <b>배열이다</b> — 하나로 좁히는 순간 그게 추천이 된다.
+     *
+     * <p>우리가 판정하지 않는다. 환자가 짚은 부위 노드의 속성을 그대로 담는다.
+     * 진료과가 없는 부위 14곳에서는 빈 목록이다.
+     */
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(columnDefinition = "jsonb")
-    private Map<String, List<Integer>> evidence = new LinkedHashMap<>();
+    private List<String> departmentGuidance = new ArrayList<>();
+
+    /** {@code "팀 결정 2026-09-04, 의료인 자문 확인 전"}. 화면에 함께 보여야 한다. */
+    @Column(length = 120)
+    private String departmentGuidanceSource;
+
+    /** 8축 중 몇 개가 찼는지. 앱이 "조금 더 여쭤볼까요"를 띄우는 근거다. */
+    private Double completeness;
+
+    private Boolean minimallyComplete;
 
     // --- 추적성 ---
 
     /**
-     * 어떤 AI 파이프라인이 만든 카드인지.
-     *
-     * <p>프롬프트는 AI 레포에서 관리하므로, 백엔드가 추적성을 확보하는 유일한 수단이다.
+     * 어떤 프롬프트가 만든 카드인지. 프롬프트는 AI 레포에서 관리하므로,
+     * 백엔드가 추적성을 확보하는 유일한 수단이다.
      */
     @Column(length = 64)
-    private String pipelineVersion;
+    private String promptVersion;
+
+    /** 프롬프트가 같아도 모델이 바뀌면 결과가 달라진다. 하나로는 못 짚는다. */
+    @Column(length = 64)
+    private String modelId;
+
+    @Column(length = 32)
+    private String ontologySnapshot;
 
     /** 장애 시 AI 쪽 로그와 잇는 열쇠. */
     @Column(length = 64)
@@ -173,25 +178,44 @@ public class BriefingCard {
 
     public void applyContent(CardContent content) {
         this.title = content.title();
-        this.onsetStatus = content.onsetStatus();
-        this.onsetText = content.onsetText();
-        this.patternStatus = content.patternStatus();
-        this.patternText = content.patternText();
-        this.siteStatus = content.siteStatus();
-        this.siteText = content.siteText();
-        this.siteCodes = new ArrayList<>(content.siteCodes());
-        this.medicationsStatus = content.medicationsStatus();
-        this.medications = new ArrayList<>(content.medications());
-        this.allergiesStatus = content.allergiesStatus();
-        this.allergiesText = content.allergiesText();
+        this.chiefComplaint = content.chiefComplaint();
+        this.axes = content.axes().values().stream().map(CardAxis::copy)
+                .collect(Collectors.toCollection(ArrayList::new));
+        this.redFlags = new ArrayList<>(content.redFlags());
+        this.patientNotes = new ArrayList<>(content.patientNotes());
         this.questions = new ArrayList<>(content.questions());
-        this.suggestedDepartment = content.suggestedDepartment();
-        this.evidence = new LinkedHashMap<>(content.evidence());
+        this.departmentGuidance = new ArrayList<>(content.departmentGuidance());
+        this.departmentGuidanceSource = content.departmentGuidanceSource();
+        this.completeness = content.completeness();
+        this.minimallyComplete = content.minimallyComplete();
     }
 
-    public void applyTrace(String pipelineVersion, String aiRequestId) {
-        this.pipelineVersion = pipelineVersion;
+    public void applyTrace(String promptVersion, String modelId, String ontologySnapshot, String aiRequestId) {
+        this.promptVersion = promptVersion;
+        this.modelId = modelId;
+        this.ontologySnapshot = ontologySnapshot;
         this.aiRequestId = aiRequestId;
+    }
+
+    /**
+     * 목록·일정·홈에서 이 카드를 가리킬 이름.
+     *
+     * <p>{@code title} 은 AI 가 부위 + 기간을 조합해 만드는데 <b>아직 안 내려온다</b>.
+     * 그동안 목록이 통째로 비면 환자가 자기 카드를 못 찾는다. 그래서 없으면 환자가 말한
+     * 그대로({@code chiefComplaint})를 쓴다.
+     *
+     * <p><b>줄이지 않는다.</b> 20자에 맞추려고 자르는 순간 그건 이미 환자 말이 아니다 —
+     * 길면 화면에서 줄이는 것은 앱 몫이다. 서버가 문구를 만들지 않는다는 원칙은 그대로다.
+     * 여기서 하는 일은 있는 값 둘 중 하나를 고르는 것뿐이다.
+     */
+    public String displayTitle() {
+        return title != null && !title.isBlank() ? title : chiefComplaint;
+    }
+
+    /** 축 이름으로 찾아 쓰기 좋게. 순서는 AI 가 준 그대로 유지한다. */
+    public Map<String, CardAxis> axesByName() {
+        return axes.stream().collect(Collectors.toMap(
+                CardAxis::getAxis, Function.identity(), (a, b) -> a, LinkedHashMap::new));
     }
 
     // --- 상태 전이 ---
@@ -215,27 +239,19 @@ public class BriefingCard {
         next.version = this.version + 1;
         next.parentCard = this;
         next.applyPatientSnapshot(patientName, patientAge, patientSex);
-        next.applyTrace(pipelineVersion, aiRequestId);
-        next.copyContentFrom(this);
+        next.applyTrace(promptVersion, modelId, ontologySnapshot, aiRequestId);
+        next.title = title;
+        next.chiefComplaint = chiefComplaint;
+        next.axes = axes.stream().map(CardAxis::copy)
+                .collect(Collectors.toCollection(ArrayList::new));
+        next.redFlags = new ArrayList<>(redFlags);
+        next.patientNotes = new ArrayList<>(patientNotes);
+        next.questions = new ArrayList<>(questions);
+        next.departmentGuidance = new ArrayList<>(departmentGuidance);
+        next.departmentGuidanceSource = departmentGuidanceSource;
+        next.completeness = completeness;
+        next.minimallyComplete = minimallyComplete;
         return next;
-    }
-
-    private void copyContentFrom(BriefingCard source) {
-        this.title = source.title;
-        this.onsetStatus = source.onsetStatus;
-        this.onsetText = source.onsetText;
-        this.patternStatus = source.patternStatus;
-        this.patternText = source.patternText;
-        this.siteStatus = source.siteStatus;
-        this.siteText = source.siteText;
-        this.siteCodes = new ArrayList<>(source.siteCodes);
-        this.medicationsStatus = source.medicationsStatus;
-        this.medications = new ArrayList<>(source.medications);
-        this.allergiesStatus = source.allergiesStatus;
-        this.allergiesText = source.allergiesText;
-        this.questions = new ArrayList<>(source.questions);
-        this.suggestedDepartment = source.suggestedDepartment;
-        this.evidence = new LinkedHashMap<>(source.evidence);
     }
 
     // --- 전달 ---
