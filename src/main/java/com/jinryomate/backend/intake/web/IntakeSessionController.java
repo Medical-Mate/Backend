@@ -1,7 +1,9 @@
 package com.jinryomate.backend.intake.web;
 
+import com.jinryomate.backend.intake.dto.IntakeDtos.QuestionsRequest;
 import com.jinryomate.backend.intake.dto.IntakeDtos.SendMessageRequest;
 import com.jinryomate.backend.intake.dto.IntakeDtos.SessionResponse;
+import com.jinryomate.backend.intake.dto.IntakeDtos.SeverityRequest;
 import com.jinryomate.backend.intake.dto.IntakeDtos.StartSessionRequest;
 import com.jinryomate.backend.intake.dto.IntakeDtos.TurnResponse;
 import com.jinryomate.backend.intake.service.IntakeSessionService;
@@ -13,6 +15,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -74,5 +77,46 @@ public class IntakeSessionController {
                                     @PathVariable Long sessionId,
                                     @Valid @RequestBody SendMessageRequest request) {
         return intakeSessionService.sendMessage(userId, sessionId, request);
+    }
+
+    @Operation(
+            summary = "통증 강도 (3단계)",
+            description = """
+                    화면 `1d` 의 슬라이더 값입니다. **1~5 서열척도이고 NRS 0~10 이 아닙니다.**
+
+                    `label` 은 "꽤 아파요" 같은 표시 문구인데 **앱이 보냅니다.** 서버가 들고
+                    있으면 문구를 바꿀 때마다 배포해야 하고, 이건 디자인 카피라 서버 것이
+                    아닙니다. 나중에 AI 에 넘길 때 `"3 (꽤 아파요)"` 를 조립하는 데 씁니다.
+
+                    **끝난 문답에도 보낼 수 있습니다.** 3단계는 문답이 끝난 뒤 화면입니다.
+                    다시 고르면 덮어씁니다.
+                    """)
+    @PutMapping("/{sessionId}/severity")
+    public SessionResponse recordSeverity(@AuthenticationPrincipal Long userId,
+                                          @PathVariable Long sessionId,
+                                          @Valid @RequestBody SeverityRequest request) {
+        return intakeSessionService.recordSeverity(userId, sessionId, request);
+    }
+
+    @Operation(
+            summary = "의사에게 물어볼 것 (4단계)",
+            description = """
+                    화면 `1i` 의 "적어둔 질문" 목록입니다. **최대 3개**이고 순서가 화면에
+                    번호(①②③)로 보입니다.
+
+                    **목록을 통째로 보내세요.** 추가·편집·삭제·순서변경이 전부 이 한 번으로
+                    처리됩니다. 비우려면 빈 배열을 보내면 됩니다.
+
+                    **끝난 문답에도 보낼 수 있습니다.** 4단계는 문답이 끝난 뒤 화면입니다.
+
+                    AI 가 만드는 질문 후보는 아직 연동되지 않았습니다. 후보가 붙어도
+                    **최종 목록은 여기로 보내는 이 값**입니다 — 고른 것과 직접 쓴 것을
+                    합치는 것은 앱 몫입니다.
+                    """)
+    @PutMapping("/{sessionId}/questions")
+    public SessionResponse replaceQuestions(@AuthenticationPrincipal Long userId,
+                                            @PathVariable Long sessionId,
+                                            @Valid @RequestBody QuestionsRequest request) {
+        return intakeSessionService.replaceQuestions(userId, sessionId, request);
     }
 }

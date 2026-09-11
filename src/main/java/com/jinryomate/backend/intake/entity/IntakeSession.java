@@ -89,6 +89,38 @@ public class IntakeSession {
     @Column(length = 16)
     private String endReason;
 
+    /**
+     * 통증 강도. 화면 3단계({@code 1d})에서 슬라이더로 받는다.
+     *
+     * <p><b>1~5 서열척도다. NRS 0~10 이 아니다.</b> 와이어프레임의 슬라이더가 다섯 칸이다.
+     */
+    private Integer severityLevel;
+
+    /**
+     * "꽤 아파요" 같은 표시 문구. <b>앱이 보낸다.</b>
+     *
+     * <p>서버가 들고 있으면 문구를 바꿀 때마다 배포해야 하고, 이건 디자인 카피라
+     * 우리 것이 아니다. AI 에 {@code selections} 로 넘길 때 {@code "3 (꽤 아파요)"} 를
+     * 조립하는 데 쓴다.
+     */
+    @Column(length = 40)
+    private String severityLabel;
+
+    /**
+     * 의사에게 물어볼 것. 화면 4단계({@code 1i}).
+     *
+     * <p><b>최종 목록은 우리 것이다.</b> AI 는 후보({@code question_candidates})만 내고,
+     * 환자가 고른 것과 직접 쓴 것을 합치는 것은 앱·백엔드 몫이다(AI#7 확인).
+     *
+     * <p>순서가 화면에 번호(①②③)로 보이므로 {@code @OrderColumn} 으로 고정한다.
+     */
+    @ElementCollection(fetch = FetchType.LAZY)
+    @CollectionTable(name = "intake_session_questions",
+                     joinColumns = @JoinColumn(name = "session_id"))
+    @OrderColumn(name = "seq")
+    @Column(name = "text", nullable = false, length = 200)
+    private List<String> questions = new ArrayList<>();
+
     @OneToMany(mappedBy = "session", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("seq ASC")
     private List<IntakeMessage> messages = new ArrayList<>();
@@ -150,6 +182,29 @@ public class IntakeSession {
 
     public boolean isCompleted() {
         return status == Status.COMPLETED;
+    }
+
+    /**
+     * 통증 강도를 기록한다. 다시 고르면 덮어쓴다.
+     *
+     * <p>3단계는 문답이 <b>끝난 뒤</b> 화면이라 {@code COMPLETED} 세션에도 쓸 수 있어야 한다.
+     */
+    public void recordSeverity(int level, String label) {
+        this.severityLevel = level;
+        this.severityLabel = label;
+    }
+
+    /**
+     * 의사에게 물어볼 것을 통째로 교체한다.
+     *
+     * <p>추가·편집·삭제·순서변경이 전부 "목록을 다시 보내기" 하나로 처리된다.
+     * 최대 3개짜리 목록에 엔드포인트를 여러 개 둘 이유가 없다.
+     */
+    public void replaceQuestions(List<String> questions) {
+        this.questions.clear();
+        if (questions != null) {
+            this.questions.addAll(questions);
+        }
     }
 
     public boolean isOwnedBy(Long userId) {

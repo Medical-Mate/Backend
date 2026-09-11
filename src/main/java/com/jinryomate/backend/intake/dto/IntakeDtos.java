@@ -2,7 +2,10 @@ package com.jinryomate.backend.intake.dto;
 
 import com.jinryomate.backend.intake.entity.IntakeMessage;
 import com.jinryomate.backend.intake.entity.IntakeSession;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import java.util.List;
 
@@ -43,6 +46,40 @@ public final class IntakeDtos {
             IntakeMessage.InputMethod inputMethod
     ) {}
 
+    /**
+     * 통증 강도. 화면 3단계({@code 1d}) 슬라이더.
+     *
+     * <p><b>1~5 서열척도다. NRS 0~10 이 아니다.</b> 와이어프레임 슬라이더가 다섯 칸이다.
+     *
+     * <p>{@code label} 은 앱이 보낸다 — "꽤 아파요" 같은 문구는 디자인 카피라 서버가
+     * 들고 있으면 바꿀 때마다 배포해야 한다.
+     */
+    public record SeverityRequest(
+            @NotNull(message = "통증 정도를 골라주세요.")
+            @Min(value = 1, message = "통증 정도는 1~5입니다.")
+            @Max(value = 5, message = "통증 정도는 1~5입니다.")
+            Integer level,
+
+            @Size(max = 40, message = "표시 문구는 40자 이내입니다.")
+            String label
+    ) {}
+
+    /**
+     * 의사에게 물어볼 것. 화면 4단계({@code 1i}).
+     *
+     * <p><b>목록을 통째로 보낸다.</b> 추가·편집·삭제·순서변경이 전부 이 한 번으로 처리된다.
+     * 빈 배열을 보내면 전부 지운다.
+     */
+    public record QuestionsRequest(
+            @NotNull(message = "질문 목록이 필요합니다. 비우려면 빈 배열을 보내주세요.")
+            @Size(max = MAX_QUESTIONS, message = "질문은 최대 " + MAX_QUESTIONS + "개까지입니다.")
+            List<@NotBlank(message = "빈 질문은 담을 수 없습니다.")
+                 @Size(max = 200, message = "질문은 200자 이내입니다.") String> questions
+    ) {}
+
+    /** 화면 {@code 1i} 의 "적어둔 질문 · 최대 3개". */
+    public static final int MAX_QUESTIONS = 3;
+
     public record MessageResponse(int seq, IntakeMessage.Role role, String text) {
         public static MessageResponse from(IntakeMessage m) {
             return new MessageResponse(m.getSeq(), m.getRole(), m.getText());
@@ -77,15 +114,27 @@ public final class IntakeDtos {
         }
     }
 
+    /**
+     * 세션 전체.
+     *
+     * <p>3·4단계 값도 함께 담는다. 사용자가 뒤로 갔을 때 <b>고른 값이 그대로 복원</b>돼야
+     * 하는데, 세션 조회 하나로 화면 넷을 다 그릴 수 있어야 그게 된다.
+     */
     public record SessionResponse(
             Long sessionId,
             IntakeSession.Status status,
             List<String> siteCodes,
             String siteText,
             Progress progress,
-            List<MessageResponse> messages
+            List<MessageResponse> messages,
+            /** 3단계. 아직 안 골랐으면 {@code null}. */
+            Severity severity,
+            /** 4단계. 아직 안 적었으면 빈 배열. */
+            List<String> questions
     ) {
         public record Progress(int current, int total) {}
+
+        public record Severity(int level, String label) {}
 
         public static SessionResponse from(IntakeSession s) {
             return new SessionResponse(
@@ -94,7 +143,11 @@ public final class IntakeDtos {
                     List.copyOf(s.getSiteCodes()),
                     s.getSiteText(),
                     new Progress(s.getProgressCurrent(), s.getProgressTotal()),
-                    s.getMessages().stream().map(MessageResponse::from).toList());
+                    s.getMessages().stream().map(MessageResponse::from).toList(),
+                    s.getSeverityLevel() == null
+                            ? null
+                            : new Severity(s.getSeverityLevel(), s.getSeverityLabel()),
+                    List.copyOf(s.getQuestions()));
         }
     }
 }
