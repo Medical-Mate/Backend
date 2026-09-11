@@ -74,6 +74,16 @@ public class Appointment {
         return new Appointment(user, clinicName, scheduledAt);
     }
 
+    /**
+     * 카드 연결을 끊는다. 카드를 지울 때 쓴다.
+     *
+     * <p><b>일정은 남는다.</b> 카드 없이 만드는 경로가 이미 있어서, 카드를 지웠다고 병원
+     * 예약까지 사라지면 환자가 진료를 놓친다.
+     */
+    public void detachCard() {
+        this.card = null;
+    }
+
     public void applyDetails(String department, String purpose, BriefingCard card) {
         this.department = department;
         this.purpose = purpose;

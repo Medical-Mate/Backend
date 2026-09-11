@@ -7,10 +7,13 @@ import com.jinryomate.backend.card.dto.CardDtos.UpdateCardRequest;
 import com.jinryomate.backend.card.entity.BriefingCard;
 import com.jinryomate.backend.card.entity.CardAxis;
 import com.jinryomate.backend.card.entity.CardContent;
+import com.jinryomate.backend.appointment.entity.Appointment;
+import com.jinryomate.backend.appointment.repository.AppointmentRepository;
 import com.jinryomate.backend.card.repository.BriefingCardRepository;
 import com.jinryomate.backend.global.error.ApiException;
 import com.jinryomate.backend.global.error.ErrorCode;
 import com.jinryomate.backend.intake.entity.IntakeSession;
+import com.jinryomate.backend.intake.repository.IntakeSessionRepository;
 import com.jinryomate.backend.intake.service.IntakeSessionService;
 import com.jinryomate.backend.profile.entity.HealthProfile;
 import com.jinryomate.backend.profile.repository.HealthProfileRepository;
@@ -42,6 +45,12 @@ public class BriefingCardService {
      * 다만 읽기 전용 조회이고 리포지토리라 생성자 순환이 생기지 않는다.
      */
     private final VisitRecordRepository visitRecordRepository;
+
+    /** 카드를 지울 때 연결을 끊기 위해서만 쓴다. 일정 자체는 지우지 않는다. */
+    private final AppointmentRepository appointmentRepository;
+
+    /** 카드를 지울 때 문답도 함께 지운다. */
+    private final IntakeSessionRepository sessionRepository;
 
     /**
      * 문답을 카드로 만든다.
@@ -158,6 +167,50 @@ public class BriefingCardService {
         card.confirm();
         log.info("카드 확정 userId={} cardId={} version={}", userId, cardId, card.getVersion());
         return CardResponse.from(card);
+    }
+
+    /**
+     * 카드를 지운다. 화면 {@code 1j} 의 기록 목록에서 지우는 경로다.
+     *
+     * <p><b>문답까지 함께 지운다.</b> 증상 대화가 {@code intake_messages} 에 그대로 남아 있는데,
+     * 카드만 지우면 환자는 지웠다고 생각하면서 증상·복용약이 계속 보관된다. 기록 탭의 카드가
+     * 그 문답에 닿는 유일한 경로이기도 해서, 카드를 지우면 접근할 수 없는 데이터가 된다.
+     *
+     * <p><b>같은 문답에서 나온 카드는 버전을 가리지 않고 전부 지운다.</b> 환자에게는 한 장이고
+     * 버전은 우리 사정이다. 버전 하나만 지우면 목록에 나머지가 남아 지운 것처럼 보이지 않는다.
+     *
+     * <p>딸린 것들의 처리가 갈린다.
+     *
+     * <ul>
+     *   <li><b>진료 기록은 함께 지운다.</b> 그 카드에 대한 기록이라 홀로 남을 수 없다
+     *   <li><b>일정은 남기고 연결만 끊는다.</b> 카드 없이 만드는 경로가 이미 있어서,
+     *       카드를 지웠다고 병원 예약까지 사라지면 환자가 진료를 놓친다
+     * </ul>
+     *
+     * <p><b>확정·전달한 카드도 지울 수 있다.</b> 환자 본인의 민감정보이고, 이미 보여준 것을
+     * 되돌릴 수는 없어도 우리가 계속 들고 있을 이유는 없다.
+     */
+    @Transactional
+    public void delete(Long userId, Long cardId) {
+        BriefingCard card = findOwned(userId, cardId);
+        Long sessionId = card.getSession().getId();
+
+        List<Long> cardIds = cardRepository.findAllBySessionIdOrderByVersionDesc(sessionId).stream()
+                .map(BriefingCard::getId)
+                .toList();
+
+        // 일정은 연결만 끊는다. 끊기 전에 지우면 외래키에 걸린다.
+        appointmentRepository.findAllByCardIdIn(cardIds).forEach(Appointment::detachCard);
+        visitRecordRepository.deleteAllByCardIdIn(cardIds);
+
+        // 버전 체인은 자식이 부모를 가리키므로 최신부터 지운다.
+        cardRepository.findAllBySessionIdOrderByVersionDesc(sessionId).forEach(cardRepository::delete);
+        cardRepository.flush();
+
+        sessionRepository.deleteById(sessionId);
+
+        log.info("카드 삭제 userId={} cardId={} sessionId={} versions={}",
+                userId, cardId, sessionId, cardIds.size());
     }
 
     /** 남의 카드는 존재 자체를 알려주지 않는다. */

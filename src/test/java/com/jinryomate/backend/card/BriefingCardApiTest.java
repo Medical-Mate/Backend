@@ -3,6 +3,7 @@ package com.jinryomate.backend.card;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.BDDMockito.given;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -113,6 +114,67 @@ class BriefingCardApiTest {
         assertThat(card.path("patient").path("sex").asText()).isEqualTo("FEMALE");
         // 어떤 파이프라인이 만들었는지 남아야 추적이 된다.
         assertThat(card.path("meta").path("promptVersion").asText()).isNotBlank();
+    }
+
+    @Test
+    @DisplayName("카드를 지우면 문답까지 사라진다")
+    void 카드_삭제() throws Exception {
+        // 증상 대화가 남아 있는데 카드만 지우면, 환자는 지웠다고 생각하면서
+        // 증상·복용약이 계속 보관된다.
+        completeOnboarding();
+        long sessionId = startSessionWithUtterance();
+        long cardId = generateCard(sessionId).path("cardId").asLong();
+
+        mockMvc.perform(delete("/api/cards/" + cardId).header("Authorization", token))
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(get("/api/cards/" + cardId).header("Authorization", token))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(get("/api/sessions/" + sessionId).header("Authorization", token))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(get("/api/me/cards").header("Authorization", token))
+                .andExpect(jsonPath("$.length()").value(0));
+    }
+
+    @Test
+    @DisplayName("확정한 카드를 지우면 버전 전체가 사라진다")
+    void 버전_체인_삭제() throws Exception {
+        // 환자에게는 한 장이고 버전은 서버 사정이다. 하나만 지우면 목록에 나머지가 남는다.
+        completeOnboarding();
+        long cardId = generateCard(startSessionWithUtterance()).path("cardId").asLong();
+        mockMvc.perform(post("/api/cards/" + cardId + "/confirm").header("Authorization", token))
+                .andExpect(status().isOk());
+
+        // 확정본을 고치면 새 버전이 생긴다.
+        String updated = mockMvc.perform(patch("/api/cards/" + cardId)
+                        .header("Authorization", token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new UpdateCardRequest(
+                                "고친 설명", null, null, null))))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        long newCardId = objectMapper.readTree(updated).path("cardId").asLong();
+
+        // 새 버전을 지우면 원본도 함께 사라진다.
+        mockMvc.perform(delete("/api/cards/" + newCardId).header("Authorization", token))
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(get("/api/me/cards").header("Authorization", token))
+                .andExpect(jsonPath("$.length()").value(0));
+    }
+
+    @Test
+    @DisplayName("남의 카드는 지울 수 없다")
+    void 남의_카드_삭제() throws Exception {
+        completeOnboarding();
+        long cardId = generateCard(startSessionWithUtterance()).path("cardId").asLong();
+
+        given(kakaoClient.resolveKakaoId(anyString())).willReturn(9911223344L);
+        String other = "Bearer " + login().accessToken();
+
+        // 존재 자체를 알려주지 않는다. 403 이 아니라 404 다.
+        mockMvc.perform(delete("/api/cards/" + cardId).header("Authorization", other))
+                .andExpect(status().isNotFound());
     }
 
     @Test
