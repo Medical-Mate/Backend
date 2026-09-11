@@ -79,9 +79,18 @@ services:
     image: ${AI_IMAGE:-ghcr.io/medical-mate/ai:latest}
     restart: unless-stopped
     environment:
-      # 요청 서명 검증. AI 쪽 문서상 비우면 검증을 생략한다.
-      # 백엔드에 실제 클라이언트를 붙일 때 서명을 함께 구현하고 그때 값을 넣는다.
+      # 요청 서명 검증. 비우면 AI 가 검증을 통째로 생략한다.
       MEDIMATE_HMAC_SECRET: ${MEDIMATE_HMAC_SECRET:-}
+
+      # 시크릿이 비면 기동을 실패시킨다.
+      #
+      # 실제로 한 번 당했다. 시크릿을 빈 채로 배포해 놓고 무검증으로 몇 시간을 돌았는데,
+      # 서명 없는 요청을 직접 던져 보기 전까지 아무도 몰랐다. AI 쪽이 기동 경고를
+      # 붙여 줬지만 컨테이너 로그를 매번 보지는 않는다.
+      #
+      # KAKAO_APP_ID 가 없으면 백엔드 기동을 막는 것과 같은 이유다 — 방어선이 조용히
+      # 꺼진 채로 멀쩡히 도는 상태를 만들지 않는다.
+      MEDIMATE_REQUIRE_HMAC: ${MEDIMATE_REQUIRE_HMAC:-1}
 
       # Bedrock Nova Pro 를 쓴다. OpenAI 키는 더 이상 필요 없다.
       MEDIMATE_PROVIDER: ${MEDIMATE_PROVIDER:-bedrock}
