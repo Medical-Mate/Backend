@@ -30,8 +30,19 @@ public class IntakeSession {
         ABANDONED
     }
 
-    /** 와이어프레임의 "증상 문답 · 2/6" 기준. */
-    public static final int DEFAULT_TOTAL_STEPS = 6;
+    /**
+     * 대화 턴 상한. AI 계약의 안전장치 값과 같다.
+     *
+     * <p><b>와이어프레임의 "2 / 4"가 아니다.</b> 그 넷은 화면 단계
+     * (부위 짚기 → 문답 → 통증 강도 → 의사에게 물어볼 것)이고, 이 숫자는 <b>2단계 안에서</b>
+     * 주고받는 대화 턴이다. 층이 다르다.
+     *
+     * <p>화면 단계 진행도는 <b>앱이 안다</b> — 화면 전환을 앱이 하므로 서버가 내려줄 것이
+     * 없다(AI#7 확인). 여기 값은 "대화가 얼마나 남았나"일 뿐이다.
+     *
+     * <p>정상 문답은 6턴(시작·느낌·경과·악화완화·퍼짐·동반)이다. 20은 안전장치다.
+     */
+    public static final int MAX_TURNS = 20;
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -63,7 +74,20 @@ public class IntakeSession {
     private int progressCurrent = 0;
 
     @Column(nullable = false)
-    private int progressTotal = DEFAULT_TOTAL_STEPS;
+    private int progressTotal = MAX_TURNS;
+
+    /**
+     * AI 가 준 {@code state} 원문.
+     *
+     * <p><b>열어보지 않는다.</b> AI 계약이 불투명하게 다루라고 명시했고, 내부 구조에
+     * 의존하는 순간 AI 쪽 변경이 우리를 깨뜨린다. 턴마다 통째로 덮어쓸 뿐이다.
+     */
+    @Column(columnDefinition = "TEXT")
+    private String aiState;
+
+    /** 왜 끝났는지. {@code stop} · {@code complete} · {@code max_turns} · {@code budget}. */
+    @Column(length = 16)
+    private String endReason;
 
     @OneToMany(mappedBy = "session", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("seq ASC")
@@ -99,9 +123,33 @@ public class IntakeSession {
         }
     }
 
+    /** AI 가 준 state 를 통째로 덮어쓴다. 턴마다 호출된다. */
+    public void rememberState(String aiState) {
+        this.aiState = aiState;
+    }
+
     public void complete() {
+        complete(null);
+    }
+
+    /**
+     * 문답을 끝낸다.
+     *
+     * <p>이미 끝난 세션에 다시 불러도 {@code completedAt} 을 덮어쓰지 않는다.
+     * AI 계약상 종료 후에도 턴이 올 수 있는데, 그때마다 완료 시각이 밀리면
+     * "언제 끝난 문답인지"를 잃는다.
+     */
+    public void complete(String endReason) {
+        if (this.status == Status.COMPLETED) {
+            return;
+        }
         this.status = Status.COMPLETED;
+        this.endReason = endReason;
         this.completedAt = Instant.now();
+    }
+
+    public boolean isCompleted() {
+        return status == Status.COMPLETED;
     }
 
     public boolean isOwnedBy(Long userId) {

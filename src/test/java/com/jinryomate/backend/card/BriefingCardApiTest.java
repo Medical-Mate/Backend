@@ -91,7 +91,10 @@ class BriefingCardApiTest {
                 .andExpect(jsonPath("$.status").value("IN_PROGRESS"))
                 .andExpect(jsonPath("$.siteText").value("손가락 관절(오른손)"))
                 .andExpect(jsonPath("$.siteCodes[0]").value("hand_finger_joint_R"))
-                .andExpect(jsonPath("$.progress.total").value(6));
+                // 화면의 "2 / 4" 가 아니라 대화 턴 상한이다. 그 넷은 화면 단계고 앱이 안다.
+                .andExpect(jsonPath("$.progress.total").value(20))
+                // 세션을 만들면 AI 첫 질문이 이미 들어 있다.
+                .andExpect(jsonPath("$.messages.length()").value(1));
     }
 
     @Test
