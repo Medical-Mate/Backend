@@ -50,9 +50,9 @@ services:
 
       # 같은 Docker 네트워크 안이라 컨테이너 이름으로 부른다. 인터넷을 타지 않는다.
       AI_BASE_URL: http://ai:8000
-      # AI 쪽은 HMAC 서명(MEDIMATE_HMAC_SECRET)을 기대한다. 백엔드에 실제 클라이언트를
-      # 붙일 때 같은 값을 넣고 서명을 구현한다. 그때까지 양쪽 모두 비워둔다.
-      AI_INTERNAL_TOKEN: ${MEDIMATE_HMAC_SECRET:-}
+      # 양쪽이 같은 값이어야 한다. 비어 있으면 백엔드가 스텁으로 돌고 AI 는 서명 검증을
+      # 끈 채 뜬다 — 붙는 시늉을 하다 401 로 터지는 것보다 낫지만, 운영에서는 채워야 한다.
+      MEDIMATE_HMAC_SECRET: ${MEDIMATE_HMAC_SECRET:-}
 
       # Dockerfile 의 -XX:MaxRAMPercentage 는 컨테이너가 여럿이면 계산이 어긋난다.
       # -Xmx 를 명시하면 MaxRAMPercentage 는 무시된다.

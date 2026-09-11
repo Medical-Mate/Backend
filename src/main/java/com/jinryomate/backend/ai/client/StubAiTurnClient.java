@@ -4,7 +4,6 @@ import com.jinryomate.backend.ai.dto.AiTurnResult;
 import com.jinryomate.backend.intake.entity.IntakeMessage;
 import com.jinryomate.backend.intake.entity.IntakeSession;
 import java.util.List;
-import org.springframework.stereotype.Component;
 
 /**
  * AI 서비스에 실제로 붙기 전까지 쓰는 임시 구현.
@@ -13,12 +12,14 @@ import org.springframework.stereotype.Component;
  * 읽지 않는다. 그래도 턴 처리 → 메시지 적재 → 진행도 → 종료 판정 → {@code state}
  * 왕복은 실제 경로로 돌아가므로, 앱이 S2 화면을 만들고 검증할 수 있다.
  *
- * <p>실제 구현체를 붙일 때 이 클래스를 지운다. 인터페이스는 그대로 둔다.
+ * <p><b>{@code MEDIMATE_HMAC_SECRET} 이 비어 있을 때만 쓰인다.</b> 빈 시크릿으로 서명하면
+ * AI 가 요청을 전부 거부하므로, 그때는 붙는 시늉을 하는 것보다 스텁이 도는 편이 낫다.
+ * 로컬 개발과 테스트에서는 시크릿이 없는 것이 정상이다. 어느 쪽이 물렸는지는 기동 로그에
+ * 남는다 — {@link com.jinryomate.backend.ai.AiClientConfig} 참고.
  *
- * <p><b>왜 아직 스텁인가</b> — AI 서버는 이미 떠 있지만 {@code MEDIMATE_HMAC_SECRET}
- * 서명 규격을 받지 못했다. 한쪽만 채우면 AI 가 우리 요청을 전부 거부한다.
+ * <p>빈 등록은 {@code AiClientConfig} 가 한다. {@code @Component} 로 두면 실제 구현체와
+ * 함께 올라와 어느 쪽이 물릴지가 불분명해진다.
  */
-@Component
 public class StubAiTurnClient implements AiTurnClient {
 
     static final String STUB_STATE = "{\"stub\":true}";

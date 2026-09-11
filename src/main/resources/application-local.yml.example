@@ -13,7 +13,6 @@ auth:
 
 ai:
   base-url: http://localhost:8000
-  internal-token: 로컬에서-쓸-토큰
 
 # 백엔드가 쓰는 카카오 값은 이 둘뿐입니다. REST API 키·네이티브 앱 키·JavaScript 키는
 # 앱(클라이언트)이 로그인할 때 쓰는 것이라 서버에 넣지 않습니다.
