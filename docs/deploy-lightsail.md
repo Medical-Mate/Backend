@@ -239,3 +239,54 @@ Error parsing parameter '--user-data': ... text contents could not be decoded
 
 `PYTHONUTF8=1` 은 안 통합니다 (CLI v2 는 고정 바이너리입니다). CLI 로 넘기는 파일은 ASCII 로
 쓰세요.
+
+---
+
+## 실제 운영 값
+
+| | |
+|---|---|
+| 인스턴스 | `jinryomate` · `ap-northeast-2a` · `small_3_0` (2 vCPU · 2GB · 60GB · 3TB) |
+| 고정 IP | `54.116.115.128` (`jinryomate-ip`) |
+| 정식 주소 | `https://api.medicalmate.site` |
+| CDN | `https://d3f36x6ccm838d.cloudfront.net` (배포 ID `EW18ATB66SC58`) |
+| 설정 위치 | `/opt/jinryomate/` |
+| 예산 알림 | `jinryomate-monthly` $30 |
+
+## CloudFront 를 앞에 둔 이유
+
+**기관 방화벽이 신규 도메인을 막습니다.** FortiGate 계열이 갓 등록한 도메인을 `Newly Observed Domain` 으로 분류해 24~72시간 차단합니다. HTTPS 도 중간에서 복호화해 검사하므로 프로토콜을 바꿔도 소용없습니다 — 인증서 발급자가 `O=Fortinet` 으로 바뀌는 것으로 확인됩니다.
+
+`cloudfront.net` 은 오래된 주요 CDN 이라 그 분류에 걸리지 않습니다. **앱·AI 담당자에게는 CloudFront 주소를 주세요.**
+
+구성에서 두 가지가 중요합니다.
+
+| | 정책 | 안 쓰면 |
+|---|---|---|
+| 캐시 | `Managed-CachingDisabled` | API 응답이 캐시돼 남의 데이터가 보입니다 |
+| 오리진 요청 | `Managed-AllViewerExceptHostHeader` | `Authorization` 이 잘려 JWT 인증이 전부 깨집니다 |
+
+**`Managed-AllViewer` 를 쓰면 안 됩니다.** 뷰어의 `Host: xxx.cloudfront.net` 이 그대로 오리진에 가서 Caddy 가 매칭에 실패합니다. `ExceptHostHeader` 여야 `Host: api.medicalmate.site` 가 갑니다.
+
+## 도메인을 바꿀 때
+
+```bash
+cd /opt/jinryomate
+sed -i 's/^PUBLIC_HOST=.*/PUBLIC_HOST=새주소/' .env
+docker compose -f docker-compose.prod.yml up -d --force-recreate caddy
+```
+
+Caddy 가 인증서를 자동으로 새로 발급합니다. **DNS A 레코드가 먼저 전파돼 있어야** ACME 챌린지가 통과합니다.
+
+## SSH 가 안 될 때
+
+방화벽이 관리자 IP 로 제한돼 있습니다. 접속하는 곳의 공인 IP 가 바뀌면 막힙니다.
+
+```bash
+aws lightsail put-instance-public-ports --instance-name jinryomate \
+  --port-infos fromPort=80,toPort=80,protocol=TCP,cidrs=0.0.0.0/0 \
+               fromPort=443,toPort=443,protocol=TCP,cidrs=0.0.0.0/0 \
+               fromPort=22,toPort=22,protocol=TCP,cidrs=<새 IP>/32
+```
+
+**일부 기관 네트워크는 아웃바운드 22번 자체를 막습니다.** 그때는 규칙을 고쳐도 안 됩니다 — 다른 망에서 접속하거나 Lightsail 콘솔의 브라우저 SSH 를 쓰세요.
