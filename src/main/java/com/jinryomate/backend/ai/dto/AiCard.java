@@ -33,6 +33,18 @@ public record AiCard(
         /** 축 밖으로 새는 환자 말. 예: {@code "타이레놀 먹었어요"}. */
         @JsonProperty("patient_notes") List<String> patientNotes,
 
+        /**
+         * AI 가 만든 "의사에게 물어볼 것" 후보. 화면 {@code 1i} 가 이걸 보여준다.
+         *
+         * <p><b>종료 턴에만 온다.</b> 중간 턴에는 {@code null} 이다. 요청에
+         * {@code question_candidates: true} 를 실어야 돌기도 한다 — Bedrock 호출이
+         * 한 번 더 들어가서 우리가 켜는 시점을 쥔다.
+         *
+         * <p><b>최종 목록은 이것이 아니다.</b> 환자가 고른 것과 직접 쓴 것을 합친 결과를
+         * {@code PUT /api/sessions/{id}/questions} 로 따로 받는다.
+         */
+        @JsonProperty("question_candidates") List<QuestionCandidate> questionCandidates,
+
         @JsonProperty("minimally_complete") Boolean minimallyComplete,
 
         /** 8축 중 몇 개가 찼는지. {@code 0.375} 형태. */
@@ -47,6 +59,16 @@ public record AiCard(
 
         Provenance provenance
 ) {
+
+    /**
+     * 질문 후보 하나.
+     *
+     * @param rank 낮을수록 먼저. <b>배열 순서가 아니라 이 값으로 정렬한다</b> —
+     *             카드를 보면 의사가 바로 아는 것은 낮추고, 복용약·알러지처럼 환자가
+     *             꺼내야 처방에 반영되는 것은 올린다는 것이 AI 쪽 정렬 원칙이다
+     */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record QuestionCandidate(String text, String source, Integer rank) {}
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record Axis(

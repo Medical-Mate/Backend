@@ -56,7 +56,20 @@ public class IntakeSessionController {
 
     @Operation(
             summary = "세션 조회",
-            description = "앱을 껐다 켜도 이어서 답할 수 있도록 대화와 진행도를 돌려줍니다.")
+            description = """
+                    앱을 껐다 켜도 이어서 답할 수 있도록 대화와 진행도를 돌려줍니다.
+
+                    **`questionCandidates` 는 AI 가 만든 "의사에게 물어볼 것" 후보입니다.**
+                    화면 `1i` 가 이걸 보여줍니다. **문답이 끝나야 채워지고** 그 전에는 빈
+                    배열입니다. `rank` 순으로 이미 정렬해 최대 3개만 내려줍니다.
+
+                    카드가 아니라 여기 실리는 이유는 화면 순서입니다 —
+                    `문답 → 통증 강도 → 물어볼 것 → 카드` 라, 후보가 필요한 시점에는
+                    카드가 아직 없습니다.
+
+                    **최종 목록은 후보가 아닙니다.** 환자가 고른 것과 직접 쓴 것을 합쳐
+                    `PUT /api/sessions/{id}/questions` 로 보내주세요.
+                    """)
     @GetMapping("/{sessionId}")
     public SessionResponse get(@AuthenticationPrincipal Long userId,
                                @PathVariable Long sessionId) {
@@ -117,7 +130,7 @@ public class IntakeSessionController {
 
                     **끝난 문답에도 보낼 수 있습니다.** 4단계는 문답이 끝난 뒤 화면입니다.
 
-                    AI 가 만드는 질문 후보는 아직 연동되지 않았습니다. 후보가 붙어도
+                    AI 가 만든 후보는 `GET /api/sessions/{id}` 의 `questionCandidates` 로 옵니다.
                     **최종 목록은 여기로 보내는 이 값**입니다 — 고른 것과 직접 쓴 것을
                     합치는 것은 앱 몫입니다.
                     """)

@@ -33,6 +33,7 @@ public class IntakeSessionService {
     private final HealthProfileService healthProfileService;
     private final AiTurnClient aiTurnClient;
     private final BodyMap bodyMap;
+    private final QuestionCandidateReader candidateReader;
 
     /**
      * 문답 세션을 시작한다.
@@ -65,7 +66,7 @@ public class IntakeSessionService {
 
         // 부위·증상은 민감정보라 값을 로그에 남기지 않는다.
         log.info("문답 세션 시작 userId={} sessionId={}", userId, session.getId());
-        return SessionResponse.from(session);
+        return SessionResponse.from(session, candidateReader.read(session.getAiCard()));
     }
 
     /**
@@ -156,7 +157,7 @@ public class IntakeSessionService {
 
         // 강도 값 자체는 증상 정보라 라벨을 로그에 남기지 않는다. 숫자만 남긴다.
         log.info("통증 강도 기록 sessionId={} level={}", sessionId, request.level());
-        return SessionResponse.from(session);
+        return SessionResponse.from(session, candidateReader.read(session.getAiCard()));
     }
 
     /**
@@ -171,12 +172,13 @@ public class IntakeSessionService {
 
         // 질문 내용은 증상을 유추할 수 있어 로그에 남기지 않는다. 개수만 남긴다.
         log.info("물어볼 것 저장 sessionId={} count={}", sessionId, request.questions().size());
-        return SessionResponse.from(session);
+        return SessionResponse.from(session, candidateReader.read(session.getAiCard()));
     }
 
     @Transactional(readOnly = true)
     public SessionResponse get(Long userId, Long sessionId) {
-        return SessionResponse.from(findOwned(userId, sessionId));
+        IntakeSession session = findOwned(userId, sessionId);
+        return SessionResponse.from(session, candidateReader.read(session.getAiCard()));
     }
 
     /** 남의 세션은 존재 자체를 알려주지 않는다. 없는 것과 같은 응답을 준다. */
