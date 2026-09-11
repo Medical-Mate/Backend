@@ -54,6 +54,11 @@ services:
       # 끈 채 뜬다 — 붙는 시늉을 하다 401 로 터지는 것보다 낫지만, 운영에서는 채워야 한다.
       MEDIMATE_HMAC_SECRET: ${MEDIMATE_HMAC_SECRET:-}
 
+      # 심평원 병원정보서비스. 발급받은 문자열을 그대로 넣는다 — 디코딩해서 넣으면
+      # 인증은 통과한 것처럼 보이는데 결과가 0건으로 온다(오류 메시지도 없다).
+      # 비어 있으면 백엔드가 고정 목록으로 돈다.
+      HIRA_SERVICE_KEY: ${HIRA_SERVICE_KEY:-}
+
       # Dockerfile 의 -XX:MaxRAMPercentage 는 컨테이너가 여럿이면 계산이 어긋난다.
       # -Xmx 를 명시하면 MaxRAMPercentage 는 무시된다.
       JAVA_TOOL_OPTIONS: "-Xmx320m -XX:MaxMetaspaceSize=128m"

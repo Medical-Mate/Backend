@@ -51,6 +51,12 @@ management:
 
 # AI 서비스 연동. 인터페이스 문서 참고.
 # 인증 방식은 AI 서비스 배포 위치가 정해지면 확정한다.
+hospital:
+  base-url: ${HIRA_BASE_URL:https://apis.data.go.kr/B551182/hospInfoServicev2}
+  # 공공데이터포털이 준 문자열 그대로 넣는다. 디코딩하면 결과가 조용히 0건이 된다.
+  service-key: ${HIRA_SERVICE_KEY:}
+  timeout: 10s
+
 ai:
   base-url: ${AI_BASE_URL:http://localhost:8000}
   hmac-secret: ${MEDIMATE_HMAC_SECRET:}
