@@ -261,7 +261,7 @@ class IntakeStepApiTest {
                         .header("Authorization", token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(
-                                new StartSessionRequest(List.of("abdomen"), "복부"))))
+                                new StartSessionRequest("SUR:032", null, "아랫배"))))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
         return objectMapper.readTree(body).path("sessionId").asLong();

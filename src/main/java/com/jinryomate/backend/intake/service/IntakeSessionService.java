@@ -14,6 +14,7 @@ import com.jinryomate.backend.intake.dto.IntakeDtos.StartSessionRequest;
 import com.jinryomate.backend.intake.dto.IntakeDtos.TurnResponse;
 import com.jinryomate.backend.intake.entity.IntakeMessage;
 import com.jinryomate.backend.intake.entity.IntakeSession;
+import com.jinryomate.backend.intake.entity.Side;
 import com.jinryomate.backend.intake.repository.IntakeSessionRepository;
 import com.jinryomate.backend.profile.service.HealthProfileService;
 import java.util.List;
@@ -31,6 +32,7 @@ public class IntakeSessionService {
     private final UserRepository userRepository;
     private final HealthProfileService healthProfileService;
     private final AiTurnClient aiTurnClient;
+    private final BodyMap bodyMap;
 
     /**
      * 문답 세션을 시작한다.
@@ -49,10 +51,10 @@ public class IntakeSessionService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ApiException(ErrorCode.UNAUTHORIZED, "다시 로그인해주세요."));
 
+        validateSite(request.siteNodeId(), request.side());
+
         IntakeSession session = sessionRepository.save(IntakeSession.start(
-                user,
-                request.siteCodes() == null ? List.of() : request.siteCodes(),
-                request.siteText()));
+                user, request.siteNodeId(), request.side(), request.siteText()));
 
         // 첫 질문을 여기서 받아 대화에 넣는다. 앱이 세션을 만든 뒤 또 호출하지 않아도
         // 바로 화면을 그릴 수 있다. AI 계약상 이 호출은 LLM 을 쓰지 않는다.
@@ -101,6 +103,35 @@ public class IntakeSessionService {
                 sessionId, request.text().length(), result.ended(), result.endReason());
 
         return TurnResponse.of(session, result.reply(), result.ended());
+    }
+
+    /**
+     * 부위를 여기서 먼저 거른다.
+     *
+     * <p>AI 도 같은 검증을 하지만 그대로 넘기면 <b>문답을 시작한 뒤에</b> 422 가 돌아온다.
+     * 앱은 이미 화면을 넘긴 뒤라 되돌리기가 어렵다.
+     *
+     * <p>부위를 건너뛰는 경로가 있어 {@code null} 은 통과시킨다. 다만 <b>부위 없이 좌우만</b>
+     * 보내는 것은 막는다 — 무엇의 좌우인지 알 수 없다.
+     */
+    private void validateSite(String siteNodeId, Side side) {
+        if (siteNodeId == null || siteNodeId.isBlank()) {
+            if (side != null) {
+                throw new ApiException(ErrorCode.INVALID_REQUEST, "부위를 함께 보내주세요.");
+            }
+            return;
+        }
+
+        BodyMap.Node node = bodyMap.get(siteNodeId);
+        if (node == null) {
+            log.warn("부위 마스터에 없는 코드 siteNodeId={} snapshot={}", siteNodeId, bodyMap.getSnapshot());
+            throw new ApiException(ErrorCode.INVALID_REQUEST, "알 수 없는 부위입니다.");
+        }
+
+        if (side != null && !node.lateralized()) {
+            throw new ApiException(ErrorCode.INVALID_REQUEST,
+                    node.label() + "에는 좌우가 없습니다.");
+        }
     }
 
     private String lastAiReply(IntakeSession session) {

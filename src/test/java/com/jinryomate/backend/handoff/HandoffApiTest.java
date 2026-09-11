@@ -16,6 +16,7 @@ import com.jinryomate.backend.auth.dto.AuthDtos.KakaoLoginRequest;
 import com.jinryomate.backend.auth.dto.AuthDtos.TokenResponse;
 import com.jinryomate.backend.card.repository.BriefingCardRepository;
 import com.jinryomate.backend.intake.dto.IntakeDtos.StartSessionRequest;
+import com.jinryomate.backend.intake.entity.Side;
 import com.jinryomate.backend.profile.dto.ProfileDtos.HealthProfileRequest;
 import com.jinryomate.backend.profile.dto.ProfileDtos.ListFieldRequest;
 import com.jinryomate.backend.profile.dto.ProfileDtos.TextFieldRequest;
@@ -165,7 +166,7 @@ class HandoffApiTest {
                         .header("Authorization", token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(
-                                new StartSessionRequest(List.of("hand_finger_joint_R"), "손가락 관절(오른손)"))))
+                                new StartSessionRequest("SUR:072", Side.RIGHT, "손(오른쪽)"))))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
         long sessionId = objectMapper.readTree(session).path("sessionId").asLong();

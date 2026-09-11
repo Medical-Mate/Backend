@@ -2,6 +2,7 @@ package com.jinryomate.backend.intake.dto;
 
 import com.jinryomate.backend.intake.entity.IntakeMessage;
 import com.jinryomate.backend.intake.entity.IntakeSession;
+import com.jinryomate.backend.intake.entity.Side;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
@@ -20,8 +21,16 @@ public final class IntakeDtos {
      * <p>부위를 건너뛰어도 시작할 수 있다. 와이어프레임에 "부위 짚기"를 건너뛰는 경로가 있다.
      */
     public record StartSessionRequest(
-            @Size(max = 10, message = "부위는 최대 10개까지입니다.")
-            List<@Size(max = 64) String> siteCodes,
+            /**
+             * 부위 마스터의 노드 id. {@code ANC:001} · {@code SUR:032}.
+             *
+             * <p><b>하나만 보낸다.</b> AI 가 세션 시작에 부위 하나를 받는다. 없는 id 는 400이다.
+             */
+            @Size(max = 40, message = "부위 코드가 너무 깁니다.")
+            String siteNodeId,
+
+            /** 좌우. 좌우가 없는 부위(머리·배 등 13곳)에 보내면 400이다. */
+            Side side,
 
             @Size(max = 100, message = "부위 표현은 100자 이내입니다.")
             String siteText
@@ -123,7 +132,8 @@ public final class IntakeDtos {
     public record SessionResponse(
             Long sessionId,
             IntakeSession.Status status,
-            List<String> siteCodes,
+            String siteNodeId,
+            Side side,
             String siteText,
             Progress progress,
             List<MessageResponse> messages,
@@ -140,7 +150,8 @@ public final class IntakeDtos {
             return new SessionResponse(
                     s.getId(),
                     s.getStatus(),
-                    List.copyOf(s.getSiteCodes()),
+                    s.getSiteNodeId(),
+                    s.getSide(),
                     s.getSiteText(),
                     new Progress(s.getProgressCurrent(), s.getProgressTotal()),
                     s.getMessages().stream().map(MessageResponse::from).toList(),
