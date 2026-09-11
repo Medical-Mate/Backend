@@ -324,7 +324,7 @@ class AppointmentApiTest {
                         .header("Authorization", token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(
-                                new StartSessionRequest("SUR:072", Side.RIGHT, "손(오른쪽)"))))
+                                new StartSessionRequest("SUR:072", null, Side.RIGHT, "손(오른쪽)"))))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
         long sessionId = objectMapper.readTree(session).path("sessionId").asLong();

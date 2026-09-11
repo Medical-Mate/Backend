@@ -1,5 +1,6 @@
 package com.jinryomate.backend.ai.client;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.jinryomate.backend.ai.dto.AiTurnResult;
 import com.jinryomate.backend.intake.entity.IntakeSession;
 
@@ -26,7 +27,10 @@ public interface AiTurnClient {
      * 환자 발화를 넘기고 다음 질문을 받는다.
      *
      * @param session   진행 중인 세션. 보관해둔 {@code state} 를 여기서 꺼낸다
-     * @param utterance 환자가 말한 것. 음성이었어도 텍스트로 변환된 뒤에 온다
+     * @param utterance      환자가 말한 것. 음성이었어도 텍스트로 변환된 뒤에 온다
+     * @param extraction     폰이 만든 추출 결과. 온디바이스 프로필에서만 온다.
+     *                       <b>열어보지 않고 그대로 넘긴다.</b> 없으면 {@code null}
+     * @param extractionMeta 폰 모델·프롬프트 버전. {@code extraction} 과 함께 온다
      */
-    AiTurnResult turn(IntakeSession session, String utterance);
+    AiTurnResult turn(IntakeSession session, String utterance, JsonNode extraction, JsonNode extractionMeta);
 }

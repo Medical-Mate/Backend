@@ -91,7 +91,7 @@ class IntakeTurnApiTest {
                         .header("Authorization", token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(
-                                new StartSessionRequest("SUR:999", null, "없는 곳"))))
+                                new StartSessionRequest("SUR:999", null, null, "없는 곳"))))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error.code").value("INVALID_REQUEST"));
     }
@@ -104,7 +104,7 @@ class IntakeTurnApiTest {
                         .header("Authorization", token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(
-                                new StartSessionRequest("ANC:001", Side.LEFT, "머리"))))
+                                new StartSessionRequest("ANC:001", null, Side.LEFT, "머리"))))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error.message").value(org.hamcrest.Matchers.containsString("좌우")));
     }
@@ -117,7 +117,7 @@ class IntakeTurnApiTest {
                         .header("Authorization", token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(
-                                new StartSessionRequest(null, Side.RIGHT, null))))
+                                new StartSessionRequest(null, null, Side.RIGHT, null))))
                 .andExpect(status().isBadRequest());
     }
 
@@ -129,7 +129,7 @@ class IntakeTurnApiTest {
                         .header("Authorization", token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(
-                                new StartSessionRequest(null, null, null))))
+                                new StartSessionRequest(null, null, null, null))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.siteNodeId").doesNotExist());
     }
@@ -252,7 +252,7 @@ class IntakeTurnApiTest {
                         .header("Authorization", otherToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(
-                                new SendMessageRequest("남의 문답에 끼어들기", null))))
+                                new SendMessageRequest("남의 문답에 끼어들기", null, null, null))))
                 // 403 이 아니라 404 다. 403 은 "그 세션이 있다"는 것을 알려준다.
                 .andExpect(status().isNotFound());
     }
@@ -279,7 +279,7 @@ class IntakeTurnApiTest {
                 .header("Authorization", token)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(
-                        new StartSessionRequest("SUR:032", null, "아랫배")));
+                        new StartSessionRequest("SUR:032", null, null, "아랫배")));
     }
 
     private long startAndGetId() throws Exception {
@@ -294,7 +294,7 @@ class IntakeTurnApiTest {
         return post("/api/sessions/" + sessionId + "/messages")
                 .header("Authorization", token)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(new SendMessageRequest(text, method)));
+                .content(objectMapper.writeValueAsString(new SendMessageRequest(text, method, null, null)));
     }
 
     private void completeOnboarding() throws Exception {

@@ -1,5 +1,6 @@
 package com.jinryomate.backend.ai.client;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.jinryomate.backend.ai.dto.AiTurnResult;
 import com.jinryomate.backend.intake.entity.IntakeMessage;
 import com.jinryomate.backend.intake.entity.IntakeSession;
@@ -42,17 +43,24 @@ public class StubAiTurnClient implements AiTurnClient {
 
     private static final String CLOSING = "말씀해 주셔서 감사해요. 정리해서 카드로 만들어 드릴게요.";
 
+    /**
+     * 문답을 시작한다.
+     *
+     * <p><b>부위 이름을 문장에 끼워 넣지 않는다.</b> 예전에는 {@code "윗배(명치)이(가)
+     * 불편하시군요"} 처럼 냈는데, 부위가 34가지라 받침에 따라 조사가 갈린다. 조사를
+     * 서버가 계산하는 것도, {@code 이(가)} 로 고정하는 것도 화면에 그대로 보인다 —
+     * 문구는 서버가 만들지 않는다는 원칙과도 맞지 않는다.
+     */
     @Override
     public AiTurnResult start(IntakeSession session) {
-        String opening = session.getSiteText() == null
-                ? "어디가 어떻게 불편해서 오셨는지 편하게 말씀해 주세요."
-                : session.getSiteText() + "이(가) 불편하시군요. " + QUESTIONS.get(0);
-
-        return new AiTurnResult(opening, false, null, STUB_STATE, card(session, null));
+        return new AiTurnResult(
+                "어디가 어떻게 불편해서 오셨는지 편하게 말씀해 주세요.",
+                false, null, STUB_STATE, card(session, null));
     }
 
     @Override
-    public AiTurnResult turn(IntakeSession session, String utterance) {
+    public AiTurnResult turn(IntakeSession session, String utterance,
+                             JsonNode extraction, JsonNode extractionMeta) {
         // 이 발화는 서비스가 이미 저장한 뒤에 들어온다. 여기서 또 세면 두 번 센다.
         long answered = session.getMessages().stream()
                 .filter(m -> m.getRole() == IntakeMessage.Role.USER)
@@ -73,7 +81,12 @@ public class StubAiTurnClient implements AiTurnClient {
      * 흉내 내야, 3값으로 검증하다 터지는 것 같은 문제가 스텁에서도 드러난다.
      */
     private String card(IntakeSession session, String utterance) {
-        String complaint = utterance == null ? session.getSiteText() : utterance;
+        // 첫 발화만 주 호소로 쓴다. 매 턴 덮어쓰면 마지막 답이 제목 자리에 올라온다 —
+        // 강도를 "9점"이라고 답한 순간 카드 목록에 "9점"이 뜬다(안드로이드 #143).
+        String complaint = firstUtterance(session);
+        if (complaint == null) {
+            complaint = utterance;
+        }
 
         StringBuilder axes = new StringBuilder();
         for (String axis : AXES) {
@@ -94,6 +107,15 @@ public class StubAiTurnClient implements AiTurnClient {
                 + ",\"minimally_complete\":false,\"completeness\":" + (complaint == null ? "0.0" : "0.125")
                 + ",\"department_guidance\":null"
                 + ",\"provenance\":{\"prompt_version\":\"stub\",\"model_id\":\"stub\",\"ontology_snapshot\":null}}";
+    }
+
+    /** 환자가 처음 한 말. 아직 없으면 {@code null}. */
+    private String firstUtterance(IntakeSession session) {
+        return session.getMessages().stream()
+                .filter(m -> m.getRole() == IntakeMessage.Role.USER)
+                .findFirst()
+                .map(IntakeMessage::getText)
+                .orElse(null);
     }
 
     private static String quote(String s) {

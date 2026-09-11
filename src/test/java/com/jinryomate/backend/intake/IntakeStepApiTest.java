@@ -200,7 +200,7 @@ class IntakeStepApiTest {
                             .header("Authorization", token)
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(
-                                    new SendMessageRequest("답변 " + i, null))))
+                                    new SendMessageRequest("답변 " + i, null, null, null))))
                     .andExpect(status().isOk());
         }
 
@@ -261,7 +261,7 @@ class IntakeStepApiTest {
                         .header("Authorization", token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(
-                                new StartSessionRequest("SUR:032", null, "아랫배"))))
+                                new StartSessionRequest("SUR:032", null, null, "아랫배"))))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
         return objectMapper.readTree(body).path("sessionId").asLong();

@@ -65,14 +65,35 @@ public class HttpAiTurnClient implements AiTurnClient {
         if (session.getSide() != null) {
             body.put("side", session.getSide().toContract());
         }
+        if (session.getAiProfile() != null) {
+            body.put("profile", session.getAiProfile().toContract());
+        }
         return call(START_PATH, body, "세션 시작");
     }
 
+    /**
+     * 환자 발화를 넘기고 다음 질문을 받는다.
+     *
+     * <p>온디바이스 프로필이면 {@code extraction} 이 함께 온다. <b>열어보지 않고 그대로
+     * 실어 보낸다</b> — 형식은 AI 계약이 정하고, 우리가 구조를 읽기 시작하면 AI 쪽 변경이
+     * 우리를 깨뜨린다.
+     *
+     * <p>{@code extraction} 이 있어도 {@code utterance} 는 함께 보낸다. AI 가 근거를
+     * 검증하려면 원문이 필요하다 — 발화가 외부 LLM 업체에 안 가는 것이지 AI 서버에
+     * 안 가는 것이 아니다.
+     */
     @Override
-    public AiTurnResult turn(IntakeSession session, String utterance) {
+    public AiTurnResult turn(IntakeSession session, String utterance,
+                             JsonNode extraction, JsonNode extractionMeta) {
         ObjectNode body = objectMapper.createObjectNode();
         body.set("state", readState(session));
         body.put("utterance", utterance);
+        if (extraction != null && !extraction.isNull()) {
+            body.set("extraction", extraction);
+        }
+        if (extractionMeta != null && !extractionMeta.isNull()) {
+            body.set("extraction_meta", extractionMeta);
+        }
         return call(TURN_PATH, body, "턴");
     }
 

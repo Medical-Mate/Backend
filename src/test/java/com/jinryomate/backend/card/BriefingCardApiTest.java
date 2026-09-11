@@ -73,7 +73,7 @@ class BriefingCardApiTest {
                         .header("Authorization", token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(
-                                new StartSessionRequest("SUR:072", Side.RIGHT, "손(오른쪽)"))))
+                                new StartSessionRequest("SUR:072", null, Side.RIGHT, "손(오른쪽)"))))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error.code").value("INVALID_REQUEST"));
     }
@@ -87,7 +87,7 @@ class BriefingCardApiTest {
                         .header("Authorization", token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(
-                                new StartSessionRequest("SUR:072", Side.RIGHT, "손(오른쪽)"))))
+                                new StartSessionRequest("SUR:072", null, Side.RIGHT, "손(오른쪽)"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("IN_PROGRESS"))
                 .andExpect(jsonPath("$.siteText").value("손(오른쪽)"))
@@ -173,7 +173,7 @@ class BriefingCardApiTest {
     @DisplayName("확정된 카드를 고치면 원본은 그대로 두고 새 버전이 생긴다")
     void 확정_후_수정은_새_버전() throws Exception {
         completeOnboarding();
-        long cardId = generateCard(startSession()).path("cardId").asLong();
+        long cardId = generateCard(startSessionWithUtterance()).path("cardId").asLong();
 
         mockMvc.perform(post("/api/cards/" + cardId + "/confirm").header("Authorization", token))
                 .andExpect(status().isOk())
@@ -197,7 +197,7 @@ class BriefingCardApiTest {
         mockMvc.perform(get("/api/cards/" + cardId).header("Authorization", token))
                 .andExpect(jsonPath("$.status").value("CONFIRMED"))
                 // 확정본의 본문은 새 버전을 만들어도 바뀌지 않는다.
-                .andExpect(jsonPath("$.chiefComplaint").value("손(오른쪽)"));
+                .andExpect(jsonPath("$.chiefComplaint").value("오른손이 3주 전부터 저려요"));
     }
 
     @Test
@@ -328,10 +328,26 @@ class BriefingCardApiTest {
                         .header("Authorization", token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(
-                                new StartSessionRequest("SUR:072", Side.RIGHT, "손(오른쪽)"))))
+                                new StartSessionRequest("SUR:072", null, Side.RIGHT, "손(오른쪽)"))))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
         return objectMapper.readTree(body).path("sessionId").asLong();
+    }
+
+    /**
+     * 발화를 한 줄 넣은 세션.
+     *
+     * <p>카드의 주 호소는 <b>환자가 처음 한 말</b>에서 나온다. 아무 말도 없이 만든 카드는
+     * 주 호소가 비는 것이 맞다 — 그 상태를 확인하는 테스트가 아니라면 한 줄은 넣어야 한다.
+     */
+    private long startSessionWithUtterance() throws Exception {
+        long sessionId = startSession();
+        mockMvc.perform(post("/api/sessions/" + sessionId + "/messages")
+                        .header("Authorization", token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"text\":\"오른손이 3주 전부터 저려요\"}"))
+                .andExpect(status().isOk());
+        return sessionId;
     }
 
     private JsonNode generateCard(long sessionId) throws Exception {
