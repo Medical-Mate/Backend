@@ -83,20 +83,30 @@ services:
       # 백엔드에 실제 클라이언트를 붙일 때 서명을 함께 구현하고 그때 값을 넣는다.
       MEDIMATE_HMAC_SECRET: ${MEDIMATE_HMAC_SECRET:-}
 
-      # 기본 모델은 OpenAI 다. Bedrock 으로 갈아타면 이 키가 필요 없어진다.
-      MEDIMATE_PROVIDER: ${MEDIMATE_PROVIDER:-openai}
-      MEDIMATE_MODEL: ${MEDIMATE_MODEL:-}
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      # Bedrock Nova Pro 를 쓴다. OpenAI 키는 더 이상 필요 없다.
+      MEDIMATE_PROVIDER: ${MEDIMATE_PROVIDER:-bedrock}
+      MEDIMATE_MODEL: ${MEDIMATE_MODEL:-apac.amazon.nova-pro-v1:0}
 
-      # Bedrock 으로 갈 때만 쓴다. Lightsail 은 인스턴스에 IAM 역할을 붙일 수 없어
-      # 키를 넣는다 — boto3 는 환경변수를 역할과 똑같이 취급하므로 AI 코드는 그대로다.
+      # AI 쪽이 읽는 이름은 AWS_REGION 이 아니라 이것이다.
+      MEDIMATE_BEDROCK_REGION: ${BEDROCK_REGION:-ap-northeast-2}
+
+      # Lightsail 은 인스턴스에 IAM 역할을 붙일 수 없어 키를 넣는다 —
+      # boto3 는 환경변수를 역할과 똑같이 취급하므로 AI 코드는 그대로다.
+      #
+      # 이 키는 bedrock:InvokeModel 만 가진 전용 사용자(jinryomate-ai-bedrock)의 것이다.
+      # apac 추론 프로파일이 아시아 6개 리전으로 분산되므로 정책에 그 리전들의
+      # foundation-model ARN 을 전부 넣었다 — 서울만 넣으면 도쿄·싱가포르로
+      # 라우팅될 때 AccessDenied 가 난다.
       AWS_REGION: ${BEDROCK_REGION:-ap-northeast-2}
       AWS_ACCESS_KEY_ID: ${BEDROCK_ACCESS_KEY_ID:-}
       AWS_SECRET_ACCESS_KEY: ${BEDROCK_SECRET_ACCESS_KEY:-}
 
-    # AI 쪽 실측 RSS 가 46MB 다(인터프리터 13.6 + 앱 30.7 + 온톨로지 1.6).
-    # 문서의 "512MB~1GB" 는 넉넉히 잡은 번들 기준이라 그대로 쓰면 낭비다.
+      # 되돌릴 때만 쓴다. Bedrock 으로 확정돼 지금은 비어 있다.
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+
+    # AI 쪽 실측 RSS 70MB (boto3 +10, Bedrock 클라이언트 +15 가 더해졌다).
+    # 2.7배 여유다. 더 조이지 말라는 요청이 있었다.
     mem_limit: 192m
     profiles: ["ai"]   # AI 이미지가 준비되면 --profile ai 로 함께 띄운다.
 
