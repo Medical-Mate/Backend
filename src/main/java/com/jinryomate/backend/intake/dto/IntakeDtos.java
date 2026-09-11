@@ -113,6 +113,18 @@ public final class IntakeDtos {
     /** 화면 {@code 1i} 의 "적어둔 질문 · 최대 3개". */
     public static final int MAX_QUESTIONS = 3;
 
+    /**
+     * AI 가 만든 질문 후보. 화면 {@code 1i} 에서 환자가 골라 담는다.
+     *
+     * <p><b>최종 목록이 아니다.</b> 고른 것과 직접 쓴 것을 합친 결과는
+     * {@code PUT /api/sessions/{id}/questions} 로 따로 보낸다.
+     *
+     * <p>문답이 끝나기 전에는 빈 배열이다.
+     *
+     * @param rank 낮을수록 먼저. 이미 이 순서로 정렬해서 내려준다
+     */
+    public record QuestionCandidate(String text, String source, Integer rank) {}
+
     public record MessageResponse(int seq, IntakeMessage.Role role, String text) {
         public static MessageResponse from(IntakeMessage m) {
             return new MessageResponse(m.getSeq(), m.getRole(), m.getText());
@@ -164,13 +176,25 @@ public final class IntakeDtos {
             /** 3단계. 아직 안 골랐으면 {@code null}. */
             Severity severity,
             /** 4단계. 아직 안 적었으면 빈 배열. */
-            List<String> questions
+            List<String> questions,
+
+            /**
+             * AI 가 만든 질문 후보. <b>문답이 끝나야 채워진다.</b>
+             *
+             * <p>카드가 아니라 여기 실리는 이유 — 화면 순서가 문답 → 강도 → 물어볼 것 →
+             * 카드라, 후보가 필요한 시점에는 카드가 아직 없다.
+             */
+            List<QuestionCandidate> questionCandidates
     ) {
         public record Progress(int current, int total) {}
 
         public record Severity(int level, String label) {}
 
         public static SessionResponse from(IntakeSession s) {
+            return from(s, List.of());
+        }
+
+        public static SessionResponse from(IntakeSession s, List<QuestionCandidate> candidates) {
             return new SessionResponse(
                     s.getId(),
                     s.getStatus(),
@@ -182,7 +206,8 @@ public final class IntakeDtos {
                     s.getSeverityLevel() == null
                             ? null
                             : new Severity(s.getSeverityLevel(), s.getSeverityLabel()),
-                    List.copyOf(s.getQuestions()));
+                    List.copyOf(s.getQuestions()),
+                    List.copyOf(candidates));
         }
     }
 }
