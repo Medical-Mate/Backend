@@ -20,6 +20,12 @@ public enum ErrorCode {
     NOT_FOUND(HttpStatus.NOT_FOUND, "대상을 찾을 수 없습니다."),
     METHOD_NOT_ALLOWED(HttpStatus.METHOD_NOT_ALLOWED, "지원하지 않는 방식입니다."),
 
+    /** 요청 {@code Content-Type} 을 서버가 읽지 못한다. 이 API 는 JSON 만 받는다. */
+    UNSUPPORTED_MEDIA_TYPE(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "지원하지 않는 형식입니다. JSON으로 보내주세요."),
+
+    /** {@code Accept} 로 요청한 형식을 서버가 만들지 못한다. */
+    NOT_ACCEPTABLE(HttpStatus.NOT_ACCEPTABLE, "요청하신 형식으로는 응답할 수 없습니다."),
+
     UPSTREAM_ERROR(HttpStatus.BAD_GATEWAY, "AI 서비스 호출에 실패했습니다."),
     UPSTREAM_TIMEOUT(HttpStatus.GATEWAY_TIMEOUT, "AI 응답이 지연되고 있습니다."),
 

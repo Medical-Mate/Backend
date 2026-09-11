@@ -2,8 +2,11 @@ package com.jinryomate.backend.global.error;
 
 import com.jinryomate.backend.global.web.RequestIdFilter;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.HttpMediaTypeNotAcceptableException;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
@@ -72,6 +75,27 @@ public class GlobalExceptionHandler {
         return build(ErrorCode.METHOD_NOT_ALLOWED, ErrorCode.METHOD_NOT_ALLOWED.getDefaultMessage());
     }
 
+    /**
+     * 요청 {@code Content-Type} 을 읽을 수 없을 때. 예: JSON 엔드포인트에 {@code text/plain}.
+     *
+     * <p><b>예외 메시지를 응답에 담지 않는다.</b> 미디어 타입 예외에 본문이 섞이지는 않지만,
+     * {@code HttpMessageNotReadableException} 과 같은 규칙을 두는 편이 낫다 — 예외를 하나
+     * 두면 다음 사람이 어디까지 안전한지 매번 판단해야 한다.
+     */
+    @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
+    public ResponseEntity<ErrorResponse> handleUnsupportedMediaType(HttpMediaTypeNotSupportedException e) {
+        log.warn("[UNSUPPORTED_MEDIA_TYPE] {}", e.getContentType());
+        return build(ErrorCode.UNSUPPORTED_MEDIA_TYPE,
+                ErrorCode.UNSUPPORTED_MEDIA_TYPE.getDefaultMessage());
+    }
+
+    /** {@code Accept} 로 요청한 형식을 만들 수 없을 때. */
+    @ExceptionHandler(HttpMediaTypeNotAcceptableException.class)
+    public ResponseEntity<ErrorResponse> handleNotAcceptable(HttpMediaTypeNotAcceptableException e) {
+        log.warn("[NOT_ACCEPTABLE] {}", e.getSupportedMediaTypes());
+        return build(ErrorCode.NOT_ACCEPTABLE, ErrorCode.NOT_ACCEPTABLE.getDefaultMessage());
+    }
+
     /** 매핑된 핸들러가 없을 때. 오타 난 경로가 500 으로 보이면 앱이 서버 장애로 오해한다. */
     @ExceptionHandler(NoResourceFoundException.class)
     public ResponseEntity<ErrorResponse> handleNoResource(NoResourceFoundException e) {
@@ -91,9 +115,18 @@ public class GlobalExceptionHandler {
         return build(ErrorCode.INTERNAL, ErrorCode.INTERNAL.getDefaultMessage());
     }
 
+    /**
+     * 오류 응답을 만든다.
+     *
+     * <p><b>{@code Content-Type} 을 JSON 으로 못 박는다.</b> 그러지 않으면 {@code Accept} 가
+     * 안 맞을 때(406) 본문이 통째로 비어 나간다 — 협상에 실패한 응답을 또 협상하기 때문이다.
+     * 앱이 오류 분기를 하나만 두면 되도록 형태를 통일한 것이 이 프로젝트의 결정인데,
+     * 하필 형식을 잘못 보낸 요청에서 그 형태가 깨지면 원인을 짚기가 제일 어렵다.
+     */
     private ResponseEntity<ErrorResponse> build(ErrorCode code, String message) {
         return ResponseEntity
                 .status(code.getStatus())
+                .contentType(MediaType.APPLICATION_JSON)
                 .body(ErrorResponse.of(code, message, RequestIdFilter.current()));
     }
 }
