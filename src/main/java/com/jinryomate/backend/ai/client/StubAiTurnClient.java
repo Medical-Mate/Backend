@@ -2,6 +2,7 @@ package com.jinryomate.backend.ai.client;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.jinryomate.backend.ai.dto.AiTurnResult;
+import com.jinryomate.backend.ai.dto.PatientProfile;
 import com.jinryomate.backend.intake.entity.IntakeMessage;
 import com.jinryomate.backend.intake.entity.IntakeSession;
 import java.util.List;
@@ -56,6 +57,12 @@ public class StubAiTurnClient implements AiTurnClient {
         return new AiTurnResult(
                 "어디가 어떻게 불편해서 오셨는지 편하게 말씀해 주세요.",
                 false, null, STUB_STATE, card(session, null));
+    }
+
+    @Override
+    public AiTurnResult requestQuestionCandidates(IntakeSession session, PatientProfile profile) {
+        // 스텁은 후보를 만들지 않는다. 카드를 그대로 두고 아무것도 바꾸지 않는다.
+        return new AiTurnResult(CLOSING, true, "complete", STUB_STATE, card(session, null));
     }
 
     @Override

@@ -2,6 +2,7 @@ package com.jinryomate.backend.intake.service;
 
 import com.jinryomate.backend.ai.client.AiTurnClient;
 import com.jinryomate.backend.ai.dto.AiTurnResult;
+import com.jinryomate.backend.ai.dto.PatientProfile;
 import com.jinryomate.backend.auth.entity.User;
 import com.jinryomate.backend.auth.repository.UserRepository;
 import com.jinryomate.backend.global.error.ApiException;
@@ -16,6 +17,7 @@ import com.jinryomate.backend.intake.entity.IntakeMessage;
 import com.jinryomate.backend.intake.entity.IntakeSession;
 import com.jinryomate.backend.intake.entity.Side;
 import com.jinryomate.backend.intake.repository.IntakeSessionRepository;
+import com.jinryomate.backend.profile.repository.HealthProfileRepository;
 import com.jinryomate.backend.profile.service.HealthProfileService;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
@@ -31,6 +33,9 @@ public class IntakeSessionService {
     private final IntakeSessionRepository sessionRepository;
     private final UserRepository userRepository;
     private final HealthProfileService healthProfileService;
+
+    /** 질문 후보를 받을 때 건강정보를 함께 넘기려고만 쓴다. */
+    private final HealthProfileRepository profileRepository;
     private final AiTurnClient aiTurnClient;
     private final BodyMap bodyMap;
     private final QuestionCandidateReader candidateReader;
@@ -98,6 +103,7 @@ public class IntakeSessionService {
 
         if (result.ended()) {
             session.complete(result.endReason());
+            fetchQuestionCandidates(session, userId);
         }
 
         // 발화 내용은 증상 텍스트라 로그에 남기지 않는다. 길이만 남긴다.
@@ -105,6 +111,33 @@ public class IntakeSessionService {
                 sessionId, request.text().length(), result.ended(), result.endReason());
 
         return TurnResponse.of(session, result.reply(), result.ended());
+    }
+
+    /**
+     * 문답이 끝난 직후 질문 후보를 받아온다. 화면 {@code 1i} 가 쓴다.
+     *
+     * <p><b>왜 여기서 따로 부르나</b> — 계약은 "종료 턴 요청에 {@code question_candidates: true}
+     * 를 얹으라"고 하지만, <b>어느 턴이 마지막인지는 응답의 {@code ended} 를 봐야 안다.</b>
+     * 보내는 시점에는 모른다. 매 턴 켜 두면 건강정보를 매 턴 실어 보내게 되어, AI 쪽이
+     * 422 로 막으려던 그 상태가 그대로 생긴다. 종료 뒤 한 번 부르면 딱 한 번만 나간다.
+     *
+     * <p><b>실패해도 문답은 끝난다.</b> 후보는 덤이고 문답이 본체다. 여기서 예외를 올리면
+     * 마지막 답변을 보낸 환자가 오류 화면을 본다 — 실제로는 문답이 정상으로 끝났는데도.
+     */
+    private void fetchQuestionCandidates(IntakeSession session, Long userId) {
+        try {
+            PatientProfile profile = PatientProfile.from(
+                    profileRepository.findByUserId(userId).orElse(null));
+
+            AiTurnResult result = aiTurnClient.requestQuestionCandidates(session, profile);
+            session.rememberCard(result.card());
+
+            log.info("질문 후보 수신 sessionId={} profile={}", session.getId(), profile != null);
+        } catch (Exception e) {
+            // 건강정보가 로그로 새지 않도록 예외 타입만 남긴다.
+            log.warn("질문 후보를 받지 못했습니다 sessionId={} cause={}",
+                    session.getId(), e.getClass().getSimpleName());
+        }
     }
 
     /**
