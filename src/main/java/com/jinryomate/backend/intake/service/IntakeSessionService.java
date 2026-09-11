@@ -6,8 +6,10 @@ import com.jinryomate.backend.auth.entity.User;
 import com.jinryomate.backend.auth.repository.UserRepository;
 import com.jinryomate.backend.global.error.ApiException;
 import com.jinryomate.backend.global.error.ErrorCode;
+import com.jinryomate.backend.intake.dto.IntakeDtos.QuestionsRequest;
 import com.jinryomate.backend.intake.dto.IntakeDtos.SendMessageRequest;
 import com.jinryomate.backend.intake.dto.IntakeDtos.SessionResponse;
+import com.jinryomate.backend.intake.dto.IntakeDtos.SeverityRequest;
 import com.jinryomate.backend.intake.dto.IntakeDtos.StartSessionRequest;
 import com.jinryomate.backend.intake.dto.IntakeDtos.TurnResponse;
 import com.jinryomate.backend.intake.entity.IntakeMessage;
@@ -105,6 +107,37 @@ public class IntakeSessionService {
                 .reduce((first, second) -> second)
                 .map(IntakeMessage::getText)
                 .orElse("이미 끝난 문답입니다.");
+    }
+
+    /**
+     * 통증 강도를 기록한다. 화면 3단계.
+     *
+     * <p><b>끝난 세션에도 쓸 수 있다.</b> 3단계는 문답이 끝난 뒤 화면이라
+     * {@code COMPLETED} 라고 막으면 정상 흐름이 막힌다.
+     */
+    @Transactional
+    public SessionResponse recordSeverity(Long userId, Long sessionId, SeverityRequest request) {
+        IntakeSession session = findOwned(userId, sessionId);
+        session.recordSeverity(request.level(), request.label());
+
+        // 강도 값 자체는 증상 정보라 라벨을 로그에 남기지 않는다. 숫자만 남긴다.
+        log.info("통증 강도 기록 sessionId={} level={}", sessionId, request.level());
+        return SessionResponse.from(session);
+    }
+
+    /**
+     * 의사에게 물어볼 것을 통째로 교체한다. 화면 4단계.
+     *
+     * <p>추가·편집·삭제·순서변경이 전부 이 한 번으로 처리된다. 빈 배열이면 전부 지운다.
+     */
+    @Transactional
+    public SessionResponse replaceQuestions(Long userId, Long sessionId, QuestionsRequest request) {
+        IntakeSession session = findOwned(userId, sessionId);
+        session.replaceQuestions(request.questions());
+
+        // 질문 내용은 증상을 유추할 수 있어 로그에 남기지 않는다. 개수만 남긴다.
+        log.info("물어볼 것 저장 sessionId={} count={}", sessionId, request.questions().size());
+        return SessionResponse.from(session);
     }
 
     @Transactional(readOnly = true)

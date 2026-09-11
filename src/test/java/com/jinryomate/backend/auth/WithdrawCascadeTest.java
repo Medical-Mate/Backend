@@ -17,6 +17,8 @@ import com.jinryomate.backend.auth.dto.AuthDtos.KakaoLoginRequest;
 import com.jinryomate.backend.auth.dto.AuthDtos.TokenResponse;
 import com.jinryomate.backend.auth.repository.UserRepository;
 import com.jinryomate.backend.card.repository.BriefingCardRepository;
+import com.jinryomate.backend.intake.dto.IntakeDtos.QuestionsRequest;
+import com.jinryomate.backend.intake.dto.IntakeDtos.SeverityRequest;
 import com.jinryomate.backend.intake.dto.IntakeDtos.StartSessionRequest;
 import com.jinryomate.backend.intake.repository.IntakeSessionRepository;
 import com.jinryomate.backend.profile.dto.ProfileDtos.HealthProfileRequest;
@@ -94,6 +96,9 @@ class WithdrawCascadeTest {
         // 카드에 매달린 일정이어야 FK 순서가 드러난다. 카드를 먼저 지우면 여기서 걸린다.
         createAppointment(cardId);
 
+        // 세션에 매달린 값 컬렉션. 세션을 지울 때 함께 안 지워지면 외래키에 걸린다.
+        recordSeverityAndQuestions();
+
         // 여기까지가 환자 한 명이 S1~S6 를 다 거친 상태다.
         assertThat(profileRepository.count()).isOne();
         assertThat(cardRepository.count()).isOne();
@@ -112,6 +117,29 @@ class WithdrawCascadeTest {
     }
 
     // ---------- helpers ----------
+
+    /**
+     * 증상 정리 3·4단계.
+     *
+     * <p>{@code intake_session_questions} 는 {@code @ElementCollection} 이라 세션과 함께
+     * 지워져야 한다. 안 지워지면 세션 삭제가 외래키에 걸린다.
+     */
+    private void recordSeverityAndQuestions() throws Exception {
+        long sessionId = sessionRepository.findAll().getFirst().getId();
+
+        mockMvc.perform(put("/api/sessions/" + sessionId + "/severity")
+                        .header("Authorization", token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new SeverityRequest(3, "꽤 아파요"))))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(put("/api/sessions/" + sessionId + "/questions")
+                        .header("Authorization", token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new QuestionsRequest(
+                                List.of("혈액 검사를 받아야 하나요?", "약을 같이 먹어도 되나요?")))))
+                .andExpect(status().isOk());
+    }
 
     private void createAppointment(long cardId) throws Exception {
         mockMvc.perform(post("/api/me/appointments")
