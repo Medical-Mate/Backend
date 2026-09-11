@@ -50,7 +50,9 @@ services:
 
       # 같은 Docker 네트워크 안이라 컨테이너 이름으로 부른다. 인터넷을 타지 않는다.
       AI_BASE_URL: http://ai:8000
-      AI_INTERNAL_TOKEN: ${AI_INTERNAL_TOKEN:-}
+      # AI 쪽은 HMAC 서명(MEDIMATE_HMAC_SECRET)을 기대한다. 백엔드에 실제 클라이언트를
+      # 붙일 때 같은 값을 넣고 서명을 구현한다. 그때까지 양쪽 모두 비워둔다.
+      AI_INTERNAL_TOKEN: ${MEDIMATE_HMAC_SECRET:-}
 
       # Dockerfile 의 -XX:MaxRAMPercentage 는 컨테이너가 여럿이면 계산이 어긋난다.
       # -Xmx 를 명시하면 MaxRAMPercentage 는 무시된다.
@@ -67,19 +69,35 @@ services:
       start_period: 90s   # 콜드 스타트가 느리다. 짧게 잡으면 기동 중에 unhealthy 가 된다.
 
   # ---------- AI ----------
-  # Bedrock 을 부르는 얇은 프록시다. 모델을 들고 있지 않아 GPU 가 필요 없다.
-  # 포트를 열지 않는다 — 백엔드만 내부망으로 접근한다.
+  # 모델 가중치를 들고 있지 않아 GPU 가 필요 없다. 무상태라 볼륨도 DB 도 없다 —
+  # 세션 상태는 백엔드가 들고 다닌다.
   #
-  # AI 이미지가 준비되기 전에는 이 블록을 주석 처리해도 백엔드는 스텁으로 동작한다.
+  # 포트를 열지 않는다. 백엔드만 내부망으로 접근한다.
+  #
+  # AI 이미지가 준비되기 전에는 띄우지 않아도 된다. 백엔드가 StubAiCardClient 로 동작한다.
   ai:
     image: ${AI_IMAGE:-ghcr.io/medical-mate/ai:latest}
     restart: unless-stopped
     environment:
-      INTERNAL_TOKEN: ${AI_INTERNAL_TOKEN:-}
+      # 요청 서명 검증. AI 쪽 문서상 비우면 검증을 생략한다.
+      # 백엔드에 실제 클라이언트를 붙일 때 서명을 함께 구현하고 그때 값을 넣는다.
+      MEDIMATE_HMAC_SECRET: ${MEDIMATE_HMAC_SECRET:-}
+
+      # 기본 모델은 OpenAI 다. Bedrock 으로 갈아타면 이 키가 필요 없어진다.
+      MEDIMATE_PROVIDER: ${MEDIMATE_PROVIDER:-openai}
+      MEDIMATE_MODEL: ${MEDIMATE_MODEL:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+
+      # Bedrock 으로 갈 때만 쓴다. Lightsail 은 인스턴스에 IAM 역할을 붙일 수 없어
+      # 키를 넣는다 — boto3 는 환경변수를 역할과 똑같이 취급하므로 AI 코드는 그대로다.
       AWS_REGION: ${BEDROCK_REGION:-ap-northeast-2}
       AWS_ACCESS_KEY_ID: ${BEDROCK_ACCESS_KEY_ID:-}
       AWS_SECRET_ACCESS_KEY: ${BEDROCK_SECRET_ACCESS_KEY:-}
-    mem_limit: 512m
+
+    # AI 쪽 실측 RSS 가 46MB 다(인터프리터 13.6 + 앱 30.7 + 온톨로지 1.6).
+    # 문서의 "512MB~1GB" 는 넉넉히 잡은 번들 기준이라 그대로 쓰면 낭비다.
+    mem_limit: 192m
     profiles: ["ai"]   # AI 이미지가 준비되면 --profile ai 로 함께 띄운다.
 
   # ---------- DB ----------
