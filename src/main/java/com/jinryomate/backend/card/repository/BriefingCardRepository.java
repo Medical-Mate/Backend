@@ -25,5 +25,8 @@ public interface BriefingCardRepository extends JpaRepository<BriefingCard, Long
      */
     Optional<BriefingCard> findFirstBySessionIdOrderByVersionDesc(Long sessionId);
 
+    /** 한 문답에서 나온 카드 전부. 버전 체인이라 함께 다룬다. */
+    List<BriefingCard> findAllBySessionIdOrderByVersionDesc(Long sessionId);
+
     void deleteAllByUser(User user);
 }

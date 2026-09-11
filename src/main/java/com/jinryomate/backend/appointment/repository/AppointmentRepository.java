@@ -21,5 +21,8 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
     List<Appointment> findAllByUserIdAndStatusAndScheduledAtGreaterThanEqualOrderByScheduledAtAsc(
             Long userId, Appointment.Status status, Instant from);
 
+    /** 카드를 지울 때 그 카드를 가리키던 일정을 찾는다. 일정 자체는 남는다 — 카드 없이도 성립한다. */
+    List<Appointment> findAllByCardIdIn(java.util.Collection<Long> cardIds);
+
     void deleteAllByUser(User user);
 }

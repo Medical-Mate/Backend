@@ -10,12 +10,15 @@ import jakarta.validation.Valid;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 @Tag(name = "브리핑 카드", description = "문답 결과를 의사에게 전달할 카드 (화면 S3)")
@@ -106,6 +109,35 @@ public class BriefingCardController {
                                @PathVariable Long cardId,
                                @Valid @RequestBody UpdateCardRequest request) {
         return briefingCardService.update(userId, cardId, request);
+    }
+
+    @Operation(
+            summary = "카드 삭제",
+            description = """
+                    기록 목록(화면 `1j`)에서 카드를 지웁니다.
+
+                    **문답까지 함께 지워집니다.** 증상 대화가 서버에 그대로 남아 있는데 카드만
+                    지우면, 환자는 지웠다고 생각하면서 증상·복용약이 계속 보관됩니다.
+
+                    **같은 문답에서 나온 카드는 버전을 가리지 않고 전부 지워집니다.** 환자에게는
+                    한 장이고 버전은 서버 사정입니다.
+
+                    딸린 것은 이렇게 갈립니다.
+
+                    - **진료 기록은 함께 지워집니다** — 그 카드에 대한 기록이라 홀로 남을 수 없습니다
+                    - **일정은 남고 연결만 끊깁니다** — 카드를 지웠다고 병원 예약까지 사라지면
+                      환자가 진료를 놓칩니다
+
+                    **확정·전달한 카드도 지울 수 있습니다.** 환자 본인의 민감정보이고, 이미 보여준
+                    것을 되돌릴 수는 없어도 서버가 계속 들고 있을 이유는 없습니다.
+
+                    **되돌릴 수 없습니다.** 앱에서 한 번 확인받고 부르세요.
+                    """)
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @DeleteMapping("/cards/{cardId}")
+    public void delete(@AuthenticationPrincipal Long userId,
+                       @PathVariable Long cardId) {
+        briefingCardService.delete(userId, cardId);
     }
 
     @Operation(
