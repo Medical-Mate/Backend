@@ -1,6 +1,7 @@
 package com.jinryomate.backend.hospital;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.jinryomate.backend.hospital.client.CachingHospitalSearchClient;
 import com.jinryomate.backend.hospital.client.HospitalSearchClient;
 import com.jinryomate.backend.hospital.client.HttpHospitalSearchClient;
 import com.jinryomate.backend.hospital.client.StubHospitalSearchClient;
@@ -37,7 +38,9 @@ public class HospitalConfig {
                                                          ObjectMapper objectMapper,
                                                          HospitalProperties properties) {
         log.info("병원 검색: 심평원에 붙습니다 baseUrl={}", properties.baseUrl());
-        return new HttpHospitalSearchClient(hospitalRestClient, objectMapper, properties);
+        // 캐시로 감싼다. 상류가 느리고(중앙값 1.6초) 일일 할당량이 있다.
+        return new CachingHospitalSearchClient(
+                new HttpHospitalSearchClient(hospitalRestClient, objectMapper, properties));
     }
 
     @Bean

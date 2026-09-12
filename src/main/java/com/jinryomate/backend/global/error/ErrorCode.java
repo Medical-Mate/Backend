@@ -26,6 +26,14 @@ public enum ErrorCode {
     /** {@code Accept} 로 요청한 형식을 서버가 만들지 못한다. */
     NOT_ACCEPTABLE(HttpStatus.NOT_ACCEPTABLE, "요청하신 형식으로는 응답할 수 없습니다."),
 
+    /**
+     * 바깥 서비스가 응답하지 못한다. 병원 검색(심평원)이 이 자리다.
+     *
+     * <p><b>빈 목록으로 감추지 않는다.</b> 앱은 "그런 병원 없음"과 "상류가 죽음"을 구별해야
+     * 한다 — 사용자에게 하는 말이 "검색 결과 없음"과 "잠시 뒤 다시"로 갈린다.
+     */
+    SERVICE_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "잠시 후 다시 시도해주세요."),
+
     UPSTREAM_ERROR(HttpStatus.BAD_GATEWAY, "AI 서비스 호출에 실패했습니다."),
     UPSTREAM_TIMEOUT(HttpStatus.GATEWAY_TIMEOUT, "AI 응답이 지연되고 있습니다."),
 
