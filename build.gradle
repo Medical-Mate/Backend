@@ -39,6 +39,10 @@ dependencies {
     compileOnly 'org.projectlombok:lombok'
     annotationProcessor 'org.projectlombok:lombok'
 
+    // 병원 검색 캐시. 심평원 호출이 느리고(중앙값 1.6초) 일일 할당량이 있어서,
+    // 같은 질의를 매번 상류로 보내면 둘 다 문제가 된다.
+    implementation 'com.github.ben-manes.caffeine:caffeine'
+
     implementation 'org.flywaydb:flyway-core'
     implementation 'org.flywaydb:flyway-database-postgresql'
 

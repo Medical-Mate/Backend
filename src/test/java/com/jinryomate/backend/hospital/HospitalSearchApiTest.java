@@ -62,13 +62,24 @@ class HospitalSearchApiTest {
     }
 
     @Test
-    @DisplayName("홈페이지가 없는 병원은 url이 null이다")
-    void 홈페이지_없음() throws Exception {
-        // 작은 의원은 대부분 비어 있다. 화면이 이 상태를 견뎌야 한다.
+    @DisplayName("주소가 함께 온다")
+    void 주소() throws Exception {
+        // 주소가 없으면 같은 이름의 다른 지점을 구별할 수 없다. "○○의원"은 검색하면
+        // 여러 곳이 같은 줄로 보인다.
+        mockMvc.perform(get("/api/hospitals?q=서울대학교병원").header("Authorization", token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.hospitals[0].address").isNotEmpty())
+                // 홈페이지는 화면이 쓰지 않는다. 처음엔 골라야 할 것을 잘못 골랐다.
+                .andExpect(jsonPath("$.hospitals[0].url").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("주소가 없는 병원은 address가 null이다")
+    void 주소_없음() throws Exception {
         mockMvc.perform(get("/api/hospitals?q=행복한의원").header("Authorization", token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.hospitals[0].name").value("행복한의원"))
-                .andExpect(jsonPath("$.hospitals[0].url").doesNotExist());
+                .andExpect(jsonPath("$.hospitals[0].address").doesNotExist());
     }
 
     @Test
