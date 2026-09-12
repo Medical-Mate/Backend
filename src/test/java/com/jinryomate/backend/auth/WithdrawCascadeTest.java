@@ -29,6 +29,7 @@ import com.jinryomate.backend.profile.entity.FieldStatus;
 import com.jinryomate.backend.profile.entity.Sex;
 import com.jinryomate.backend.profile.repository.HealthProfileRepository;
 import com.jinryomate.backend.visit.dto.VisitDtos.CreateVisitRequest;
+import com.jinryomate.backend.visit.dto.VisitDtos.VisitAxisRequest;
 import com.jinryomate.backend.visit.repository.VisitRecordRepository;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
@@ -158,8 +159,10 @@ class WithdrawCascadeTest {
                         .header("Authorization", token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new CreateVisitRequest(
-                                "○○정형외과", LocalDate.now(), "혈액검사", "3일 뒤 확인",
-                                "나프록센 500mg·하루 2번 식후", "피검사 해보자고 하셨어요"))))
+                                "○○정형외과", LocalDate.now(),
+                                List.of(new VisitAxisRequest("tests", "혈액검사"),
+                                        new VisitAxisRequest("medication_instructions", "나프록센 500mg")),
+                                null, null, "피검사 해보자고 하셨어요"))))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
         return objectMapper.readTree(body).path("visitId").asLong();

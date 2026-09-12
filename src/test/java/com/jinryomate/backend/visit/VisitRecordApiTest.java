@@ -4,11 +4,14 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.BDDMockito.given;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jinryomate.backend.TestcontainersConfig;
 import com.jinryomate.backend.auth.client.KakaoClient;
@@ -21,9 +24,13 @@ import com.jinryomate.backend.profile.dto.ProfileDtos.ListFieldRequest;
 import com.jinryomate.backend.profile.dto.ProfileDtos.TextFieldRequest;
 import com.jinryomate.backend.profile.entity.FieldStatus;
 import com.jinryomate.backend.profile.entity.Sex;
+import com.jinryomate.backend.visit.dto.VisitDtos.ClassifyMemoRequest;
 import com.jinryomate.backend.visit.dto.VisitDtos.CreateVisitRequest;
+import com.jinryomate.backend.visit.dto.VisitDtos.UpdateVisitRequest;
+import com.jinryomate.backend.visit.dto.VisitDtos.VisitAxisRequest;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -85,10 +92,90 @@ class VisitRecordApiTest {
                         .content(objectMapper.writeValueAsString(fullRecord())))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.clinicName").value("○○정형외과"))
-                .andExpect(jsonPath("$.prescription").value("나프록센 500mg·하루 2번 식후"))
+                // 칸이 고정이 아니다. 보낸 항목이 보낸 이름 그대로 남는다.
+                .andExpect(jsonPath("$.axes.medication_instructions.value")
+                        .value("나프록센 500mg·하루 2번 식후"))
+                .andExpect(jsonPath("$.axes.findings.value").value("허리 디스크 초기"))
+                .andExpect(jsonPath("$.axes.follow_up").doesNotExist())
+                // 출처는 서버가 박는다. 앱이 "AI 가 뽑았다"고 주장할 수 없어야 한다.
+                .andExpect(jsonPath("$.axes.findings.source").value("PATIENT_EDIT"))
+                .andExpect(jsonPath("$.axes.findings.status").value("FILLED"))
+                .andExpect(jsonPath("$.followUpDate").value(
+                        LocalDate.now().plusDays(14).toString()))
+                .andExpect(jsonPath("$.patientNotes[0]").value("다음에 올 때 실비보험 서류 챙기기"))
                 // 되묻기는 뺐다. 남아 있으면 앱이 없는 화면을 그리려 한다.
                 .andExpect(jsonPath("$.checks").doesNotExist())
                 .andExpect(jsonPath("$.progress").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("항목을 고치면 통째로 갈아끼워진다")
+    void 항목_수정() throws Exception {
+        long cardId = confirmedCard();
+        long visitId = createVisitOn(cardId);
+
+        // 환자가 검사 줄을 지우고 약 줄을 고쳤다.
+        mockMvc.perform(patch("/api/visits/" + visitId)
+                        .header("Authorization", token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new UpdateVisitRequest(
+                                null, null,
+                                List.of(new VisitAxisRequest("medication_instructions", "나프록센 250mg")),
+                                LocalDate.now().plusDays(7), null, null))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.axes.medication_instructions.value").value("나프록센 250mg"))
+                // 지운 줄은 사라져야 한다. 병합이면 여기가 남는다.
+                .andExpect(jsonPath("$.axes.tests").doesNotExist())
+                .andExpect(jsonPath("$.followUpDate").value(LocalDate.now().plusDays(7).toString()))
+                // null 인 필드는 건드리지 않는다.
+                .andExpect(jsonPath("$.clinicName").value("○○정형외과"))
+                .andExpect(jsonPath("$.rawNote").value("피검사 해보자고 하셨어요"));
+    }
+
+    @Test
+    @DisplayName("메모를 넘기면 항목으로 나눠 돌려준다. 저장은 안 한다")
+    void 메모_분류() throws Exception {
+        String body = mockMvc.perform(post("/api/visits/classify")
+                        .header("Authorization", token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new ClassifyMemoRequest(
+                                "선생님이 허리 디스크 초기래요. 나프록센 먹으라고 하셨어요. 다음 주에 오라고 하셨어요.",
+                                LocalDate.now(), "○○정형외과", null))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.sentences.length()").value(3))
+                // 라벨의 키가 sentences 의 인덱스다. 앱이 이걸로 줄을 옮긴다.
+                .andExpect(jsonPath("$.labels").exists())
+                .andReturn().getResponse().getContentAsString();
+
+        // 나누기만 하고 저장하지 않는다. 환자가 고치고 나서 저장하기 때문이다.
+        mockMvc.perform(get("/api/me/visits").header("Authorization", token))
+                .andExpect(jsonPath("$.length()").value(0));
+
+        // 돌려받은 labels 를 그대로 보내면 같은 결과가 나온다 — 모델을 안 부르는 경로다.
+        JsonNode first = objectMapper.readTree(body);
+        Map<String, String> labels = objectMapper.convertValue(
+                first.path("labels"), new TypeReference<Map<String, String>>() {});
+
+        mockMvc.perform(post("/api/visits/classify")
+                        .header("Authorization", token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new ClassifyMemoRequest(
+                                "선생님이 허리 디스크 초기래요. 나프록센 먹으라고 하셨어요. 다음 주에 오라고 하셨어요.",
+                                LocalDate.now(), "○○정형외과", labels))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.labels").value(labels));
+    }
+
+    @Test
+    @DisplayName("빈 메모는 400")
+    void 빈_메모() throws Exception {
+        mockMvc.perform(post("/api/visits/classify")
+                        .header("Authorization", token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(
+                                new ClassifyMemoRequest("  ", null, null, null))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("INVALID_REQUEST"));
     }
 
     @Test
@@ -214,9 +301,11 @@ class VisitRecordApiTest {
     private CreateVisitRequest fullRecord() {
         return new CreateVisitRequest(
                 "○○정형외과", LocalDate.now(),
-                "혈액검사(류마티스 인자 포함)",
-                "3일 뒤 확인",
-                "나프록센 500mg·하루 2번 식후",
+                List.of(new VisitAxisRequest("findings", "허리 디스크 초기"),
+                        new VisitAxisRequest("tests", "혈액검사(류마티스 인자 포함)"),
+                        new VisitAxisRequest("medication_instructions", "나프록센 500mg·하루 2번 식후")),
+                LocalDate.now().plusDays(14),
+                List.of("다음에 올 때 실비보험 서류 챙기기"),
                 "피검사 해보자고 하시고, 결과는 3일 뒤에 나온대요");
     }
 
@@ -229,8 +318,9 @@ class VisitRecordApiTest {
                         .header("Authorization", token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new CreateVisitRequest(
-                                clinic, visitedOn, "혈액검사", "3일 뒤 확인",
-                                "나프록센 500mg", "피검사 해보자고 하셨어요"))))
+                                clinic, visitedOn,
+                                List.of(new VisitAxisRequest("tests", "혈액검사")),
+                                null, null, "피검사 해보자고 하셨어요"))))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
         return objectMapper.readTree(body).path("visitId").asLong();

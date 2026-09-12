@@ -2,18 +2,27 @@ package com.jinryomate.backend.visit.entity;
 
 import com.jinryomate.backend.auth.entity.User;
 import com.jinryomate.backend.card.entity.BriefingCard;
+import com.jinryomate.backend.card.entity.CardAxis;
 import jakarta.persistence.*;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 /**
  * 진료 후 기록. 화면 S5.
  *
- * <p>병원을 나온 직후 골든타임에 받아 적는다. 여기 담긴 한 일·결과·받은 약이
- * 와이어프레임의 요약 카드에 그대로 찍힌다.
+ * <p>병원을 나온 직후 골든타임에 받아 적는다. 환자가 적은 메모를 AI 가 소견·검사·약·재방문
+ * 으로 나누고, 그 결과가 시안 1q-1 의 카드 한 장에 찍힌다.
  *
  * <p><b>녹음은 저장하지 않는다.</b> 기억 재구성 방식이라 오디오 컬럼 자체를 만들지 않는다.
  * 컬럼이 없으면 실수로 저장할 수도 없다.
@@ -59,23 +68,50 @@ public class VisitRecord {
     @Column(nullable = false)
     private LocalDate visitedOn;
 
-    /** 예: {@code 혈액검사(류마티스 인자 포함)} */
-    @Column(length = 200)
-    private String whatWasDone;
+    /**
+     * AI 가 나눈 항목. 화면 {@code 1q-1}.
+     *
+     * <p><b>칸을 고정하지 않는다.</b> 시안은 브리핑 카드와 같은 모양의 카드 한 장이고,
+     * "소견"을 못 찾으면 그 줄이 없고 다른 항목을 찾으면 그 줄이 생긴다. 세 칸으로 박아두면
+     * 그중 셋만 살아남는다.
+     *
+     * <p>카드의 {@link CardAxis} 를 그대로 쓴다. 모양이 같아야 앱이 그리는 코드를 나눠 쓰고,
+     * 두 벌로 두면 한쪽만 고쳐져서 갈라진다.
+     *
+     * <p>AI 가 주는 네 축은 {@code findings}(소견) · {@code tests}(검사) ·
+     * {@code medication_instructions}(약) · {@code follow_up}(재방문)이다. 다만 축 이름을
+     * enum 으로 박지 않으므로 늘어도 저장된다.
+     */
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = "visit_record_axes", joinColumns = @JoinColumn(name = "visit_id"))
+    private List<CardAxis> axes = new ArrayList<>();
 
-    /** 예: {@code 3일 뒤 확인} */
-    @Column(length = 200)
-    private String result;
+    /**
+     * 재방문 날짜.
+     *
+     * <p><b>여기서 일정을 만들지 않는다.</b> 앱이 이 값을 읽어
+     * {@code POST /api/me/appointments} 를 부른다 — 환자가 확인하고 등록하는 흐름이고,
+     * AI 가 "2주 뒤"를 잘못 계산해도 조용히 일정이 생기지 않는다.
+     */
+    private LocalDate followUpDate;
 
-    /** 예: {@code 나프록센 500mg·하루 2번 식후} */
-    @Column(length = 200)
-    private String prescription;
+    /** 어느 축에도 안 들어간 문장. <b>버리지 않는다.</b> */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(columnDefinition = "jsonb")
+    private List<String> patientNotes = new ArrayList<>();
+
+    /** 무엇이 이 기록을 나눴는지. 환자가 직접 적었으면 비어 있다. */
+    @Column(length = 40)
+    private String promptVersion;
+
+    @Column(length = 80)
+    private String modelId;
 
     /**
      * 환자가 순서 없이 말한 원문.
      *
      * <p>"어떤 얘기 들으셨어요? 순서 없이 생각나는 대로 괜찮아요"에 대한 답이다.
-     * 위 세 필드는 여기서 정리해 낸 것이고, 원문도 남겨 나중에 다시 볼 수 있게 한다.
+     * 축은 여기서 나눠 낸 것이고, 원문도 남겨 나중에 다시 볼 수 있게 한다.
      */
     @Column(length = 2000)
     private String rawNote;
@@ -112,13 +148,51 @@ public class VisitRecord {
         return new VisitRecord(user, card, visitedOn == null ? LocalDate.now() : visitedOn);
     }
 
-    public void applyContent(String clinicName, String whatWasDone, String result,
-                             String prescription, String rawNote) {
+    /**
+     * 항목을 통째로 갈아끼운다.
+     *
+     * <p>부분 수정이 아니라 통째로인 이유 — 화면 {@code 1q-1-E} 가 "전체 수정"이다. 환자가
+     * 줄을 지우면 그 축이 사라져야 하는데, 부분 병합이면 지운 줄이 남는다.
+     *
+     * @param axes {@code null} 이면 그대로 둔다. 빈 목록이면 <b>전부 지운다</b>
+     */
+    public void applyAxes(List<CardAxis> axes) {
+        if (axes == null) {
+            return;
+        }
+        this.axes = axes.stream().map(CardAxis::copy)
+                .collect(Collectors.toCollection(ArrayList::new));
+    }
+
+    public void applyContent(String clinicName, LocalDate followUpDate,
+                             List<String> patientNotes, String rawNote) {
         this.clinicName = clinicName;
-        this.whatWasDone = whatWasDone;
-        this.result = result;
-        this.prescription = prescription;
+        this.followUpDate = followUpDate;
+        this.patientNotes = patientNotes == null ? new ArrayList<>() : new ArrayList<>(patientNotes);
         this.rawNote = rawNote;
+    }
+
+    /** 무엇이 나눴는지. 환자가 직접 적은 기록이면 부르지 않는다. */
+    public void applyTrace(String promptVersion, String modelId) {
+        this.promptVersion = promptVersion;
+        this.modelId = modelId;
+    }
+
+    public void changeVisitedOn(LocalDate visitedOn) {
+        if (visitedOn != null) {
+            this.visitedOn = visitedOn;
+        }
+    }
+
+    /** 축 이름으로 찾아 쓰기 좋게. 순서는 AI 가 준 그대로 유지한다. */
+    public Map<String, CardAxis> axesByName() {
+        return axes.stream().collect(Collectors.toMap(
+                CardAxis::getAxis, Function.identity(), (a, b) -> a, LinkedHashMap::new));
+    }
+
+    /** V17 이전 행은 이 컬럼이 비어 있다. */
+    public List<String> getPatientNotes() {
+        return patientNotes == null ? List.of() : patientNotes;
     }
 
     public boolean isOwnedBy(Long userId) {

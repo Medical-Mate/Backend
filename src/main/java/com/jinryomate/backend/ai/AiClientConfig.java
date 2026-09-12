@@ -1,9 +1,12 @@
 package com.jinryomate.backend.ai;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.jinryomate.backend.ai.client.AiMemoClient;
 import com.jinryomate.backend.ai.client.AiSigner;
 import com.jinryomate.backend.ai.client.AiTurnClient;
+import com.jinryomate.backend.ai.client.HttpAiMemoClient;
 import com.jinryomate.backend.ai.client.HttpAiTurnClient;
+import com.jinryomate.backend.ai.client.StubAiMemoClient;
 import com.jinryomate.backend.ai.client.StubAiTurnClient;
 import java.time.Duration;
 import lombok.extern.slf4j.Slf4j;
@@ -56,5 +59,27 @@ public class AiClientConfig {
     public AiTurnClient stubAiTurnClient() {
         log.warn("AI 문답: 스텁으로 돕니다. MEDIMATE_HMAC_SECRET 이 비어 있습니다.");
         return new StubAiTurnClient();
+    }
+
+    /**
+     * 진료 후 메모 분류. 문답과 같은 시크릿·같은 규칙을 쓴다.
+     *
+     * <p>붙는 조건을 문답과 같이 두는 이유 — 한쪽만 실제에 붙으면 로컬에서 "문답은 되는데
+     * 정리는 안 된다" 같은 상태가 되고, 그 원인이 설정이라는 것이 화면에 드러나지 않는다.
+     */
+    @Bean
+    @ConditionalOnExpression("!'${ai.hmac-secret:}'.isBlank()")
+    public AiMemoClient httpAiMemoClient(RestClient aiRestClient,
+                                         ObjectMapper objectMapper,
+                                         AiProperties properties) {
+        log.info("AI 메모 분류: 실제 서비스에 붙습니다 baseUrl={}", properties.baseUrl());
+        return new HttpAiMemoClient(aiRestClient, objectMapper, new AiSigner(properties.hmacSecret()));
+    }
+
+    @Bean
+    @ConditionalOnExpression("'${ai.hmac-secret:}'.isBlank()")
+    public AiMemoClient stubAiMemoClient() {
+        log.warn("AI 메모 분류: 스텁으로 돕니다. MEDIMATE_HMAC_SECRET 이 비어 있습니다.");
+        return new StubAiMemoClient();
     }
 }
