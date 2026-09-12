@@ -1,5 +1,6 @@
 package com.jinryomate.backend.ai.dto;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import java.time.LocalDate;
 
 /**
@@ -21,6 +22,13 @@ public record FollowUp(LocalDate date, String text, boolean approximate) {
     /** 재방문 얘기가 아예 없었을 때. */
     public static final FollowUp NONE = new FollowUp(null, null, false);
 
+    /**
+     * 응답에 나가지 않는다.
+     *
+     * <p>{@code isEmpty} 라 Jackson 이 이걸 {@code empty} 라는 필드로 읽어 응답에 실었다.
+     * 우리 안에서만 쓰는 판단이라 앱이 볼 이유가 없다.
+     */
+    @JsonIgnore
     public boolean isEmpty() {
         return date == null && (text == null || text.isBlank());
     }
