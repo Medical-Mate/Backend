@@ -3,6 +3,8 @@ package com.jinryomate.backend.auth.web;
 import com.jinryomate.backend.auth.dto.AuthDtos.DeviceRequest;
 import com.jinryomate.backend.auth.dto.AuthDtos.KakaoLoginRequest;
 import com.jinryomate.backend.auth.dto.AuthDtos.RefreshRequest;
+import com.jinryomate.backend.auth.dto.AuthDtos.SettingsRequest;
+import com.jinryomate.backend.auth.dto.AuthDtos.SettingsResponse;
 import com.jinryomate.backend.auth.dto.AuthDtos.TokenResponse;
 import com.jinryomate.backend.auth.service.AuthService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -13,6 +15,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -94,6 +98,37 @@ public class AuthController {
                                                @Valid @RequestBody DeviceRequest request) {
         authService.registerDevice(userId, request.pushToken(), request.platform());
         return ResponseEntity.noContent().build();
+    }
+
+    @Operation(
+            summary = "계정 설정 조회",
+            description = """
+                    화면 `1s-1` 의 토글. **셋 중 하나만 여기 있습니다.**
+
+                    "브리핑 카드 자동 저장"과 "진료실 화면 밝기 최대"는 서버가 읽지도 않는
+                    기기 취향이라 앱의 `DataStore` 에 두세요. 서버가 안 쓰는 값을
+                    민감정보 서버에 보관할 이유가 없습니다.
+
+                    `visitReminderEnabled`(진료 하루 전 알림)만 계정에 따라다닙니다.
+
+                    **지금 알림을 예약하는 것은 앱입니다**(`POST /me/devices` 설명 참고).
+                    그래도 이 값만 서버에 두는 이유는, 알림을 받을지 말지는 기기 취향이
+                    아니라 **그 사람의 선택**이기 때문입니다. 기기를 바꾸거나 앱을 다시
+                    깔면 "안 받겠다"고 한 사람에게 알림이 다시 가기 시작합니다.
+                    로그인 직후 이 값을 읽어 예약 여부를 정하시면 됩니다.
+
+                    서버 푸시로 옮길 때도 같은 값을 그대로 씁니다. 기본값은 켜짐입니다.
+                    """)
+    @GetMapping("/me/settings")
+    public SettingsResponse getSettings(@AuthenticationPrincipal Long userId) {
+        return authService.getSettings(userId);
+    }
+
+    @Operation(summary = "계정 설정 변경", description = "진료 하루 전 알림을 켜고 끕니다.")
+    @PatchMapping("/me/settings")
+    public SettingsResponse updateSettings(@AuthenticationPrincipal Long userId,
+                                           @Valid @RequestBody SettingsRequest request) {
+        return authService.updateSettings(userId, request.visitReminderEnabled());
     }
 
     @Operation(
