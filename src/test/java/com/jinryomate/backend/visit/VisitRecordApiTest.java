@@ -105,6 +105,8 @@ class VisitRecordApiTest {
                         LocalDate.now().plusDays(14).toString()))
                 .andExpect(jsonPath("$.followUp.text").value("2주 뒤"))
                 .andExpect(jsonPath("$.followUp.approximate").value(true))
+                // isEmpty() 가 empty 필드로 새어 나가면 안 된다. 우리 안에서만 쓰는 판단이다.
+                .andExpect(jsonPath("$.followUp.empty").doesNotExist())
                 .andExpect(jsonPath("$.patientNotes[0]").value("다음에 올 때 실비보험 서류 챙기기"))
                 // 되묻기는 뺐다. 남아 있으면 앱이 없는 화면을 그리려 한다.
                 .andExpect(jsonPath("$.checks").doesNotExist())
