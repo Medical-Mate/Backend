@@ -1,6 +1,7 @@
 package com.jinryomate.backend.visit.service;
 
 import com.jinryomate.backend.ai.client.AiMemoClient;
+import com.jinryomate.backend.ai.dto.FollowUp;
 import com.jinryomate.backend.ai.dto.MemoClassification;
 import com.jinryomate.backend.card.dto.CardDtos.Axis;
 import com.jinryomate.backend.card.entity.AxisSource;
@@ -14,6 +15,7 @@ import com.jinryomate.backend.global.error.ErrorCode;
 import com.jinryomate.backend.visit.dto.VisitDtos.ClassifyMemoRequest;
 import com.jinryomate.backend.visit.dto.VisitDtos.ClassifyMemoResponse;
 import com.jinryomate.backend.visit.dto.VisitDtos.CreateVisitRequest;
+import com.jinryomate.backend.visit.dto.VisitDtos.FollowUpRequest;
 import com.jinryomate.backend.visit.dto.VisitDtos.UpdateVisitRequest;
 import com.jinryomate.backend.visit.dto.VisitDtos.VisitAxisRequest;
 import com.jinryomate.backend.visit.dto.VisitDtos.VisitResponse;
@@ -57,7 +59,7 @@ public class VisitRecordService {
         VisitRecord record = VisitRecord.of(card.getUser(), card, request.visitedOn());
         record.applyContent(
                 request.clinicName(),
-                request.followUpDate(),
+                toFollowUp(request.followUp()),
                 request.patientNotes(),
                 request.rawNote());
         record.applyAxes(toAxes(request.axes()));
@@ -82,7 +84,7 @@ public class VisitRecordService {
         record.changeVisitedOn(request.visitedOn());
         record.applyContent(
                 request.clinicName() != null ? request.clinicName() : record.getClinicName(),
-                request.followUpDate() != null ? request.followUpDate() : record.getFollowUpDate(),
+                request.followUp() != null ? toFollowUp(request.followUp()) : record.followUp(),
                 request.patientNotes() != null ? request.patientNotes() : record.getPatientNotes(),
                 request.rawNote() != null ? request.rawNote() : record.getRawNote());
         record.applyAxes(toAxes(request.axes()));
@@ -115,7 +117,22 @@ public class VisitRecordService {
                 result.sentences(),
                 result.labels(),
                 result.patientNotes(),
-                result.followUpDate());
+                result.followUp());
+    }
+
+    /**
+     * 요청의 재방문 시점을 저장할 값으로 옮긴다.
+     *
+     * <p>안이 비어 있으면 {@link FollowUp#NONE} 이다 — 앱이 빈 객체를 보내는 것과 필드를
+     * 생략하는 것이 같은 뜻이어야 한다.
+     */
+    private FollowUp toFollowUp(FollowUpRequest requested) {
+        if (requested == null) {
+            return FollowUp.NONE;
+        }
+        FollowUp followUp = new FollowUp(
+                requested.date(), requested.text(), requested.approximate());
+        return followUp.isEmpty() ? FollowUp.NONE : followUp;
     }
 
     /**

@@ -1,5 +1,6 @@
 package com.jinryomate.backend.ai.client;
 
+import com.jinryomate.backend.ai.dto.FollowUp;
 import com.jinryomate.backend.ai.dto.MemoClassification;
 import com.jinryomate.backend.card.entity.AxisSource;
 import com.jinryomate.backend.card.entity.AxisStatus;
@@ -17,8 +18,8 @@ import java.util.Map;
  * 실제 분류와 결과가 다르지만, 문장 쪼개기 → 축 배치 → 라벨 반환 → 라벨로 재조립하는
  * 왕복은 실제 경로로 돌아가므로 앱이 1p·1q-1 을 만들고 검증할 수 있다.
  *
- * <p><b>재방문 날짜는 뽑지 않는다.</b> "2주 뒤" 같은 표현을 날짜로 바꾸는 것은 흉내로 될
- * 일이 아니고, 틀린 날짜가 캘린더에 들어가면 환자가 진료를 놓친다. 항상 {@code null} 이다.
+ * <p><b>재방문 시점은 뽑지 않는다.</b> "2주 뒤" 같은 표현을 날짜로 바꾸는 것은 흉내로 될
+ * 일이 아니고, 틀린 날짜가 캘린더에 들어가면 환자가 진료를 놓친다. 항상 비어 있다.
  *
  * <p>빈 등록은 {@link com.jinryomate.backend.ai.AiClientConfig} 가 한다.
  */
@@ -65,7 +66,7 @@ public class StubAiMemoClient implements AiMemoClient {
                     hits, AxisSource.AI_EXTRACTION));
         }
 
-        return new MemoClassification(axes, sentences, resolved, notes, null, "stub", "stub");
+        return new MemoClassification(axes, sentences, resolved, notes, FollowUp.NONE, "stub", "stub");
     }
 
     /** 마침표로만 쪼갠다. 실제 AI 는 더 잘하지만 여기서 흉내 낼 값어치가 없다. */

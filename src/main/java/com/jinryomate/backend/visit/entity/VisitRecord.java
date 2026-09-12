@@ -2,6 +2,7 @@ package com.jinryomate.backend.visit.entity;
 
 import com.jinryomate.backend.auth.entity.User;
 import com.jinryomate.backend.card.entity.BriefingCard;
+import com.jinryomate.backend.ai.dto.FollowUp;
 import com.jinryomate.backend.card.entity.CardAxis;
 import jakarta.persistence.*;
 import java.time.Instant;
@@ -87,13 +88,24 @@ public class VisitRecord {
     private List<CardAxis> axes = new ArrayList<>();
 
     /**
-     * 재방문 날짜.
+     * 재방문 시점.
+     *
+     * <p><b>날짜 하나가 아니다.</b> 환자가 들은 말은 "2주 뒤" 이고, 그걸 날짜로 바꾼 것이
+     * {@code followUpDate}, 그 날짜가 정확한 지정이 아니라는 표시가
+     * {@code followUpApproximate} 다. 시안 1q-1 은 셋을 합쳐 "2주 뒤 (9월 27일 전후)" 로 찍는다.
      *
      * <p><b>여기서 일정을 만들지 않는다.</b> 앱이 이 값을 읽어
      * {@code POST /api/me/appointments} 를 부른다 — 환자가 확인하고 등록하는 흐름이고,
      * AI 가 "2주 뒤"를 잘못 계산해도 조용히 일정이 생기지 않는다.
      */
     private LocalDate followUpDate;
+
+    /** 환자가 말한 그대로. {@code 2주 뒤} */
+    @Column(length = 60)
+    private String followUpText;
+
+    /** {@code true} 면 화면에 "전후" 를 붙인다. 재방문이 없으면 {@code null}. */
+    private Boolean followUpApproximate;
 
     /** 어느 축에도 안 들어간 문장. <b>버리지 않는다.</b> */
     @JdbcTypeCode(SqlTypes.JSON)
@@ -164,12 +176,23 @@ public class VisitRecord {
                 .collect(Collectors.toCollection(ArrayList::new));
     }
 
-    public void applyContent(String clinicName, LocalDate followUpDate,
+    public void applyContent(String clinicName, FollowUp followUp,
                              List<String> patientNotes, String rawNote) {
         this.clinicName = clinicName;
-        this.followUpDate = followUpDate;
         this.patientNotes = patientNotes == null ? new ArrayList<>() : new ArrayList<>(patientNotes);
         this.rawNote = rawNote;
+
+        FollowUp value = followUp == null ? FollowUp.NONE : followUp;
+        this.followUpDate = value.date();
+        this.followUpText = value.text();
+        // 재방문이 없으면 null 이다. false 로 박으면 "정확한 날짜를 지정받았다"가 되어 뜻이 다르다.
+        this.followUpApproximate = value.isEmpty() ? null : value.approximate();
+    }
+
+    /** 저장된 재방문 시점. 셋이 늘 함께 다닌다. */
+    public FollowUp followUp() {
+        return new FollowUp(followUpDate, followUpText,
+                followUpApproximate != null && followUpApproximate);
     }
 
     /** 무엇이 나눴는지. 환자가 직접 적은 기록이면 부르지 않는다. */

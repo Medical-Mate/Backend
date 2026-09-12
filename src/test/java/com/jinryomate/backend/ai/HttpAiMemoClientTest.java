@@ -8,6 +8,7 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jinryomate.backend.ai.client.AiSigner;
 import com.jinryomate.backend.ai.client.HttpAiMemoClient;
+import com.jinryomate.backend.ai.dto.FollowUp;
 import com.jinryomate.backend.ai.dto.MemoClassification;
 import com.jinryomate.backend.card.entity.AxisSource;
 import com.jinryomate.backend.card.entity.AxisStatus;
@@ -116,22 +117,80 @@ class HttpAiMemoClientTest {
 
         assertThat(result.sentences()).hasSize(2);
         assertThat(result.labels()).containsEntry("0", "findings");
-        assertThat(result.followUpDate()).isNull();
+        assertThat(result.followUp()).isEqualTo(FollowUp.NONE);
         assertThat(result.promptVersion()).isEqualTo("memo-small-v4");
         assertThat(result.modelId()).isEqualTo("apac.amazon.nova-pro-v1:0");
     }
 
-    @Test
-    @DisplayName("재방문 날짜가 오면 읽고, 읽을 수 없으면 비운다")
-    void 재방문_날짜() {
-        assertThat(classifyWith(REAL_RESPONSE.replace(
-                "\"follow_up_date\": null", "\"follow_up_date\": \"2026-09-26\""))
-                .followUpDate()).isEqualTo(LocalDate.of(2026, 9, 26));
+    /**
+     * 재방문 시점이 <b>실제로 나왔을 때</b>의 응답. 이것도 서버에서 직접 받은 것이다.
+     *
+     * <p>계약이 객체다. 처음에 문자열로 읽어서 날짜가 있어도 항상 비워 저장했는데, 그때
+     * 테스트에 쓴 표본이 하필 {@code null} 이라 안 걸렸다.
+     */
+    private static final String WITH_FOLLOW_UP = """
+            {
+              "card": {
+                "axes": {
+                  "follow_up": {
+                    "status": "filled",
+                    "value": "2주 뒤에 다시 오라고 하셨어요.",
+                    "evidence": ["2주 뒤에 다시 오라고 하셨어요."],
+                    "source": "ai_extraction"
+                  }
+                },
+                "patient_notes": [],
+                "unsorted": [],
+                "provenance": {"prompt_version": "memo-small-v4", "model_id": "apac.amazon.nova-pro-v1:0"},
+                "follow_up_date": {
+                  "text": "2주 뒤",
+                  "date": "2026-09-27",
+                  "approximate": true,
+                  "basis": "visit_date 2026-09-13 + 14d"
+                },
+                "visit_date": "2026-09-13"
+              },
+              "sentences": ["2주 뒤에 다시 오라고 하셨어요."],
+              "labels": {"0": "follow_up"},
+              "dropped": [],
+              "source": "server",
+              "usage": {"input_tokens": 0, "output_tokens": 0, "cost_usd": 0},
+              "request_id": null
+            }
+            """;
 
-        // 여기서 실패시키면 나머지 분류까지 버리게 된다. 환자가 화면에서 고칠 수 있는 값이다.
-        assertThat(classifyWith(REAL_RESPONSE.replace(
-                "\"follow_up_date\": null", "\"follow_up_date\": \"다음 주 화요일\""))
-                .followUpDate()).isNull();
+    @Test
+    @DisplayName("재방문 시점은 객체다. 원문과 '전후' 여부까지 읽는다")
+    void 재방문_시점() {
+        FollowUp followUp = classifyWith(WITH_FOLLOW_UP).followUp();
+
+        // 날짜만 읽으면 시안의 "2주 뒤 (9월 27일 전후)" 를 못 그린다.
+        assertThat(followUp.date()).isEqualTo(LocalDate.of(2026, 9, 27));
+        assertThat(followUp.text()).isEqualTo("2주 뒤");
+        assertThat(followUp.approximate()).isTrue();
+    }
+
+    @Test
+    @DisplayName("재방문 시점이 문자열로 와도 견딘다")
+    void 재방문_문자열() {
+        // 계약이 바뀌었을 때 날짜를 통째로 잃는 것보다 낫다.
+        FollowUp followUp = classifyWith(REAL_RESPONSE.replace(
+                "\"follow_up_date\": null", "\"follow_up_date\": \"2026-09-26\"")).followUp();
+
+        assertThat(followUp.date()).isEqualTo(LocalDate.of(2026, 9, 26));
+        assertThat(followUp.approximate()).isFalse();
+    }
+
+    @Test
+    @DisplayName("날짜를 못 읽어도 분류 전체를 버리지 않는다")
+    void 못_읽는_날짜() {
+        // 환자가 1q-1 에서 눈으로 보고 고칠 수 있는 값이라 비어 있어도 흐름이 안 끊긴다.
+        var result = classifyWith(WITH_FOLLOW_UP.replace("\"2026-09-27\"", "\"다음 주 화요일\""));
+
+        assertThat(result.followUp().date()).isNull();
+        // 원문은 남는다. 날짜만 못 읽은 것이지 재방문 얘기가 없었던 게 아니다.
+        assertThat(result.followUp().text()).isEqualTo("2주 뒤");
+        assertThat(result.axes().get("follow_up").getValue()).isEqualTo("2주 뒤에 다시 오라고 하셨어요.");
     }
 
     @Test
