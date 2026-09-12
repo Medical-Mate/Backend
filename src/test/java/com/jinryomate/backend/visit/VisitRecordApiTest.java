@@ -3,6 +3,7 @@ package com.jinryomate.backend.visit;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.BDDMockito.given;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -144,6 +145,60 @@ class VisitRecordApiTest {
     }
 
     @Test
+    @DisplayName("카드를 지워도 진료 기록은 남는다")
+    void 카드를_지워도_기록은_남는다() throws Exception {
+        // 카드는 진료 전에 만든 준비물이고 기록은 진료에서 실제로 들은 것이다.
+        // 준비물을 지웠다고 의사에게 들은 말이 사라지면 안 된다.
+        long cardId = confirmedCard();
+        long visitId = createVisitOn(cardId);
+
+        mockMvc.perform(delete("/api/cards/" + cardId).header("Authorization", token))
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(get("/api/visits/" + visitId).header("Authorization", token))
+                .andExpect(status().isOk())
+                // 카드 연결은 끊긴다.
+                .andExpect(jsonPath("$.cardId").doesNotExist())
+                .andExpect(jsonPath("$.clinicName").isNotEmpty());
+
+        // 목록도 줄 제목을 계속 그릴 수 있어야 한다.
+        mockMvc.perform(get("/api/me/visits").header("Authorization", token))
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].cardId").doesNotExist())
+                .andExpect(jsonPath("$[0].cardTitle").isNotEmpty());
+    }
+
+    @Test
+    @DisplayName("기록만 지우면 카드는 남는다")
+    void 기록만_삭제() throws Exception {
+        // 전에는 이 경로가 없어서 기록 삭제가 카드 삭제로 대신 나갔고,
+        // 기록 한 건을 지우려던 사용자가 카드까지 잃었다.
+        long cardId = confirmedCard();
+        long visitId = createVisitOn(cardId);
+
+        mockMvc.perform(delete("/api/visits/" + visitId).header("Authorization", token))
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(get("/api/visits/" + visitId).header("Authorization", token))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(get("/api/cards/" + cardId).header("Authorization", token))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    @DisplayName("남의 기록은 지울 수 없다")
+    void 남의_기록_삭제() throws Exception {
+        long visitId = createVisitOn(confirmedCard());
+
+        given(kakaoClient.resolveKakaoId(anyString())).willReturn(8877665544L);
+        String other = "Bearer " + login().accessToken();
+
+        // 존재 자체를 알려주지 않는다. 403 이 아니라 404 다.
+        mockMvc.perform(delete("/api/visits/" + visitId).header("Authorization", other))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
     @DisplayName("없는 기록은 404, 토큰 없으면 401")
     void 접근_제어() throws Exception {
         mockMvc.perform(get("/api/visits/999999").header("Authorization", token))
@@ -165,18 +220,20 @@ class VisitRecordApiTest {
                 "피검사 해보자고 하시고, 결과는 3일 뒤에 나온대요");
     }
 
-    private void createVisitOn(long cardId) throws Exception {
-        createVisitOn(cardId, LocalDate.now(), "○○정형외과");
+    private long createVisitOn(long cardId) throws Exception {
+        return createVisitOn(cardId, LocalDate.now(), "○○정형외과");
     }
 
-    private void createVisitOn(long cardId, LocalDate visitedOn, String clinic) throws Exception {
-        mockMvc.perform(post("/api/cards/" + cardId + "/visit")
+    private long createVisitOn(long cardId, LocalDate visitedOn, String clinic) throws Exception {
+        String body = mockMvc.perform(post("/api/cards/" + cardId + "/visit")
                         .header("Authorization", token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new CreateVisitRequest(
                                 clinic, visitedOn, "혈액검사", "3일 뒤 확인",
                                 "나프록센 500mg", "피검사 해보자고 하셨어요"))))
-                .andExpect(status().isOk());
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        return objectMapper.readTree(body).path("visitId").asLong();
     }
 
     private long confirmedCard() throws Exception {

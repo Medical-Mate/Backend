@@ -20,8 +20,13 @@ public interface VisitRecordRepository extends JpaRepository<VisitRecord, Long> 
      */
     List<VisitRecord> findAllByUserIdOrderByVisitedOnDescIdDesc(Long userId);
 
-    /** 카드를 지울 때 그 카드에 달린 기록도 함께 지운다. 기록은 카드에 대한 것이라 홀로 남을 수 없다. */
-    void deleteAllByCardIdIn(java.util.Collection<Long> cardIds);
+    /**
+     * 카드를 지울 때 그 카드를 가리키던 기록을 찾는다.
+     *
+     * <p><b>기록은 지우지 않고 연결만 끊는다.</b> 카드는 준비물이고 기록은 진료에서 들은
+     * 것이라, 준비물을 지웠다고 사라질 값이 아니다.
+     */
+    List<VisitRecord> findAllByCardIdIn(java.util.Collection<Long> cardIds);
 
     void deleteAllByUser(User user);
 }

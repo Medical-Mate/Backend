@@ -52,7 +52,8 @@ public final class VisitDtos {
         public static VisitResponse from(VisitRecord v) {
             return new VisitResponse(
                     v.getId(),
-                    v.getCard().getId(),
+                    // 카드를 지우면 끊긴다. 기록은 남는다.
+                    v.getCard() == null ? null : v.getCard().getId(),
                     v.getClinicName(),
                     v.getVisitedOn(),
                     v.getWhatWasDone(),
@@ -70,7 +71,10 @@ public final class VisitDtos {
      */
     public record VisitSummary(
             Long visitId,
+            /** 카드를 지우면 {@code null} 이 된다. 기록은 그대로 남는다. */
             Long cardId,
+
+            /** 카드가 지워져도 남는다 — 만들 때 박아둔 제목으로 내려간다. */
             String cardTitle,
             String clinicName,
             LocalDate visitedOn
@@ -78,8 +82,9 @@ public final class VisitDtos {
         public static VisitSummary from(VisitRecord v) {
             return new VisitSummary(
                     v.getId(),
-                    v.getCard().getId(),
-                    v.getCard().displayTitle(),
+                    v.getCard() == null ? null : v.getCard().getId(),
+                    // 카드가 지워져도 줄 제목은 남는다. 만들 때 박아둔 값으로 내려간다.
+                    v.displayCardTitle(),
                     v.getClinicName(),
                     v.getVisitedOn());
         }

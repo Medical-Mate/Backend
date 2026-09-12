@@ -17,6 +17,7 @@ import com.jinryomate.backend.intake.repository.IntakeSessionRepository;
 import com.jinryomate.backend.intake.service.IntakeSessionService;
 import com.jinryomate.backend.profile.entity.HealthProfile;
 import com.jinryomate.backend.profile.repository.HealthProfileRepository;
+import com.jinryomate.backend.visit.entity.VisitRecord;
 import com.jinryomate.backend.visit.repository.VisitRecordRepository;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -182,8 +183,10 @@ public class BriefingCardService {
      * <p>딸린 것들의 처리가 갈린다.
      *
      * <ul>
-     *   <li><b>진료 기록은 함께 지운다.</b> 그 카드에 대한 기록이라 홀로 남을 수 없다
-     *   <li><b>일정은 남기고 연결만 끊는다.</b> 카드 없이 만드는 경로가 이미 있어서,
+     *   <li><b>진료 기록은 남기고 연결만 끊는다.</b> 카드는 진료 전에 만든 준비물이고
+     *       기록은 진료에서 실제로 들은 것이라, 준비물을 지웠다고 의사에게 들은 말이
+     *       사라지면 안 된다. 기록만 지우려면 {@code DELETE /api/visits/{id}} 를 쓴다
+     *   <li><b>일정도 남기고 연결만 끊는다.</b> 카드 없이 만드는 경로가 이미 있어서,
      *       카드를 지웠다고 병원 예약까지 사라지면 환자가 진료를 놓친다
      * </ul>
      *
@@ -199,9 +202,9 @@ public class BriefingCardService {
                 .map(BriefingCard::getId)
                 .toList();
 
-        // 일정은 연결만 끊는다. 끊기 전에 지우면 외래키에 걸린다.
+        // 일정과 진료 기록 둘 다 연결만 끊는다. 끊기 전에 지우면 외래키에 걸린다.
         appointmentRepository.findAllByCardIdIn(cardIds).forEach(Appointment::detachCard);
-        visitRecordRepository.deleteAllByCardIdIn(cardIds);
+        visitRecordRepository.findAllByCardIdIn(cardIds).forEach(VisitRecord::detachCard);
 
         // 버전 체인은 자식이 부모를 가리키므로 최신부터 지운다.
         cardRepository.findAllBySessionIdOrderByVersionDesc(sessionId).forEach(cardRepository::delete);
