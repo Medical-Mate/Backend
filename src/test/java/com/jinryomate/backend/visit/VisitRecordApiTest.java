@@ -26,6 +26,7 @@ import com.jinryomate.backend.profile.entity.FieldStatus;
 import com.jinryomate.backend.profile.entity.Sex;
 import com.jinryomate.backend.visit.dto.VisitDtos.ClassifyMemoRequest;
 import com.jinryomate.backend.visit.dto.VisitDtos.CreateVisitRequest;
+import com.jinryomate.backend.visit.dto.VisitDtos.FollowUpRequest;
 import com.jinryomate.backend.visit.dto.VisitDtos.UpdateVisitRequest;
 import com.jinryomate.backend.visit.dto.VisitDtos.VisitAxisRequest;
 import java.time.LocalDate;
@@ -100,8 +101,10 @@ class VisitRecordApiTest {
                 // 출처는 서버가 박는다. 앱이 "AI 가 뽑았다"고 주장할 수 없어야 한다.
                 .andExpect(jsonPath("$.axes.findings.source").value("PATIENT_EDIT"))
                 .andExpect(jsonPath("$.axes.findings.status").value("FILLED"))
-                .andExpect(jsonPath("$.followUpDate").value(
+                .andExpect(jsonPath("$.followUp.date").value(
                         LocalDate.now().plusDays(14).toString()))
+                .andExpect(jsonPath("$.followUp.text").value("2주 뒤"))
+                .andExpect(jsonPath("$.followUp.approximate").value(true))
                 .andExpect(jsonPath("$.patientNotes[0]").value("다음에 올 때 실비보험 서류 챙기기"))
                 // 되묻기는 뺐다. 남아 있으면 앱이 없는 화면을 그리려 한다.
                 .andExpect(jsonPath("$.checks").doesNotExist())
@@ -121,12 +124,15 @@ class VisitRecordApiTest {
                         .content(objectMapper.writeValueAsString(new UpdateVisitRequest(
                                 null, null,
                                 List.of(new VisitAxisRequest("medication_instructions", "나프록센 250mg")),
-                                LocalDate.now().plusDays(7), null, null))))
+                                new FollowUpRequest(LocalDate.now().plusDays(7), "1주 뒤", true),
+                                null, null))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.axes.medication_instructions.value").value("나프록센 250mg"))
                 // 지운 줄은 사라져야 한다. 병합이면 여기가 남는다.
                 .andExpect(jsonPath("$.axes.tests").doesNotExist())
-                .andExpect(jsonPath("$.followUpDate").value(LocalDate.now().plusDays(7).toString()))
+                .andExpect(jsonPath("$.followUp.date").value(LocalDate.now().plusDays(7).toString()))
+                .andExpect(jsonPath("$.followUp.text").value("1주 뒤"))
+                .andExpect(jsonPath("$.followUp.approximate").value(true))
                 // null 인 필드는 건드리지 않는다.
                 .andExpect(jsonPath("$.clinicName").value("○○정형외과"))
                 .andExpect(jsonPath("$.rawNote").value("피검사 해보자고 하셨어요"));
@@ -304,7 +310,7 @@ class VisitRecordApiTest {
                 List.of(new VisitAxisRequest("findings", "허리 디스크 초기"),
                         new VisitAxisRequest("tests", "혈액검사(류마티스 인자 포함)"),
                         new VisitAxisRequest("medication_instructions", "나프록센 500mg·하루 2번 식후")),
-                LocalDate.now().plusDays(14),
+                new FollowUpRequest(LocalDate.now().plusDays(14), "2주 뒤", true),
                 List.of("다음에 올 때 실비보험 서류 챙기기"),
                 "피검사 해보자고 하시고, 결과는 3일 뒤에 나온대요");
     }

@@ -76,9 +76,19 @@ public class VisitRecordController {
                     `status` 와 `source` 는 보내지 않습니다. 값이 있으면 `FILLED`,
                     비었으면 `UNKNOWN` 이고 출처는 서버가 `PATIENT_EDIT` 로 박습니다.
 
-                    ### 재방문 날짜
+                    ### 재방문 시점
 
-                    `followUpDate` 는 저장만 합니다. **캘린더 일정은 만들지 않습니다** —
+                    `followUp` 은 날짜 하나가 아니라 셋입니다.
+
+                    ```jsonc
+                    "followUp": { "date": "2026-09-27", "text": "2주 뒤", "approximate": true }
+                    ```
+
+                    분류 응답의 `followUp` 을 그대로 옮기시면 됩니다. `approximate` 가
+                    `true` 면 화면에 **"전후"** 를 붙이세요 — "2주 뒤" 는 날짜가 아니라
+                    범위라, 시안은 `2주 뒤 (9월 27일 전후)` 로 찍습니다.
+
+                    저장만 합니다. **캘린더 일정은 만들지 않습니다** —
                     `POST /api/me/appointments` 를 앱에서 따로 불러주세요. 환자가 보고
                     등록하는 흐름(`1r-2-A`)이고, AI 가 날짜를 잘못 뽑아도 조용히 일정이
                     생기지 않아야 합니다.

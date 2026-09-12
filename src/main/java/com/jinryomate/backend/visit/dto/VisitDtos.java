@@ -1,5 +1,6 @@
 package com.jinryomate.backend.visit.dto;
 
+import com.jinryomate.backend.ai.dto.FollowUp;
 import com.jinryomate.backend.card.dto.CardDtos.Axis;
 import com.jinryomate.backend.visit.entity.VisitRecord;
 import jakarta.validation.Valid;
@@ -16,6 +17,21 @@ public final class VisitDtos {
     private VisitDtos() {}
 
     // ---------- 요청 ----------
+
+    /**
+     * 재방문 시점. 분류 응답의 {@code followUp} 을 그대로 돌려보내면 됩니다.
+     *
+     * <p>{@code approximate} 가 {@code true} 면 화면에 "전후" 를 붙입니다 —
+     * "2주 뒤" 는 날짜가 아니라 범위입니다.
+     */
+    public record FollowUpRequest(
+            LocalDate date,
+
+            @Size(max = 60, message = "60자 이내로 입력해주세요.")
+            String text,
+
+            boolean approximate
+    ) {}
 
     /**
      * 저장할 항목 한 줄. 화면 {@code 1q-1-E} 가 보내는 것.
@@ -43,7 +59,8 @@ public final class VisitDtos {
      *
      * @param axes         소견 · 검사 · 약 · 재방문. <b>칸이 고정이 아니다</b> — AI 가 나눈
      *                     항목을 그대로 보내면 된다
-     * @param followUpDate 재방문 날짜. 캘린더 일정은 여기서 만들지 않는다.
+     * @param followUp     재방문 시점. 분류 응답의 {@code followUp} 을 그대로 옮기면 된다.
+     *                     캘린더 일정은 여기서 만들지 않는다 —
      *                     앱이 {@code POST /api/me/appointments} 를 따로 부른다
      * @param patientNotes 어느 항목에도 안 들어간 문장
      */
@@ -57,7 +74,7 @@ public final class VisitDtos {
             @Size(max = 12, message = "한 번에 보낼 수 있는 항목은 12개까지입니다.")
             List<VisitAxisRequest> axes,
 
-            LocalDate followUpDate,
+            FollowUpRequest followUp,
 
             @Size(max = 20, message = "메모는 최대 20개입니다.")
             List<@Size(max = 500) String> patientNotes,
@@ -83,7 +100,7 @@ public final class VisitDtos {
             @Size(max = 12, message = "한 번에 보낼 수 있는 항목은 12개까지입니다.")
             List<VisitAxisRequest> axes,
 
-            LocalDate followUpDate,
+            FollowUpRequest followUp,
 
             @Size(max = 20, message = "메모는 최대 20개입니다.")
             List<@Size(max = 500) String> patientNotes,
@@ -129,7 +146,9 @@ public final class VisitDtos {
             List<String> sentences,
             Map<String, String> labels,
             List<String> patientNotes,
-            LocalDate followUpDate
+
+            /** 재방문 시점. 저장 요청의 {@code followUp} 으로 그대로 옮기면 됩니다. */
+            FollowUp followUp
     ) {}
 
     /** 와이어프레임의 요약 카드. */
@@ -142,7 +161,9 @@ public final class VisitDtos {
             /** 항목 이름 → 항목. 순서는 나눈 그대로다. */
             Map<String, Axis> axes,
 
-            LocalDate followUpDate,
+            /** 재방문 시점. 없으면 안쪽이 전부 비어 있습니다. */
+            FollowUp followUp,
+
             List<String> patientNotes,
             String rawNote,
 
@@ -161,7 +182,7 @@ public final class VisitDtos {
                     v.getClinicName(),
                     v.getVisitedOn(),
                     axes,
-                    v.getFollowUpDate(),
+                    v.followUp(),
                     List.copyOf(v.getPatientNotes()),
                     v.getRawNote(),
                     v.getPromptVersion(),

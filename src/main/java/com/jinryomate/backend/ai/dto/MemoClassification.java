@@ -1,7 +1,6 @@
 package com.jinryomate.backend.ai.dto;
 
 import com.jinryomate.backend.card.entity.CardAxis;
-import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 
@@ -20,14 +19,14 @@ import java.util.Map;
  * @param sentences    메모를 문장으로 쪼갠 것. {@code labels} 의 키가 이 배열의 인덱스다
  * @param labels       문장 인덱스(문자열) → 축 이름. 수정 저장 때 되돌려 보낸다
  * @param patientNotes 어느 축에도 안 들어간 문장. <b>버리지 않는다</b>
- * @param followUpDate AI 가 뽑아낸 재방문 날짜. 못 뽑으면 {@code null}
+ * @param followUp     재방문 시점. 날짜 하나가 아니라 원문·날짜·"전후" 여부를 함께 담는다
  */
 public record MemoClassification(
         Map<String, CardAxis> axes,
         List<String> sentences,
         Map<String, String> labels,
         List<String> patientNotes,
-        LocalDate followUpDate,
+        FollowUp followUp,
         String promptVersion,
         String modelId
 ) {}
