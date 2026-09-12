@@ -8,14 +8,9 @@ import com.jinryomate.backend.ai.dto.AiTurnResult;
 import com.jinryomate.backend.ai.dto.PatientProfile;
 import com.jinryomate.backend.global.error.ApiException;
 import com.jinryomate.backend.global.error.ErrorCode;
-import com.jinryomate.backend.global.web.RequestIdFilter;
 import com.jinryomate.backend.intake.entity.IntakeSession;
-import java.time.Instant;
 import java.util.List;
-import java.util.UUID;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.http.HttpStatusCode;
-import org.springframework.http.MediaType;
 import org.springframework.web.client.RestClient;
 
 /**
@@ -24,9 +19,8 @@ import org.springframework.web.client.RestClient;
  * <p>계약은 AI 저장소가 단일 원천이다({@code docs/api-previsit.md}). 여기서는 우리가
  * 지킬 것만 다룬다 — 서명, 재시도, {@code state} 불투명성.
  *
- * <p><b>본문을 직접 직렬화한다.</b> {@code RestClient} 에 객체를 넘기면 Jackson 이
- * 나중에 직렬화하므로, 그 바이트를 미리 알 수 없어 서명할 수가 없다. 그래서 여기서
- * {@code byte[]} 로 만들어 서명하고 같은 바이트를 그대로 보낸다.
+ * <p>서명·재시도는 {@link AiHttpCaller} 가 한다. 진료 후 메모 쪽과 같은 규칙을 써야 해서
+ * 따로 뺐다.
  *
  * <p><b>{@code state} 는 열어보지 않는다.</b> 받은 JSON 을 문자열로 보관했다가 다음 턴에
  * 그대로 실어 보낸다. 내부 구조에 의존하는 순간 AI 쪽 변경이 우리를 깨뜨린다.
@@ -37,16 +31,14 @@ public class HttpAiTurnClient implements AiTurnClient {
     private static final String START_PATH = "/v1/previsit/sessions";
     private static final String TURN_PATH = "/v1/previsit/turns";
 
-    private final RestClient restClient;
     private final ObjectMapper objectMapper;
-    private final AiSigner signer;
+    private final AiHttpCaller caller;
 
     public HttpAiTurnClient(RestClient restClient,
                             ObjectMapper objectMapper,
                             AiSigner signer) {
-        this.restClient = restClient;
         this.objectMapper = objectMapper;
-        this.signer = signer;
+        this.caller = new AiHttpCaller(restClient, objectMapper, signer);
     }
 
     /**
@@ -120,28 +112,19 @@ public class HttpAiTurnClient implements AiTurnClient {
         }
     }
 
-    /**
-     * 서명해서 호출하고 결과를 푼다.
-     *
-     * <p><b>502 에만 한 번 재시도한다.</b> 같은 {@code state} 로 다시 부르는 것이라
-     * 환자에게 질문이 더 나가지 않는다. {@code 422} 는 우리 요청이 규격을 벗어난 것이라
-     * 다시 보내도 같은 답이 오고, {@code 503} 은 상대가 내려간 것이라 즉시 재시도가 의미 없다.
-     */
+    /** 서명·재시도는 {@link AiHttpCaller} 가 하고, 여기서는 응답만 푼다. */
     private AiTurnResult call(String path, ObjectNode body, String what) {
-        String requestId = requestId();
-        byte[] bytes = serialize(body);
+        TurnResponse response = caller.call(path, body, what, TurnResponse.class);
 
-        try {
-            return post(path, bytes, requestId);
-        } catch (RetryableAiException e) {
-            log.warn("AI {} 실패, 1회 재시도 requestId={} status={}", what, requestId, e.status);
-            try {
-                return post(path, bytes, requestId);
-            } catch (RetryableAiException retry) {
-                log.error("AI {} 재시도도 실패 requestId={} status={}", what, requestId, retry.status);
-                throw new ApiException(ErrorCode.UPSTREAM_ERROR, "잠시 후 다시 시도해주세요.");
-            }
+        if (response == null || response.reply() == null) {
+            log.error("AI 응답에 reply 가 없습니다 path={}", path);
+            throw new ApiException(ErrorCode.UPSTREAM_ERROR, "잠시 후 다시 시도해주세요.");
         }
+        caller.warnIfRequestIdDiffers(response.requestId());
+
+        String state = response.state() == null ? null : response.state().toString();
+        String card = response.card() == null || response.card().isNull() ? null : response.card().toString();
+        return new AiTurnResult(response.reply(), response.ended(), response.endReason(), state, card);
     }
 
     /**
@@ -177,79 +160,6 @@ public class HttpAiTurnClient implements AiTurnClient {
         }
         ArrayNode array = node.putArray(name);
         values.forEach(array::add);
-    }
-
-    private AiTurnResult post(String path, byte[] body, String requestId) {
-        Instant now = Instant.now();
-        String signature = signer.sign("POST", path, now, requestId, body);
-
-        TurnResponse response;
-        try {
-            response = restClient.post()
-                    .uri(path)
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .header(AiSigner.SIGNATURE_HEADER, signature)
-                    .header(AiSigner.TIMESTAMP_HEADER, String.valueOf(now.getEpochSecond()))
-                    .header(AiSigner.REQUEST_ID_HEADER, requestId)
-                    .body(body)
-                    .retrieve()
-                    .onStatus(HttpStatusCode::isError, (req, res) -> {
-                        int status = res.getStatusCode().value();
-                        if (status == 502 || status == 504) {
-                            throw new RetryableAiException(status);
-                        }
-                        // 본문에 환자 발화가 되비쳐 올 수 있어 상태 코드만 남긴다.
-                        log.error("AI 호출 실패 status={} path={} requestId={}", status, path, requestId);
-                        throw new ApiException(ErrorCode.UPSTREAM_ERROR, "잠시 후 다시 시도해주세요.");
-                    })
-                    .body(TurnResponse.class);
-        } catch (RetryableAiException | ApiException e) {
-            throw e;
-        } catch (Exception e) {
-            // 연결 실패·타임아웃. 같은 state 로 한 번 더 시도할 값어치가 있다.
-            throw new RetryableAiException(0);
-        }
-
-        if (response == null || response.reply() == null) {
-            log.error("AI 응답에 reply 가 없습니다 path={} requestId={}", path, requestId);
-            throw new ApiException(ErrorCode.UPSTREAM_ERROR, "잠시 후 다시 시도해주세요.");
-        }
-
-        // 응답의 request_id 가 우리가 보낸 것과 다르면 로그가 이어지지 않는다. 막지는 않는다 —
-        // 답은 이미 정상이고, 여기서 실패시키면 추적 편의를 위해 환자를 막는 것이 된다.
-        if (response.requestId() != null && !requestId.equals(response.requestId())) {
-            log.warn("AI 가 다른 request_id 를 돌려줬습니다 sent={} received={}",
-                    requestId, response.requestId());
-        }
-
-        String state = response.state() == null ? null : response.state().toString();
-        String card = response.card() == null || response.card().isNull() ? null : response.card().toString();
-        return new AiTurnResult(response.reply(), response.ended(), response.endReason(), state, card);
-    }
-
-    private byte[] serialize(ObjectNode body) {
-        try {
-            return objectMapper.writeValueAsBytes(body);
-        } catch (Exception e) {
-            throw new IllegalStateException("AI 요청 본문을 만들 수 없습니다.", e);
-        }
-    }
-
-    /** 웹 요청 밖(테스트·비동기)에서 불릴 수 있어 없으면 새로 만든다. */
-    private String requestId() {
-        String current = RequestIdFilter.current();
-        return current != null ? current
-                : "req_" + UUID.randomUUID().toString().replace("-", "").substring(0, 12);
-    }
-
-    /** 같은 {@code state} 로 한 번 더 시도할 값어치가 있는 실패. */
-    private static class RetryableAiException extends RuntimeException {
-        private final int status;
-
-        RetryableAiException(int status) {
-            super(null, null, false, false);
-            this.status = status;
-        }
     }
 
     /**
