@@ -69,6 +69,19 @@ public class VisitRecordService {
     }
 
     /** 남의 기록은 존재 자체를 알려주지 않는다. */
+    /**
+     * 진료 기록을 지운다. 기록 목록(화면 {@code 1j})의 삭제가 이 경로다.
+     *
+     * <p><b>카드는 건드리지 않는다.</b> 전에는 이 자리가 없어서 기록 삭제가 카드 삭제로
+     * 대신 나갔고, 기록 한 건을 지우려던 사용자가 카드까지 잃었다.
+     */
+    @Transactional
+    public void delete(Long userId, Long visitId) {
+        VisitRecord visit = findOwned(userId, visitId);
+        visitRecordRepository.delete(visit);
+        log.info("진료 기록 삭제 userId={} visitId={}", userId, visitId);
+    }
+
     @Transactional(readOnly = true)
     public VisitRecord findOwned(Long userId, Long visitId) {
         VisitRecord record = visitRecordRepository.findById(visitId)
