@@ -93,6 +93,28 @@ public class BriefingCard {
     @Column(length = 200)
     private String allergiesText;
 
+    /**
+     * 복용약·기저질환. 시안 {@code 1e-1} 의 KV 줄에 찍힌다.
+     *
+     * <p>알레르기와 같은 이유로 스냅샷이다. 프로필에 같은 값이 있지만 그쪽은 <b>현재값</b>이고
+     * 이쪽은 <b>만든 시점 사본</b>이라 별개로 둔다.
+     */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(columnDefinition = "jsonb")
+    private List<String> medications = new ArrayList<>();
+
+    @Enumerated(EnumType.STRING)
+    @Column(length = 16)
+    private FieldStatus medicationsStatus;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(columnDefinition = "jsonb")
+    private List<String> conditions = new ArrayList<>();
+
+    @Enumerated(EnumType.STRING)
+    @Column(length = 16)
+    private FieldStatus conditionsStatus;
+
     // --- 카드 본문 ---
 
     /**
@@ -190,13 +212,36 @@ public class BriefingCard {
         return new BriefingCard(user, session);
     }
 
-    public void applyPatientSnapshot(String name, Integer age, Sex sex,
-                                     FieldStatus allergiesStatus, String allergiesText) {
-        this.patientName = name;
-        this.patientAge = age;
-        this.patientSex = sex;
-        this.allergiesStatus = allergiesStatus;
-        this.allergiesText = allergiesText;
+    public void applyPatientSnapshot(PatientSnapshot snapshot) {
+        this.patientName = snapshot.name();
+        this.patientAge = snapshot.age();
+        this.patientSex = snapshot.sex();
+        this.allergiesStatus = snapshot.allergiesStatus();
+        this.allergiesText = snapshot.allergiesText();
+        this.medicationsStatus = snapshot.medicationsStatus();
+        this.medications = new ArrayList<>(snapshot.medications());
+        this.conditionsStatus = snapshot.conditionsStatus();
+        this.conditions = new ArrayList<>(snapshot.conditions());
+    }
+
+    /**
+     * V16 이전에 만들어진 카드는 이 컬럼이 비어 있다. 그때도 목록은 빈 채로 주고,
+     * "안 먹는다"인지 "모른다"인지는 {@code medicationsStatus} 가 말한다.
+     */
+    public List<String> getMedications() {
+        return medications == null ? List.of() : medications;
+    }
+
+    public List<String> getConditions() {
+        return conditions == null ? List.of() : conditions;
+    }
+
+    /** 이 카드가 들고 있는 인적사항. 새 버전에 그대로 물려준다. */
+    public PatientSnapshot patientSnapshot() {
+        return new PatientSnapshot(patientName, patientAge, patientSex,
+                medicationsStatus, List.copyOf(getMedications()),
+                conditionsStatus, List.copyOf(getConditions()),
+                allergiesStatus, allergiesText);
     }
 
     public void applyContent(CardContent content) {
@@ -269,7 +314,7 @@ public class BriefingCard {
         BriefingCard next = new BriefingCard(user, session);
         next.version = this.version + 1;
         next.parentCard = this;
-        next.applyPatientSnapshot(patientName, patientAge, patientSex, allergiesStatus, allergiesText);
+        next.applyPatientSnapshot(patientSnapshot());
         next.applyTrace(promptVersion, modelId, ontologySnapshot, aiRequestId);
         next.title = title;
         next.chiefComplaint = chiefComplaint;
