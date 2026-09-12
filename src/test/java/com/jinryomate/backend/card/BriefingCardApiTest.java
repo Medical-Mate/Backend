@@ -253,6 +253,77 @@ class BriefingCardApiTest {
     }
 
     @Test
+    @DisplayName("복용약·기저질환이 카드에 실리고 세 값이 구별된다")
+    void 복용약_기저질환_스냅샷() throws Exception {
+        // 시안 1e-1 의 KV 줄이다. 진료실에서 의사가 가장 먼저 묻는 둘이라,
+        // 이 한 장을 보여주면서 다른 화면을 또 열게 하면 안 된다.
+        completeOnboarding();  // 복용약 KNOWN ["이부프로펜"] · 기저질환 NONE []
+        long cardId = generateCard(startSession()).path("cardId").asLong();
+
+        mockMvc.perform(get("/api/cards/" + cardId).header("Authorization", token))
+                .andExpect(jsonPath("$.patient.medications.status").value("KNOWN"))
+                .andExpect(jsonPath("$.patient.medications.items[0]").value("이부프로펜"))
+                // "없어요"와 "잘 모르겠어요"가 뭉개지면 처방에서 전혀 다른 말이 된다.
+                .andExpect(jsonPath("$.patient.conditions.status").value("NONE"))
+                .andExpect(jsonPath("$.patient.conditions.items.length()").value(0));
+
+        // 의사가 보는 화면에도 실려야 한다.
+        mockMvc.perform(post("/api/cards/" + cardId + "/confirm").header("Authorization", token))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/cards/" + cardId + "/handoff").header("Authorization", token))
+                .andExpect(jsonPath("$.patient.medications.items[0]").value("이부프로펜"))
+                .andExpect(jsonPath("$.patient.conditions.status").value("NONE"));
+    }
+
+    @Test
+    @DisplayName("프로필의 복용약을 나중에 고쳐도 이미 만든 카드는 그대로다")
+    void 복용약도_스냅샷이다() throws Exception {
+        // 9월에 만든 카드를 12월에 열었을 때 그때 먹는 약이 붙으면 안 된다.
+        // 진료실에서 맞는 값은 "이 카드를 만들 당시 먹던 약"이다.
+        completeOnboarding();
+        long cardId = generateCard(startSession()).path("cardId").asLong();
+
+        mockMvc.perform(put("/api/me/health-profile")
+                        .header("Authorization", token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new HealthProfileRequest(
+                                "김서연", 1994, "03-03", Sex.FEMALE,
+                                new ListFieldRequest(FieldStatus.KNOWN, List.of("나프록센")),
+                                new ListFieldRequest(FieldStatus.KNOWN, List.of("고혈압")),
+                                new com.jinryomate.backend.profile.dto.ProfileDtos.TextFieldRequest(
+                                        FieldStatus.UNKNOWN, null)))))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/cards/" + cardId).header("Authorization", token))
+                .andExpect(jsonPath("$.patient.medications.items[0]").value("이부프로펜"))
+                .andExpect(jsonPath("$.patient.conditions.status").value("NONE"));
+    }
+
+    @Test
+    @DisplayName("확정 후 새 버전을 만들어도 복용약 스냅샷이 따라온다")
+    void 새_버전에도_스냅샷이_남는다() throws Exception {
+        completeOnboarding();
+        long cardId = generateCard(startSession()).path("cardId").asLong();
+        mockMvc.perform(post("/api/cards/" + cardId + "/confirm").header("Authorization", token))
+                .andExpect(status().isOk());
+
+        // 확정 이후의 수정은 새 버전으로만 남는다. 그 새 행에도 스냅샷이 있어야 한다.
+        String updated = mockMvc.perform(patch("/api/cards/" + cardId)
+                        .header("Authorization", token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new UpdateCardRequest(
+                                null, null, null, List.of("어제부터 심해졌어요")))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.version").value(2))
+                .andReturn().getResponse().getContentAsString();
+
+        long newCardId = objectMapper.readTree(updated).path("cardId").asLong();
+        mockMvc.perform(get("/api/cards/" + newCardId).header("Authorization", token))
+                .andExpect(jsonPath("$.patient.medications.items[0]").value("이부프로펜"))
+                .andExpect(jsonPath("$.patient.conditions.status").value("NONE"));
+    }
+
+    @Test
     @DisplayName("프로필을 나중에 고쳐도 이미 만든 카드의 인적사항은 그대로다")
     void 인적사항_스냅샷() throws Exception {
         completeOnboarding();

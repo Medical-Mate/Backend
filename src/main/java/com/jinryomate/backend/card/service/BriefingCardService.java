@@ -7,6 +7,7 @@ import com.jinryomate.backend.card.dto.CardDtos.UpdateCardRequest;
 import com.jinryomate.backend.card.entity.BriefingCard;
 import com.jinryomate.backend.card.entity.CardAxis;
 import com.jinryomate.backend.card.entity.CardContent;
+import com.jinryomate.backend.card.entity.PatientSnapshot;
 import com.jinryomate.backend.appointment.entity.Appointment;
 import com.jinryomate.backend.appointment.repository.AppointmentRepository;
 import com.jinryomate.backend.card.repository.BriefingCardRepository;
@@ -81,14 +82,9 @@ public class BriefingCardService {
         CardContentValidator.Result validated = validator.validate(assembled.content());
 
         BriefingCard card = BriefingCard.draft(session.getUser(), session);
-        // 알레르기도 여기서 박는다. 의사에게 보여주는 한 장이 안전 정보를 얻으려고
-        // API 를 두 번 부르게 하면 안 된다.
-        card.applyPatientSnapshot(
-                profile == null ? null : profile.getName(),
-                profile == null ? null : profile.age(),
-                profile == null ? null : profile.getSex(),
-                profile == null ? null : profile.getAllergiesStatus(),
-                profile == null ? null : profile.getAllergies());
+        // 알레르기·복용약·기저질환도 여기서 박는다. 의사에게 보여주는 한 장이 안전 정보를
+        // 얻으려고 API 를 두 번 부르게 하면 안 된다.
+        card.applyPatientSnapshot(PatientSnapshot.from(profile));
         card.applyContent(validated.content());
         if (assembled.provenance() != null) {
             card.applyTrace(

@@ -151,9 +151,21 @@ public final class CardDtos {
          *                  {@code status} 가 {@code NONE}("없어요")인지 {@code UNKNOWN}
          *                  ("본인 확인 못 함")인지가 의사에게 전혀 다른 말이다
          */
-        public record Patient(String name, Integer age, Sex sex, Allergies allergies) {}
+        public record Patient(String name, Integer age, Sex sex,
+                              Allergies allergies,
+                              ListField medications,
+                              ListField conditions) {}
 
         public record Allergies(FieldStatus status, String text) {}
+
+        /**
+         * 복용약·기저질환. 프로필 응답의 {@code ListFieldResponse} 와 같은 모양이라
+         * 앱이 파싱을 한 벌로 쓴다.
+         *
+         * <p><b>프로필이 아니라 카드를 만든 시점의 사본이다.</b> 나중에 약이 바뀌어도
+         * 이미 만들어진 카드는 그대로다.
+         */
+        public record ListField(FieldStatus status, List<String> items) {}
 
         /**
          * 진료과 안내.
@@ -186,7 +198,9 @@ public final class CardDtos {
                     c.getParentCard() == null ? null : c.getParentCard().getId(),
                     c.getSession().getId(),
                     new Patient(c.getPatientName(), c.getPatientAge(), c.getPatientSex(),
-                            new Allergies(c.getAllergiesStatus(), c.getAllergiesText())),
+                            new Allergies(c.getAllergiesStatus(), c.getAllergiesText()),
+                            new ListField(c.getMedicationsStatus(), List.copyOf(c.getMedications())),
+                            new ListField(c.getConditionsStatus(), List.copyOf(c.getConditions()))),
                     c.getTitle(),
                     c.getChiefComplaint(),
                     axes,
