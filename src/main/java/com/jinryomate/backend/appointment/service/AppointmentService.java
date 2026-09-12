@@ -3,7 +3,9 @@ package com.jinryomate.backend.appointment.service;
 import com.jinryomate.backend.appointment.dto.AppointmentDtos.AppointmentResponse;
 import com.jinryomate.backend.appointment.dto.AppointmentDtos.CreateAppointmentRequest;
 import com.jinryomate.backend.appointment.dto.AppointmentDtos.UpdateAppointmentRequest;
+import com.jinryomate.backend.appointment.dto.AppointmentDtos.TodoRequest;
 import com.jinryomate.backend.appointment.entity.Appointment;
+import com.jinryomate.backend.appointment.entity.AppointmentTodo;
 import com.jinryomate.backend.appointment.repository.AppointmentRepository;
 import com.jinryomate.backend.auth.repository.UserRepository;
 import com.jinryomate.backend.card.entity.BriefingCard;
@@ -80,6 +82,7 @@ public class AppointmentService {
                 request.scheduledAt());
         appointment.applyDetails(
                 request.department(), request.purpose(), findCard(userId, request.cardId()));
+        appointment.applyTodos(toTodos(request.todos()));
 
         appointmentRepository.save(appointment);
 
@@ -100,6 +103,7 @@ public class AppointmentService {
                 request.status(),
                 findCard(userId, request.cardId()),
                 request.clearCard());
+        appointment.applyTodos(toTodos(request.todos()));
 
         log.info("일정 수정 userId={} appointmentId={}", userId, appointmentId);
         return AppointmentResponse.from(appointment);
@@ -119,6 +123,21 @@ public class AppointmentService {
                         userId, from, to)
                 .stream()
                 .map(AppointmentResponse::from)
+                .toList();
+    }
+
+    /**
+     * 요청의 할 일을 저장할 값으로 옮긴다.
+     *
+     * <p>{@code null} 이면 {@code null} 을 그대로 돌려준다 — 엔티티가 그걸 "안 바꿈"으로
+     * 읽는다. 빈 목록은 "전부 지움"이라 구별해야 한다.
+     */
+    private List<AppointmentTodo> toTodos(List<TodoRequest> requested) {
+        if (requested == null) {
+            return null;
+        }
+        return requested.stream()
+                .map(t -> new AppointmentTodo(t.text(), t.done()))
                 .toList();
     }
 

@@ -150,7 +150,7 @@ class WithdrawCascadeTest {
                         .content(objectMapper.writeValueAsString(new CreateAppointmentRequest(
                                 "○○정형외과", "정형외과", "재진",
                                 LocalDate.now().plusDays(7).atStartOfDay(ZoneOffset.UTC).toInstant(),
-                                cardId))))
+                                cardId, null))))
                 .andExpect(status().isOk());
     }
 

@@ -2,6 +2,7 @@ package com.jinryomate.backend.auth.service;
 
 import com.jinryomate.backend.auth.client.KakaoClient;
 import com.jinryomate.backend.auth.client.KakaoProfile;
+import com.jinryomate.backend.auth.dto.AuthDtos.SettingsResponse;
 import com.jinryomate.backend.auth.dto.AuthDtos.TokenResponse;
 import com.jinryomate.backend.auth.entity.Device;
 import com.jinryomate.backend.auth.entity.RefreshToken;
@@ -163,6 +164,19 @@ public class AuthService {
                 .ifPresentOrElse(
                         device -> device.refresh(user, platform),
                         () -> deviceRepository.save(Device.of(user, pushToken, platform)));
+    }
+
+    @Transactional(readOnly = true)
+    public SettingsResponse getSettings(Long userId) {
+        return new SettingsResponse(findUser(userId).isVisitReminderEnabled());
+    }
+
+    @Transactional
+    public SettingsResponse updateSettings(Long userId, boolean visitReminderEnabled) {
+        User user = findUser(userId);
+        user.changeVisitReminder(visitReminderEnabled);
+        log.info("설정 변경 userId={} 진료전알림={}", userId, visitReminderEnabled);
+        return new SettingsResponse(user.isVisitReminderEnabled());
     }
 
     private TokenResponse issueTokens(User user, boolean onboardingRequired) {

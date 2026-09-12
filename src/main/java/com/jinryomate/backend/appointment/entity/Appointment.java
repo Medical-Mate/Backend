@@ -4,9 +4,13 @@ import com.jinryomate.backend.auth.entity.User;
 import com.jinryomate.backend.card.entity.BriefingCard;
 import jakarta.persistence.*;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 /**
  * 진료 예정 일정. 화면 1r · 1n.
@@ -61,6 +65,16 @@ public class Appointment {
     @Column(nullable = false, length = 16)
     private Status status = Status.SCHEDULED;
 
+    /**
+     * 진료 전 할 일. 화면 1r-4 에서 적고 1r-2 에서 체크한다.
+     *
+     * <p><b>목록째 갈아끼운다.</b> 줄 하나만 따로 조회할 일이 없고, 체크를 켤 때도 앱이
+     * 화면에 있는 목록을 그대로 보낸다. 별도 테이블을 파면 조인만 늘고 얻는 게 없다.
+     */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(columnDefinition = "jsonb")
+    private List<AppointmentTodo> todos = new ArrayList<>();
+
     @Column(nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 
@@ -88,6 +102,24 @@ public class Appointment {
         this.department = department;
         this.purpose = purpose;
         this.card = card;
+    }
+
+    /**
+     * 할 일을 통째로 갈아끼운다.
+     *
+     * @param todos {@code null} 이면 그대로 둔다. 빈 목록이면 <b>전부 지운다</b> —
+     *              환자가 마지막 줄을 지웠을 때 그게 남으면 안 된다
+     */
+    public void applyTodos(List<AppointmentTodo> todos) {
+        if (todos == null) {
+            return;
+        }
+        this.todos = new ArrayList<>(todos);
+    }
+
+    /** V18 이전 행은 이 컬럼이 비어 있다. */
+    public List<AppointmentTodo> getTodos() {
+        return todos == null ? List.of() : todos;
     }
 
     /**

@@ -131,7 +131,7 @@ class HomeApiTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new CreateAppointmentRequest(
                                 "서울OO병원", "내과", "재진",
-                                Instant.now().plus(5, ChronoUnit.DAYS), cardId))))
+                                Instant.now().plus(5, ChronoUnit.DAYS), cardId, null))))
                 .andExpect(status().isOk());
 
         mockMvc.perform(get("/api/me/home").header("Authorization", token))

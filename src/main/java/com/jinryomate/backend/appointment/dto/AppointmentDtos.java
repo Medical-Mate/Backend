@@ -2,10 +2,13 @@ package com.jinryomate.backend.appointment.dto;
 
 import com.jinryomate.backend.appointment.entity.Appointment;
 import com.jinryomate.backend.appointment.entity.Appointment.Status;
+import com.jinryomate.backend.appointment.entity.AppointmentTodo;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import java.time.Instant;
+import java.util.List;
 
 /** 진료 예정 일정의 요청·응답. */
 public final class AppointmentDtos {
@@ -29,7 +32,26 @@ public final class AppointmentDtos {
             Instant scheduledAt,
 
             /** 연결할 브리핑 카드. 없어도 된다 — 캘린더에서 바로 만드는 경로가 있다. */
-            Long cardId
+            Long cardId,
+
+            /** 진료 전 할 일. 화면 1r-4. */
+            @Valid
+            @Size(max = 20, message = "할 일은 20개까지입니다.")
+            List<TodoRequest> todos
+    ) {}
+
+    /**
+     * 할 일 한 줄.
+     *
+     * <p><b>목록째 보냅니다.</b> 체크 하나를 켤 때도 화면에 있는 목록을 전부 보내세요 —
+     * 보낸 목록이 그대로 저장됩니다. 빼고 보내면 지워집니다.
+     */
+    public record TodoRequest(
+            @NotBlank(message = "할 일 내용이 필요합니다.")
+            @Size(max = 200, message = "200자 이내로 입력해주세요.")
+            String text,
+
+            boolean done
     ) {}
 
     /**
@@ -51,7 +73,12 @@ public final class AppointmentDtos {
             Instant scheduledAt,
             Status status,
             Long cardId,
-            boolean clearCard
+            boolean clearCard,
+
+            /** 보내면 통째로 갈아끼운다. {@code null} 이면 그대로 둔다. */
+            @Valid
+            @Size(max = 20, message = "할 일은 20개까지입니다.")
+            List<TodoRequest> todos
     ) {}
 
     // ---------- 응답 ----------
@@ -69,7 +96,10 @@ public final class AppointmentDtos {
             Instant scheduledAt,
             Status status,
             Long cardId,
-            String cardTitle
+            String cardTitle,
+
+            /** 진료 전 할 일. 순서가 화면 순서다. */
+            List<AppointmentTodo> todos
     ) {
         public static AppointmentResponse from(Appointment a) {
             return new AppointmentResponse(
@@ -80,7 +110,8 @@ public final class AppointmentDtos {
                     a.getScheduledAt(),
                     a.getStatus(),
                     a.getCard() == null ? null : a.getCard().getId(),
-                    a.getCard() == null ? null : a.getCard().displayTitle());
+                    a.getCard() == null ? null : a.getCard().displayTitle(),
+                    List.copyOf(a.getTodos()));
         }
     }
 }

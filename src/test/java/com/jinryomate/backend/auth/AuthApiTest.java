@@ -5,6 +5,8 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willThrow;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -14,6 +16,7 @@ import com.jinryomate.backend.TestcontainersConfig;
 import com.jinryomate.backend.auth.client.KakaoClient;
 import com.jinryomate.backend.auth.dto.AuthDtos.KakaoLoginRequest;
 import com.jinryomate.backend.auth.dto.AuthDtos.RefreshRequest;
+import com.jinryomate.backend.auth.dto.AuthDtos.SettingsRequest;
 import com.jinryomate.backend.auth.dto.AuthDtos.TokenResponse;
 import com.jinryomate.backend.auth.repository.RefreshTokenRepository;
 import com.jinryomate.backend.auth.repository.UserRepository;
@@ -156,6 +159,37 @@ class AuthApiTest {
                         .content(objectMapper.writeValueAsString(new KakaoLoginRequest(""))))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error.code").value("INVALID_REQUEST"));
+    }
+
+    @Test
+    @DisplayName("진료 전 알림 설정은 기본이 켜짐이고 꺼도 계정에 남는다")
+    void 알림_설정() throws Exception {
+        String token = "Bearer " + objectMapper.readValue(
+                login("kakao-token").getResponse().getContentAsString(),
+                TokenResponse.class).accessToken();
+
+        // 진료를 놓치지 않게 하는 것이 이 앱의 목적이라 기본은 켜짐이다.
+        mockMvc.perform(get("/api/me/settings").header("Authorization", token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.visitReminderEnabled").value(true));
+
+        mockMvc.perform(patch("/api/me/settings")
+                        .header("Authorization", token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new SettingsRequest(false))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.visitReminderEnabled").value(false));
+
+        // 기기가 아니라 계정에 붙는다. 다시 읽어도 꺼져 있어야 한다.
+        mockMvc.perform(get("/api/me/settings").header("Authorization", token))
+                .andExpect(jsonPath("$.visitReminderEnabled").value(false));
+    }
+
+    @Test
+    @DisplayName("설정 API 는 토큰이 필요하다")
+    void 알림_설정_인증() throws Exception {
+        mockMvc.perform(get("/api/me/settings"))
+                .andExpect(status().isUnauthorized());
     }
 
     private org.springframework.test.web.servlet.MvcResult login(String kakaoToken) throws Exception {

@@ -13,6 +13,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jinryomate.backend.TestcontainersConfig;
 import com.jinryomate.backend.appointment.dto.AppointmentDtos.CreateAppointmentRequest;
+import com.jinryomate.backend.appointment.dto.AppointmentDtos.TodoRequest;
 import com.jinryomate.backend.appointment.dto.AppointmentDtos.UpdateAppointmentRequest;
 import com.jinryomate.backend.appointment.entity.Appointment.Status;
 import com.jinryomate.backend.auth.client.KakaoClient;
@@ -78,7 +79,7 @@ class AppointmentApiTest {
                         .header("Authorization", token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new CreateAppointmentRequest(
-                                "서울OO병원", "내과", "재진", kst(2026, 9, 12, 10, 30), null))))
+                                "서울OO병원", "내과", "재진", kst(2026, 9, 12, 10, 30), null, null))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.clinicName").value("서울OO병원"))
                 .andExpect(jsonPath("$.department").value("내과"))
@@ -96,11 +97,78 @@ class AppointmentApiTest {
                         .header("Authorization", token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new CreateAppointmentRequest(
-                                "서울OO병원", "내과", "재진", kst(2026, 9, 12, 10, 30), cardId))))
+                                "서울OO병원", "내과", "재진", kst(2026, 9, 12, 10, 30), cardId, null))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.cardId").value((int) cardId))
                 // 화면의 "복부 통증 브리핑 카드"
                 .andExpect(jsonPath("$.cardTitle").exists());
+    }
+
+    @Test
+    @DisplayName("진료 전 할 일이 저장되고 체크가 남는다")
+    void 할_일() throws Exception {
+        // 1r-4 에서 적고 1r-2 에서 체크한다. 자리가 없어서 앱을 다시 켜면 사라졌다.
+        String body = mockMvc.perform(post("/api/me/appointments")
+                        .header("Authorization", token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new CreateAppointmentRequest(
+                                "서울OO병원", null, null, kst(2026, 9, 12, 10, 30), null,
+                                List.of(new TodoRequest("달라진 증상 있으면 카드 수정", false),
+                                        new TodoRequest("보험 서류 챙기기", false))))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.todos.length()").value(2))
+                .andExpect(jsonPath("$.todos[0].text").value("달라진 증상 있으면 카드 수정"))
+                .andExpect(jsonPath("$.todos[0].done").value(false))
+                .andReturn().getResponse().getContentAsString();
+
+        long id = objectMapper.readTree(body).path("appointmentId").asLong();
+
+        // 첫 줄에 체크하고 둘째 줄은 지웠다. 목록째 보낸다.
+        mockMvc.perform(patch("/api/me/appointments/" + id)
+                        .header("Authorization", token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new UpdateAppointmentRequest(
+                                null, null, null, null, null, null, false,
+                                List.of(new TodoRequest("달라진 증상 있으면 카드 수정", true))))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.todos.length()").value(1))
+                .andExpect(jsonPath("$.todos[0].done").value(true));
+
+        // 다시 읽어도 남아 있어야 한다. 앱을 껐다 켜는 것과 같다.
+        mockMvc.perform(get("/api/me/appointments/upcoming").header("Authorization", token))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/me/appointments?year=2026&month=9").header("Authorization", token))
+                .andExpect(jsonPath("$[0].todos[0].done").value(true));
+    }
+
+    @Test
+    @DisplayName("할 일을 안 보내면 그대로, 빈 목록을 보내면 지워진다")
+    void 할_일_안_보냄과_빈_목록은_다르다() throws Exception {
+        String body = mockMvc.perform(post("/api/me/appointments")
+                        .header("Authorization", token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new CreateAppointmentRequest(
+                                "서울OO병원", null, null, kst(2026, 9, 12, 10, 30), null,
+                                List.of(new TodoRequest("보험 서류 챙기기", false))))))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        long id = objectMapper.readTree(body).path("appointmentId").asLong();
+
+        // null 은 "안 바꿈"이다.
+        mockMvc.perform(patch("/api/me/appointments/" + id)
+                        .header("Authorization", token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new UpdateAppointmentRequest(
+                                null, "정형외과", null, null, null, null, false, null))))
+                .andExpect(jsonPath("$.todos.length()").value(1));
+
+        // 빈 목록은 "전부 지움"이다. 환자가 마지막 줄을 지웠는데 남으면 안 된다.
+        mockMvc.perform(patch("/api/me/appointments/" + id)
+                        .header("Authorization", token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new UpdateAppointmentRequest(
+                                null, null, null, null, null, null, false, List.of()))))
+                .andExpect(jsonPath("$.todos.length()").value(0));
     }
 
     @Test
@@ -110,7 +178,7 @@ class AppointmentApiTest {
                         .header("Authorization", token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new CreateAppointmentRequest(
-                                "  ", null, null, kst(2026, 9, 12, 10, 30), null))))
+                                "  ", null, null, kst(2026, 9, 12, 10, 30), null, null))))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error.code").value("INVALID_REQUEST"));
     }
@@ -122,7 +190,7 @@ class AppointmentApiTest {
                         .header("Authorization", token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new CreateAppointmentRequest(
-                                "서울OO병원", null, null, null, null))))
+                                "서울OO병원", null, null, null, null, null))))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error.code").value("INVALID_REQUEST"));
     }
@@ -136,7 +204,7 @@ class AppointmentApiTest {
                         .header("Authorization", token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new CreateAppointmentRequest(
-                                "서울OO병원", null, null, kst(2026, 9, 12, 10, 30), null))))
+                                "서울OO병원", null, null, kst(2026, 9, 12, 10, 30), null, null))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.clinicName").value("서울OO병원"))
                 .andExpect(jsonPath("$.department").doesNotExist())
@@ -199,7 +267,7 @@ class AppointmentApiTest {
                         .header("Authorization", token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new UpdateAppointmentRequest(
-                                null, null, null, null, Status.CANCELED, null, false))))
+                                null, null, null, null, Status.CANCELED, null, false, null))))
                 .andExpect(status().isOk());
 
         mockMvc.perform(get("/api/me/appointments/upcoming").header("Authorization", token))
@@ -218,7 +286,7 @@ class AppointmentApiTest {
                         .header("Authorization", token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new UpdateAppointmentRequest(
-                                null, "정형외과", null, null, null, null, false))))
+                                null, "정형외과", null, null, null, null, false, null))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.department").value("정형외과"))
                 // 안 보낸 필드는 그대로다.
@@ -236,14 +304,14 @@ class AppointmentApiTest {
                         .header("Authorization", token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new UpdateAppointmentRequest(
-                                null, null, null, null, null, null, false))))
+                                null, null, null, null, null, null, false, null))))
                 .andExpect(jsonPath("$.cardId").value((int) cardId));
 
         mockMvc.perform(patch("/api/me/appointments/" + id)
                         .header("Authorization", token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new UpdateAppointmentRequest(
-                                null, null, null, null, null, null, true))))
+                                null, null, null, null, null, null, true, null))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.cardId").doesNotExist());
     }
@@ -279,7 +347,7 @@ class AppointmentApiTest {
                         .header("Authorization", otherToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new CreateAppointmentRequest(
-                                "남의 병원", null, null, kst(2026, 9, 12, 10, 30), cardId))))
+                                "남의 병원", null, null, kst(2026, 9, 12, 10, 30), cardId, null))))
                 .andExpect(status().isNotFound());
     }
 
@@ -307,7 +375,7 @@ class AppointmentApiTest {
                         .header("Authorization", token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new CreateAppointmentRequest(
-                                clinicName, null, null, at, cardId))))
+                                clinicName, null, null, at, cardId, null))))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
         return objectMapper.readTree(body).path("appointmentId").asLong();
