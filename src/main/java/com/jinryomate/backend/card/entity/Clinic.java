@@ -1,5 +1,7 @@
 package com.jinryomate.backend.card.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+
 /**
  * 진료받을 병원. 시안 {@code 1m-B} 에서 고르고 {@code 1e-1} 하단에 찍힌다.
  *
@@ -19,6 +21,8 @@ public record Clinic(String name, String address) {
     /** 아직 안 골랐을 때. 화면은 "병원 미정" 으로 찍는다. */
     public static final Clinic NONE = new Clinic(null, null);
 
+    /** 응답에 나가지 않는다. 우리 안에서만 쓰는 판단이다. */
+    @JsonIgnore
     public boolean isBlank() {
         return (name == null || name.isBlank()) && (address == null || address.isBlank());
     }
