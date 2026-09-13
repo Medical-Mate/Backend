@@ -80,8 +80,12 @@ public class VisitRecord {
      * 두 벌로 두면 한쪽만 고쳐져서 갈라진다.
      *
      * <p>AI 가 주는 네 축은 {@code findings}(소견) · {@code tests}(검사) ·
-     * {@code medication_instructions}(약) · {@code follow_up}(재방문)이다. 다만 축 이름을
-     * enum 으로 박지 않으므로 늘어도 저장된다.
+     * {@code medication_instructions}(약·생활 지시) · {@code follow_up}(재방문)이다.
+     * 다만 축 이름을 enum 으로 박지 않으므로 늘어도 저장된다.
+     *
+     * <p><b>{@code medication_instructions} 는 약만이 아니다.</b> AI 가 축 여섯을 넷으로
+     * 줄이면서 생활 지시·금지("무거운 거 들지 말라고 하셨어요")를 이 축에 접었다.
+     * 화면 라벨을 "약"으로만 달면 그 줄에 약이 아닌 말이 찍힌다 (AI #78 확인).
      */
     @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(name = "visit_record_axes", joinColumns = @JoinColumn(name = "visit_id"))

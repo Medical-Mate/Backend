@@ -8,7 +8,7 @@ import java.util.Map;
  * 진료 후 메모를 축으로 나눈 결과. AI {@code POST /v1/postvisit/memo} 의 응답이다.
  *
  * <p>네 축이 온다 — {@code findings}(소견) · {@code tests}(검사) ·
- * {@code medication_instructions}(약) · {@code follow_up}(재방문). 모양은 브리핑 카드의
+ * {@code medication_instructions}(약·생활 지시) · {@code follow_up}(재방문). 모양은 브리핑 카드의
  * 축과 같아서 앱이 그리는 코드를 나눠 쓴다.
  *
  * <p><b>{@code labels} 를 그대로 돌려주는 것이 핵심이다.</b> 문장 번호 → 축 이름 맵인데,
