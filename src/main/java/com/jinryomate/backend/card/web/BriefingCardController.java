@@ -2,6 +2,7 @@ package com.jinryomate.backend.card.web;
 
 import com.jinryomate.backend.card.dto.CardDtos.CardResponse;
 import com.jinryomate.backend.card.dto.CardDtos.CardSummary;
+import com.jinryomate.backend.card.dto.CardDtos.GenerateCardRequest;
 import com.jinryomate.backend.card.dto.CardDtos.UpdateCardRequest;
 import com.jinryomate.backend.card.service.BriefingCardService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -53,11 +54,30 @@ public class BriefingCardController {
 
                     환자 인적사항은 **이 시점 값이 카드에 박힙니다.** 나중에 프로필을 고쳐도
                     이미 만들어진 카드는 바뀌지 않습니다.
+
+                    ### 진료받을 병원
+
+                    화면 `1m-B` 에서 고른 병원을 함께 보내세요. 병원 검색
+                    (`GET /api/hospitals`)이 준 항목을 그대로 옮기면 됩니다.
+
+                    ```jsonc
+                    { "clinic": { "name": "서울OO병원 내과",
+                                  "address": "서울 관악구 남부순환로 1820, 3층" } }
+                    ```
+
+                    **본문 전체가 선택입니다.** 그 화면에 "아직 정하지 않았다면 건너뛰어도
+                    돼요"가 있어서, 안 보내면 병원 없이 만들어집니다. 지금처럼 본문 없이
+                    불러도 그대로 됩니다.
+
+                    나중에 `PATCH /api/cards/{id}` 의 `clinic` 으로 바꿉니다(`1e-1` 의 "변경").
+
+                    진료과는 따로 받지 않습니다 — 심평원 기관명에 이미 들어 있습니다.
                     """)
     @PostMapping("/sessions/{sessionId}/card")
     public CardResponse generate(@AuthenticationPrincipal Long userId,
-                                 @PathVariable Long sessionId) {
-        return briefingCardService.generate(userId, sessionId);
+                                 @PathVariable Long sessionId,
+                                 @Valid @RequestBody(required = false) GenerateCardRequest request) {
+        return briefingCardService.generate(userId, sessionId, request);
     }
 
     @Operation(
@@ -68,7 +88,13 @@ public class BriefingCardController {
                     `visited` 가 진료를 마쳤는지입니다. 카드의 `status`(DRAFT/CONFIRMED)와는
                     **다른 축**이라 컬럼을 두지 않고 진료 기록이 붙었는지로 판단합니다.
 
-                    `clinicName` 은 병원명이 선택 입력이라 **진료를 마쳤어도 비어 있을 수 있습니다.**
+                    **병원이 둘입니다.** `clinicName` 은 진료를 **받은** 병원(진료 기록에서 옴)이고,
+                    `clinic` 은 **받을** 병원(카드가 들고 있는 값)입니다.
+
+                    화면 `1r-4-B` 의 `09.04 작성 · 서울OO병원 내과` 는 **`clinic.name`** 입니다.
+                    안 골랐으면 안쪽이 비어 있고 그때 "병원 미정"으로 찍으세요.
+
+                    `clinicName` 은 선택 입력이라 **진료를 마쳤어도 비어 있을 수 있습니다.**
                     "진료 완료" 뱃지는 `visited` 로 판단하세요.
 
                     목록에는 본문이 담기지 않습니다. 상세는 `GET /api/cards/{id}` 로 봅니다.
@@ -81,31 +107,38 @@ public class BriefingCardController {
     @Operation(
             summary = "카드 조회",
             description = """
-                    ### 병원이 둘입니다
-
-                    **카드 자체에는 병원이 없습니다.** 카드는 증상을 정리한 한 장이고,
-                    병원은 카드 밖에서 카드를 가리키는 두 곳에서 옵니다.
+                    ### 병원이 셋 나옵니다. 헷갈리기 쉬워 정리합니다
 
                     ```jsonc
+                    "clinic":      { "name": "서울OO병원 내과",
+                                     "address": "서울 관악구 남부순환로 1820, 3층" },
                     "appointment": { "appointmentId": 3, "clinicName": "서울OO병원",
                                      "department": "내과", "scheduledAt": "..." },
                     "visit":       { "visitId": 7, "clinicName": "○○정형외과",
                                      "visitedOn": "2026-09-13" }
                     ```
 
-                    | | 뜻 | 화면 |
-                    |---|---|---|
-                    | `appointment` | 진료를 **받을** 병원 | `1e-1` 의 "진료받을 병원" |
-                    | `visit` | 진료를 **받은** 병원 | 진료 후 |
+                    | | 뜻 | 어디서 옴 | 화면 |
+                    |---|---|---|---|
+                    | **`clinic`** | 이 카드를 **어디로 가져갈 것인가** | 카드 자신 | **`1e-1` 의 "진료받을 병원"** ← 이걸 쓰세요 |
+                    | `appointment` | 연결된 일정이 어느 병원인가 | 일정 | 일정 시각 · 이동 |
+                    | `visit` | 진료를 **받은** 병원 | 진료 기록 | 진료 후 |
 
-                    **둘이 다를 수 있습니다.** 예약은 A 병원에 잡아 두고 실제로는 B 병원에
-                    갈 수 있어서 하나로 뭉치지 않았습니다. 일정을 안 잡았거나 아직 진료 전이면
-                    각각 `null` 입니다.
+                    `clinic` 은 `1m-B`("진료받을 병원을 찾아주세요")에서 고르고 `1e-1` 의
+                    "변경"으로 바꿉니다. **안 골랐으면 안쪽이 비어 있습니다** — 그 화면에
+                    "아직 정하지 않았다면 건너뛰어도 돼요"가 있어서 정상 상태이고,
+                    목록에서는 "병원 미정"으로 찍습니다.
+
+                    셋이 다 다를 수 있습니다. 카드는 A 병원에 가져가려고 만들었는데 일정은
+                    B 병원에 잡고 실제로는 C 병원에 갈 수 있습니다.
 
                     일정이 여럿이면 **아직 안 지난 것 중 가장 가까운 것**이 옵니다(취소 제외).
                     전부 지났으면 가장 최근 것입니다.
 
-                    목록(`CardSummary`)의 `clinicName` 은 `visit.clinicName` 과 같은 값입니다.
+                    > 어제까지 이 문서에 "카드 자체에는 병원이 없다, `1e-1` 은
+                    > `appointment.clinicName` 을 쓰라"고 적혀 있었습니다. **틀렸습니다.**
+                    > 시안은 병원을 고른 다음 카드를 만듭니다(`1m-B` 의 버튼이
+                    > "브리핑 카드 만들기"). `clinic` 을 쓰세요.
                     """)
     @GetMapping("/cards/{cardId}")
     public CardResponse get(@AuthenticationPrincipal Long userId,

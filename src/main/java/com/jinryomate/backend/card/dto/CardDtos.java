@@ -5,6 +5,7 @@ import com.jinryomate.backend.card.entity.AxisStatus;
 import com.jinryomate.backend.card.entity.BriefingCard;
 import com.jinryomate.backend.card.entity.CardAxis;
 import com.jinryomate.backend.card.entity.CardStatus;
+import com.jinryomate.backend.card.entity.Clinic;
 import com.jinryomate.backend.profile.entity.FieldStatus;
 import com.jinryomate.backend.profile.entity.Sex;
 import jakarta.validation.Valid;
@@ -59,6 +60,16 @@ public final class CardDtos {
             CardStatus status,
             boolean visited,
             String clinicName,
+
+            /**
+             * 진료받을 병원. 화면 {@code 1r-4-B} 의 {@code 09.04 작성 · 서울OO병원 내과}.
+             *
+             * <p><b>위 {@code clinicName} 과 다른 값입니다.</b> 저건 진료를 <b>받은</b> 병원
+             * (진료 기록에서 옵니다), 이건 <b>받을</b> 병원(카드가 들고 있는 값)입니다.
+             * 안 골랐으면 안쪽이 비어 있습니다 — 화면은 "병원 미정".
+             */
+            Clinic clinic,
+
             Instant createdAt
     ) {
         public static CardSummary of(BriefingCard c, boolean visited, String clinicName) {
@@ -69,11 +80,38 @@ public final class CardDtos {
                     c.getStatus(),
                     visited,
                     clinicName,
+                    c.clinic(),
                     c.getCreatedAt());
         }
     }
 
     // ---------- 요청 ----------
+
+    /**
+     * 진료받을 병원. 병원 검색({@code GET /api/hospitals})이 준 항목을 그대로 옮기면 됩니다.
+     *
+     * <p>진료과는 따로 받지 않습니다 — 심평원 기관명에 이미 들어 있습니다
+     * ({@code The서울아산내과의원}).
+     */
+    public record ClinicRequest(
+            @NotBlank(message = "병원명이 필요합니다.")
+            @Size(max = 60, message = "병원명은 60자 이내입니다.")
+            String name,
+
+            @Size(max = 200, message = "주소는 200자 이내입니다.")
+            String address
+    ) {}
+
+    /**
+     * 카드를 만들 때 함께 보내는 것. 화면 {@code 1m-B}.
+     *
+     * <p><b>본문 전체가 선택입니다.</b> "아직 정하지 않았다면 건너뛰어도 돼요" 가 그 화면에
+     * 있어서, 안 보내면 병원 없이 만들어집니다.
+     */
+    public record GenerateCardRequest(
+            @Valid
+            ClinicRequest clinic
+    ) {}
 
     /**
      * 환자가 S3 화면에서 카드를 고칠 때. 보낸 것만 바뀐다.
@@ -96,7 +134,11 @@ public final class CardDtos {
             List<@Size(max = 40, message = "질문은 40자 이내입니다.") String> questions,
 
             @Size(max = 10, message = "메모는 최대 10개입니다.")
-            List<@Size(max = 200) String> patientNotes
+            List<@Size(max = 200) String> patientNotes,
+
+            /** 진료받을 병원. 화면 {@code 1e-1} 의 "변경". 안 보내면 안 바뀝니다. */
+            @Valid
+            ClinicRequest clinic
     ) {}
 
     /**
@@ -133,9 +175,21 @@ public final class CardDtos {
             Patient patient,
 
             /**
-             * 진료를 <b>받을</b> 병원. 시안 {@code 1e-1} 의 "진료받을 병원".
+             * 진료받을 병원. 시안 {@code 1e-1} 하단의 "진료받을 병원".
              *
-             * <p>카드에 연결된 일정에서 옵니다. 일정을 안 잡았으면 {@code null} 입니다.
+             * <p><b>카드 자신의 값입니다.</b> {@code 1m-B} 에서 고르고 {@code 1e-1} 의
+             * "변경"으로 바꿉니다. 안 골랐으면 안쪽이 비어 있습니다("병원 미정").
+             *
+             * <p>아래 {@code appointment} 의 병원과 다를 수 있습니다 — 이건 "이 카드를 어디로
+             * 가져갈 것인가", 저건 "그 일정이 어느 병원인가" 입니다.
+             */
+            Clinic clinic,
+
+            /**
+             * 연결된 진료 예정 일정. <b>병원은 {@code clinic} 을 보세요.</b>
+             *
+             * <p>여기는 일정 자체(시각 · 이동에 쓸 id)를 그리는 데 씁니다.
+             * 일정을 안 잡았으면 {@code null} 입니다.
              */
             Appointment appointment,
 
@@ -224,6 +278,7 @@ public final class CardDtos {
                             new Allergies(c.getAllergiesStatus(), c.getAllergiesText()),
                             new ListField(c.getMedicationsStatus(), List.copyOf(c.getMedications())),
                             new ListField(c.getConditionsStatus(), List.copyOf(c.getConditions()))),
+                    c.clinic(),
                     links.appointment(),
                     links.visit(),
                     c.getTitle(),
