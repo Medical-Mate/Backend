@@ -3,6 +3,7 @@ package com.jinryomate.backend.card.service;
 import com.jinryomate.backend.card.dto.CardDtos.AxisEdit;
 import com.jinryomate.backend.card.dto.CardDtos.CardResponse;
 import com.jinryomate.backend.card.dto.CardDtos.CardSummary;
+import com.jinryomate.backend.card.dto.CardLinks;
 import com.jinryomate.backend.card.dto.CardDtos.UpdateCardRequest;
 import com.jinryomate.backend.card.entity.BriefingCard;
 import com.jinryomate.backend.card.entity.CardAxis;
@@ -20,6 +21,8 @@ import com.jinryomate.backend.profile.entity.HealthProfile;
 import com.jinryomate.backend.profile.repository.HealthProfileRepository;
 import com.jinryomate.backend.visit.entity.VisitRecord;
 import com.jinryomate.backend.visit.repository.VisitRecordRepository;
+import java.time.Instant;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -41,14 +44,14 @@ public class BriefingCardService {
     private final CardContentValidator validator;
 
     /**
-     * 목록에 "진료 완료"와 병원명을 붙이는 데만 쓴다.
+     * 목록의 "진료 완료"와 상세의 "진료받은 병원"에 쓴다.
      *
      * <p>{@code visit} 은 이미 {@code card} 에 기대고 있어서 방향이 하나 더 생긴다.
      * 다만 읽기 전용 조회이고 리포지토리라 생성자 순환이 생기지 않는다.
      */
     private final VisitRecordRepository visitRecordRepository;
 
-    /** 카드를 지울 때 연결을 끊기 위해서만 쓴다. 일정 자체는 지우지 않는다. */
+    /** 카드의 "진료받을 병원"을 찾고, 카드를 지울 때 연결을 끊는 데 쓴다. */
     private final AppointmentRepository appointmentRepository;
 
     /** 카드를 지울 때 문답도 함께 지운다. */
@@ -73,7 +76,7 @@ public class BriefingCardService {
 
         BriefingCard existing = cardRepository.findFirstBySessionIdOrderByVersionDesc(sessionId).orElse(null);
         if (existing != null) {
-            return CardResponse.from(existing);
+            return CardResponse.from(existing, linksOf(existing.getId()));
         }
 
         HealthProfile profile = profileRepository.findByUserId(userId).orElse(null);
@@ -101,12 +104,13 @@ public class BriefingCardService {
 
         log.info("카드 생성 userId={} cardId={} prompt={} rejected={}",
                 userId, card.getId(), card.getPromptVersion(), validated.rejectedFields());
-        return CardResponse.from(card, validated.rejectedFields());
+        return CardResponse.from(card, validated.rejectedFields(), linksOf(card.getId()));
     }
 
     @Transactional(readOnly = true)
     public CardResponse get(Long userId, Long cardId) {
-        return CardResponse.from(findOwned(userId, cardId));
+        BriefingCard card = findOwned(userId, cardId);
+        return CardResponse.from(card, linksOf(cardId));
     }
 
     /**
@@ -132,6 +136,32 @@ public class BriefingCardService {
     }
 
     /**
+     * 카드에 매달린 일정과 진료 기록을 찾는다.
+     *
+     * <p><b>카드에는 병원이 없다.</b> 시안 {@code 1e-1} 의 "진료받을 병원"은 연결된
+     * 일정에서 오고, 진료를 마친 뒤의 병원은 진료 기록에서 온다. 둘이 다를 수 있어
+     * 하나로 뭉치지 않는다 — 예약은 A 병원에 잡아 두고 실제로는 B 병원에 갈 수 있다.
+     *
+     * <p>일정이 여럿이면 <b>아직 안 지난 것 중 가장 가까운 것</b>을 쓴다. 그게 환자가
+     * 지금 준비하는 진료다. 전부 지났으면 가장 최근 것으로 둔다.
+     */
+    private CardLinks linksOf(Long cardId) {
+        List<Appointment> appointments = appointmentRepository.findAllByCardIdIn(List.of(cardId));
+        Instant now = Instant.now();
+
+        Appointment upcoming = appointments.stream()
+                .filter(a -> a.getStatus() != Appointment.Status.CANCELED)
+                .filter(a -> !a.getScheduledAt().isBefore(now))
+                .min(Comparator.comparing(Appointment::getScheduledAt))
+                .orElseGet(() -> appointments.stream()
+                        .filter(a -> a.getStatus() != Appointment.Status.CANCELED)
+                        .max(Comparator.comparing(Appointment::getScheduledAt))
+                        .orElse(null));
+
+        return CardLinks.of(upcoming, visitRecordRepository.findByCardId(cardId).orElse(null));
+    }
+
+    /**
      * 환자가 카드를 고친다. 화면 {@code 1e-1-E}.
      *
      * <p><b>확정된 카드는 고치지 않는다.</b> 대신 이 카드를 이어받은 새 버전을 만들어 거기에
@@ -153,7 +183,7 @@ public class BriefingCardService {
 
         log.info("카드 수정 userId={} cardId={} version={} rejected={}",
                 userId, target.getId(), target.getVersion(), validated.rejectedFields());
-        return CardResponse.from(target, validated.rejectedFields());
+        return CardResponse.from(target, validated.rejectedFields(), linksOf(target.getId()));
     }
 
     /** 확정. 이미 확정된 카드를 다시 확정하려 하면 막는다. */
@@ -165,7 +195,7 @@ public class BriefingCardService {
         }
         card.confirm();
         log.info("카드 확정 userId={} cardId={} version={}", userId, cardId, card.getVersion());
-        return CardResponse.from(card);
+        return CardResponse.from(card, linksOf(cardId));
     }
 
     /**

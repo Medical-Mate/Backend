@@ -105,6 +105,50 @@ class AppointmentApiTest {
     }
 
     @Test
+    @DisplayName("카드 상세가 진료받을 병원과 진료받은 병원을 나눠서 준다")
+    void 카드의_두_병원() throws Exception {
+        long cardId = createCard();
+
+        // 예약은 A 병원에 잡는다. 시안 1e-1 의 "진료받을 병원".
+        createWithCard("서울OO병원", Instant.now().plus(7, ChronoUnit.DAYS), cardId);
+
+        mockMvc.perform(get("/api/cards/" + cardId).header("Authorization", token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.appointment.clinicName").value("서울OO병원"))
+                // 아직 진료 전이라 받은 병원은 없다.
+                .andExpect(jsonPath("$.visit").doesNotExist());
+
+        // 실제로는 B 병원에 갔다. 둘이 다를 수 있어서 이름을 나눈다.
+        mockMvc.perform(post("/api/cards/" + cardId + "/confirm").header("Authorization", token))
+                .andExpect(status().isOk());
+        mockMvc.perform(post("/api/cards/" + cardId + "/visit")
+                        .header("Authorization", token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"clinicName": "○○정형외과", "visitedOn": "2026-09-13"}"""))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/cards/" + cardId).header("Authorization", token))
+                .andExpect(jsonPath("$.appointment.clinicName").value("서울OO병원"))
+                .andExpect(jsonPath("$.visit.clinicName").value("○○정형외과"))
+                .andExpect(jsonPath("$.visit.visitedOn").value("2026-09-13"));
+    }
+
+    @Test
+    @DisplayName("일정이 여럿이면 아직 안 지난 것 중 가장 가까운 것을 준다")
+    void 카드의_다음_일정() throws Exception {
+        long cardId = createCard();
+
+        createWithCard("지난 진료", Instant.now().minus(3, ChronoUnit.DAYS), cardId);
+        createWithCard("먼 진료", Instant.now().plus(30, ChronoUnit.DAYS), cardId);
+        createWithCard("가까운 진료", Instant.now().plus(2, ChronoUnit.DAYS), cardId);
+
+        // 환자가 지금 준비하는 진료가 그것이다.
+        mockMvc.perform(get("/api/cards/" + cardId).header("Authorization", token))
+                .andExpect(jsonPath("$.appointment.clinicName").value("가까운 진료"));
+    }
+
+    @Test
     @DisplayName("진료 전 할 일이 저장되고 체크가 남는다")
     void 할_일() throws Exception {
         // 1r-4 에서 적고 1r-2 에서 체크한다. 자리가 없어서 앱을 다시 켜면 사라졌다.

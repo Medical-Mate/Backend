@@ -78,7 +78,35 @@ public class BriefingCardController {
         return briefingCardService.list(userId);
     }
 
-    @Operation(summary = "카드 조회")
+    @Operation(
+            summary = "카드 조회",
+            description = """
+                    ### 병원이 둘입니다
+
+                    **카드 자체에는 병원이 없습니다.** 카드는 증상을 정리한 한 장이고,
+                    병원은 카드 밖에서 카드를 가리키는 두 곳에서 옵니다.
+
+                    ```jsonc
+                    "appointment": { "appointmentId": 3, "clinicName": "서울OO병원",
+                                     "department": "내과", "scheduledAt": "..." },
+                    "visit":       { "visitId": 7, "clinicName": "○○정형외과",
+                                     "visitedOn": "2026-09-13" }
+                    ```
+
+                    | | 뜻 | 화면 |
+                    |---|---|---|
+                    | `appointment` | 진료를 **받을** 병원 | `1e-1` 의 "진료받을 병원" |
+                    | `visit` | 진료를 **받은** 병원 | 진료 후 |
+
+                    **둘이 다를 수 있습니다.** 예약은 A 병원에 잡아 두고 실제로는 B 병원에
+                    갈 수 있어서 하나로 뭉치지 않았습니다. 일정을 안 잡았거나 아직 진료 전이면
+                    각각 `null` 입니다.
+
+                    일정이 여럿이면 **아직 안 지난 것 중 가장 가까운 것**이 옵니다(취소 제외).
+                    전부 지났으면 가장 최근 것입니다.
+
+                    목록(`CardSummary`)의 `clinicName` 은 `visit.clinicName` 과 같은 값입니다.
+                    """)
     @GetMapping("/cards/{cardId}")
     public CardResponse get(@AuthenticationPrincipal Long userId,
                             @PathVariable Long cardId) {
