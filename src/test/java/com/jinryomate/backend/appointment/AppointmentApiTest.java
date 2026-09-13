@@ -16,6 +16,7 @@ import com.jinryomate.backend.appointment.dto.AppointmentDtos.CreateAppointmentR
 import com.jinryomate.backend.appointment.dto.AppointmentDtos.TodoRequest;
 import com.jinryomate.backend.appointment.dto.AppointmentDtos.UpdateAppointmentRequest;
 import com.jinryomate.backend.appointment.entity.Appointment.Status;
+import com.jinryomate.backend.appointment.entity.Origin;
 import com.jinryomate.backend.auth.client.KakaoClient;
 import com.jinryomate.backend.auth.dto.AuthDtos.KakaoLoginRequest;
 import com.jinryomate.backend.auth.dto.AuthDtos.TokenResponse;
@@ -26,11 +27,9 @@ import com.jinryomate.backend.profile.dto.ProfileDtos.ListFieldRequest;
 import com.jinryomate.backend.profile.dto.ProfileDtos.TextFieldRequest;
 import com.jinryomate.backend.profile.entity.FieldStatus;
 import com.jinryomate.backend.profile.entity.Sex;
-import java.time.Instant;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.ZoneId;
-import java.time.temporal.ChronoUnit;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -79,13 +78,84 @@ class AppointmentApiTest {
                         .header("Authorization", token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new CreateAppointmentRequest(
-                                "서울OO병원", "내과", "재진", kst(2026, 9, 12, 10, 30), null, null))))
+                                "서울OO병원", "내과", "재진",
+                                LocalDate.of(2026, 9, 12), LocalTime.of(10, 30),
+                                null, null, null))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.clinicName").value("서울OO병원"))
                 .andExpect(jsonPath("$.department").value("내과"))
                 .andExpect(jsonPath("$.purpose").value("재진"))
+                .andExpect(jsonPath("$.scheduledOn").value("2026-09-12"))
+                .andExpect(jsonPath("$.scheduledTime").value("10:30:00"))
                 .andExpect(jsonPath("$.status").value("SCHEDULED"))
-                .andExpect(jsonPath("$.cardId").doesNotExist());
+                // 안 보내면 환자가 손으로 만든 일정이다.
+                .andExpect(jsonPath("$.origin").value("MANUAL"))
+                .andExpect(jsonPath("$.cards.length()").value(0));
+    }
+
+    @Test
+    @DisplayName("시각 없이 날짜만으로 일정을 만들 수 있다")
+    void 시간_미정() throws Exception {
+        // 시안 1r-2-A 의 "재방문 예정 / 시간 정하고 확정하기". 날짜는 아는데
+        // 시각은 아직 모르는 상태가 화면에 있다.
+        String body = mockMvc.perform(post("/api/me/appointments")
+                        .header("Authorization", token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new CreateAppointmentRequest(
+                                "서울OO병원", null, null,
+                                LocalDate.of(2026, 9, 12), null, null, null, null))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.scheduledOn").value("2026-09-12"))
+                .andExpect(jsonPath("$.scheduledTime").doesNotExist())
+                .andReturn().getResponse().getContentAsString();
+        long id = objectMapper.readTree(body).path("appointmentId").asLong();
+
+        // 나중에 시각을 정한다.
+        mockMvc.perform(patch("/api/me/appointments/" + id)
+                        .header("Authorization", token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new UpdateAppointmentRequest(
+                                null, null, null, null, LocalTime.of(14, 0), false,
+                                null, null, null))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.scheduledTime").value("14:00:00"));
+    }
+
+    @Test
+    @DisplayName("clearTime으로 시각을 다시 미정으로 되돌린다")
+    void 시각_지움() throws Exception {
+        long id = create("서울OO병원", LocalDate.of(2026, 9, 12), LocalTime.of(10, 30));
+
+        // scheduledTime: null 은 "안 바꿈"이다. 지우려면 clearTime 을 써야 한다.
+        mockMvc.perform(patch("/api/me/appointments/" + id)
+                        .header("Authorization", token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new UpdateAppointmentRequest(
+                                null, null, null, null, null, false, null, null, null))))
+                .andExpect(jsonPath("$.scheduledTime").value("10:30:00"));
+
+        mockMvc.perform(patch("/api/me/appointments/" + id)
+                        .header("Authorization", token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new UpdateAppointmentRequest(
+                                null, null, null, null, null, true, null, null, null))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.scheduledTime").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("진료 후 기록에서 만든 일정은 origin으로 구별된다")
+    void 재방문_출처() throws Exception {
+        // 시안 1r-2-A 가 "진료 후 기록에서 자동으로 만들었어요" 를 찍는다.
+        // 손으로 만든 일정과 구별이 안 되면 그 문구를 못 그린다.
+        mockMvc.perform(post("/api/me/appointments")
+                        .header("Authorization", token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new CreateAppointmentRequest(
+                                "서울OO병원", null, null, LocalDate.of(2026, 9, 12), null,
+                                null, Origin.VISIT_FOLLOW_UP, null))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.origin").value("VISIT_FOLLOW_UP"));
     }
 
     @Test
@@ -97,11 +167,73 @@ class AppointmentApiTest {
                         .header("Authorization", token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new CreateAppointmentRequest(
-                                "서울OO병원", "내과", "재진", kst(2026, 9, 12, 10, 30), cardId, null))))
+                                "서울OO병원", "내과", "재진",
+                                LocalDate.of(2026, 9, 12), LocalTime.of(10, 30),
+                                List.of(cardId), null, null))))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.cardId").value((int) cardId))
+                .andExpect(jsonPath("$.cards.length()").value(1))
+                .andExpect(jsonPath("$.cards[0].cardId").value((int) cardId))
                 // 화면의 "복부 통증 브리핑 카드"
-                .andExpect(jsonPath("$.cardTitle").exists());
+                .andExpect(jsonPath("$.cards[0].title").exists());
+    }
+
+    @Test
+    @DisplayName("한 일정에 카드를 여러 장 붙일 수 있다")
+    void 카드_여러_장() throws Exception {
+        // 화면 1r-4-B 가 체크박스이고 개수를 찍는다. 한 장만 붙게 해 두면
+        // 두 증상을 한 진료에 들고 가는 경로가 막힌다.
+        long first = createCard();
+        long second = createCard();
+
+        mockMvc.perform(post("/api/me/appointments")
+                        .header("Authorization", token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new CreateAppointmentRequest(
+                                "서울OO병원", null, null, LocalDate.of(2026, 9, 12), null,
+                                List.of(first, second), null, null))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.cards.length()").value(2));
+    }
+
+    @Test
+    @DisplayName("같은 카드를 두 진료에 가져갈 수 있다")
+    void 카드_하나에_진료_여럿() throws Exception {
+        // 같은 증상으로 재방문하면 카드를 다시 만들지 않고 이어서 쓴다.
+        // 카드 쪽에 appointment_id 를 뒀다면 이게 막힌다.
+        long cardId = createCard();
+
+        createWithCards("1차 진료", LocalDate.now(KST).plusDays(2), List.of(cardId));
+        createWithCards("2차 진료", LocalDate.now(KST).plusDays(30), List.of(cardId));
+
+        mockMvc.perform(get("/api/me/appointments/upcoming").header("Authorization", token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$[0].cards[0].cardId").value((int) cardId))
+                .andExpect(jsonPath("$[1].cards[0].cardId").value((int) cardId));
+    }
+
+    @Test
+    @DisplayName("cardIds를 보내면 통째로 갈아끼우고, 빈 목록이면 전부 뗀다")
+    void 카드_연결_해제() throws Exception {
+        long cardId = createCard();
+        long id = createWithCards("서울OO병원", LocalDate.of(2026, 9, 12), List.of(cardId));
+
+        // cardIds: null 은 "안 바꿈"이다.
+        mockMvc.perform(patch("/api/me/appointments/" + id)
+                        .header("Authorization", token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new UpdateAppointmentRequest(
+                                null, null, null, null, null, false, null, null, null))))
+                .andExpect(jsonPath("$.cards.length()").value(1));
+
+        // 빈 목록은 "전부 뗌"이다. 체크를 다 풀었는데 남으면 안 된다.
+        mockMvc.perform(patch("/api/me/appointments/" + id)
+                        .header("Authorization", token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new UpdateAppointmentRequest(
+                                null, null, null, null, null, false, null, List.of(), null))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.cards.length()").value(0));
     }
 
     @Test
@@ -110,11 +242,12 @@ class AppointmentApiTest {
         long cardId = createCard();
 
         // 예약은 A 병원에 잡는다. 시안 1e-1 의 "진료받을 병원".
-        createWithCard("서울OO병원", Instant.now().plus(7, ChronoUnit.DAYS), cardId);
+        createWithCards("서울OO병원", LocalDate.now(KST).plusDays(7), List.of(cardId));
 
         mockMvc.perform(get("/api/cards/" + cardId).header("Authorization", token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.appointment.clinicName").value("서울OO병원"))
+                .andExpect(jsonPath("$.appointment.scheduledOn").exists())
                 // 아직 진료 전이라 받은 병원은 없다.
                 .andExpect(jsonPath("$.visit").doesNotExist());
 
@@ -139,9 +272,9 @@ class AppointmentApiTest {
     void 카드의_다음_일정() throws Exception {
         long cardId = createCard();
 
-        createWithCard("지난 진료", Instant.now().minus(3, ChronoUnit.DAYS), cardId);
-        createWithCard("먼 진료", Instant.now().plus(30, ChronoUnit.DAYS), cardId);
-        createWithCard("가까운 진료", Instant.now().plus(2, ChronoUnit.DAYS), cardId);
+        createWithCards("지난 진료", LocalDate.now(KST).minusDays(3), List.of(cardId));
+        createWithCards("먼 진료", LocalDate.now(KST).plusDays(30), List.of(cardId));
+        createWithCards("가까운 진료", LocalDate.now(KST).plusDays(2), List.of(cardId));
 
         // 환자가 지금 준비하는 진료가 그것이다.
         mockMvc.perform(get("/api/cards/" + cardId).header("Authorization", token))
@@ -156,7 +289,8 @@ class AppointmentApiTest {
                         .header("Authorization", token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new CreateAppointmentRequest(
-                                "서울OO병원", null, null, kst(2026, 9, 12, 10, 30), null,
+                                "서울OO병원", null, null,
+                                LocalDate.of(2026, 9, 12), LocalTime.of(10, 30), null, null,
                                 List.of(new TodoRequest("달라진 증상 있으면 카드 수정", false),
                                         new TodoRequest("보험 서류 챙기기", false))))))
                 .andExpect(status().isOk())
@@ -172,15 +306,13 @@ class AppointmentApiTest {
                         .header("Authorization", token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new UpdateAppointmentRequest(
-                                null, null, null, null, null, null, false,
+                                null, null, null, null, null, false, null, null,
                                 List.of(new TodoRequest("달라진 증상 있으면 카드 수정", true))))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.todos.length()").value(1))
                 .andExpect(jsonPath("$.todos[0].done").value(true));
 
         // 다시 읽어도 남아 있어야 한다. 앱을 껐다 켜는 것과 같다.
-        mockMvc.perform(get("/api/me/appointments/upcoming").header("Authorization", token))
-                .andExpect(status().isOk());
         mockMvc.perform(get("/api/me/appointments?year=2026&month=9").header("Authorization", token))
                 .andExpect(jsonPath("$[0].todos[0].done").value(true));
     }
@@ -192,7 +324,8 @@ class AppointmentApiTest {
                         .header("Authorization", token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new CreateAppointmentRequest(
-                                "서울OO병원", null, null, kst(2026, 9, 12, 10, 30), null,
+                                "서울OO병원", null, null,
+                                LocalDate.of(2026, 9, 12), LocalTime.of(10, 30), null, null,
                                 List.of(new TodoRequest("보험 서류 챙기기", false))))))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
@@ -203,7 +336,7 @@ class AppointmentApiTest {
                         .header("Authorization", token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new UpdateAppointmentRequest(
-                                null, "정형외과", null, null, null, null, false, null))))
+                                null, "정형외과", null, null, null, false, null, null, null))))
                 .andExpect(jsonPath("$.todos.length()").value(1));
 
         // 빈 목록은 "전부 지움"이다. 환자가 마지막 줄을 지웠는데 남으면 안 된다.
@@ -211,7 +344,7 @@ class AppointmentApiTest {
                         .header("Authorization", token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new UpdateAppointmentRequest(
-                                null, null, null, null, null, null, false, List.of()))))
+                                null, null, null, null, null, false, null, null, List.of()))))
                 .andExpect(jsonPath("$.todos.length()").value(0));
     }
 
@@ -222,45 +355,49 @@ class AppointmentApiTest {
                         .header("Authorization", token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new CreateAppointmentRequest(
-                                "  ", null, null, kst(2026, 9, 12, 10, 30), null, null))))
+                                "  ", null, null,
+                                LocalDate.of(2026, 9, 12), LocalTime.of(10, 30), null, null, null))))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error.code").value("INVALID_REQUEST"));
     }
 
     @Test
-    @DisplayName("예정 일시가 없으면 400")
-    void 일시_필수() throws Exception {
+    @DisplayName("예정 날짜가 없으면 400")
+    void 날짜_필수() throws Exception {
+        // 시각은 빼도 되지만 날짜는 안 된다. 날짜가 없으면 캘린더에 그릴 자리가 없다.
         mockMvc.perform(post("/api/me/appointments")
                         .header("Authorization", token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new CreateAppointmentRequest(
-                                "서울OO병원", null, null, null, null, null))))
+                                "서울OO병원", null, null, null, LocalTime.of(10, 30), null, null, null))))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error.code").value("INVALID_REQUEST"));
     }
 
     @Test
-    @DisplayName("필수는 병원명과 일시뿐이고 나머지는 비워도 된다")
+    @DisplayName("필수는 병원명과 날짜뿐이고 나머지는 비워도 된다")
     void 나머지는_선택() throws Exception {
-        // 캘린더에서 급히 적는 경로다. 진료과·목적까지 강제하면 그 자리에서 막힌다.
+        // 캘린더에서 급히 적는 경로다. 진료과·목적·시각까지 강제하면 그 자리에서 막힌다.
         // 필수를 늘리려면 이 테스트가 먼저 깨져야 한다.
         mockMvc.perform(post("/api/me/appointments")
                         .header("Authorization", token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new CreateAppointmentRequest(
-                                "서울OO병원", null, null, kst(2026, 9, 12, 10, 30), null, null))))
+                                "서울OO병원", null, null, LocalDate.of(2026, 9, 12), null,
+                                null, null, null))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.clinicName").value("서울OO병원"))
                 .andExpect(jsonPath("$.department").doesNotExist())
                 .andExpect(jsonPath("$.purpose").doesNotExist())
-                .andExpect(jsonPath("$.cardId").doesNotExist());
+                .andExpect(jsonPath("$.scheduledTime").doesNotExist())
+                .andExpect(jsonPath("$.cards.length()").value(0));
     }
 
     @Test
     @DisplayName("월별 조회는 그 달 것만 가져온다")
     void 월별_조회() throws Exception {
-        create("9월 병원", kst(2026, 9, 12, 10, 30));
-        create("10월 병원", kst(2026, 10, 1, 9, 0));
+        create("9월 병원", LocalDate.of(2026, 9, 12), LocalTime.of(10, 30));
+        create("10월 병원", LocalDate.of(2026, 10, 1), LocalTime.of(9, 0));
 
         mockMvc.perform(get("/api/me/appointments?year=2026&month=9").header("Authorization", token))
                 .andExpect(status().isOk())
@@ -269,10 +406,11 @@ class AppointmentApiTest {
     }
 
     @Test
-    @DisplayName("한국 시각 자정 직후 일정도 그날로 잡힌다")
-    void 시간대_경계() throws Exception {
-        // UTC 로 자르면 KST 오전 9시 이전이 전날로 밀린다. 9월 12일 00:30 이 대표적이다.
-        create("자정 직후", kst(2026, 9, 12, 0, 30));
+    @DisplayName("자정 직후 일정도 그날로 잡힌다")
+    void 날짜_경계() throws Exception {
+        // 예전에는 Instant 하나로 두고 KST 로 잘랐다. 그때는 9월 12일 00:30 이
+        // UTC 기준으로 11일이라 하루 밀렸다. 날짜를 DATE 로 두면서 그 계산이 사라졌다.
+        create("자정 직후", LocalDate.of(2026, 9, 12), LocalTime.of(0, 30));
 
         mockMvc.perform(get("/api/me/appointments?date=2026-09-12").header("Authorization", token))
                 .andExpect(status().isOk())
@@ -283,13 +421,29 @@ class AppointmentApiTest {
     @Test
     @DisplayName("일자별 조회는 그 하루만 가져온다")
     void 일자별_조회() throws Exception {
-        create("당일", kst(2026, 9, 12, 10, 30));
-        create("다음날", kst(2026, 9, 13, 10, 30));
+        create("당일", LocalDate.of(2026, 9, 12), LocalTime.of(10, 30));
+        create("다음날", LocalDate.of(2026, 9, 13), LocalTime.of(10, 30));
 
         mockMvc.perform(get("/api/me/appointments?date=2026-09-12").header("Authorization", token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(1))
                 .andExpect(jsonPath("$[0].clinicName").value("당일"));
+    }
+
+    @Test
+    @DisplayName("같은 날이면 시각이 이른 것이 먼저, 시간 미정은 뒤로 간다")
+    void 같은_날_정렬() throws Exception {
+        LocalDate day = LocalDate.of(2026, 9, 12);
+        create("미정", day, null);
+        create("오후", day, LocalTime.of(15, 0));
+        create("오전", day, LocalTime.of(9, 0));
+
+        // 시간 미정을 먼저 두면 "오늘 첫 진료"가 틀린다.
+        mockMvc.perform(get("/api/me/appointments?date=2026-09-12").header("Authorization", token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].clinicName").value("오전"))
+                .andExpect(jsonPath("$[1].clinicName").value("오후"))
+                .andExpect(jsonPath("$[2].clinicName").value("미정"));
     }
 
     @Test
@@ -302,16 +456,16 @@ class AppointmentApiTest {
     @Test
     @DisplayName("다가오는 일정은 지난 것과 취소된 것을 빼고 가까운 순으로 준다")
     void 다가오는_일정() throws Exception {
-        create("지난 진료", Instant.now().minus(3, ChronoUnit.DAYS));
-        long canceled = create("취소한 진료", Instant.now().plus(1, ChronoUnit.DAYS));
-        create("먼 진료", Instant.now().plus(30, ChronoUnit.DAYS));
-        create("가까운 진료", Instant.now().plus(5, ChronoUnit.DAYS));
+        create("지난 진료", LocalDate.now(KST).minusDays(3), null);
+        long canceled = create("취소한 진료", LocalDate.now(KST).plusDays(1), null);
+        create("먼 진료", LocalDate.now(KST).plusDays(30), null);
+        create("가까운 진료", LocalDate.now(KST).plusDays(5), null);
 
         mockMvc.perform(patch("/api/me/appointments/" + canceled)
                         .header("Authorization", token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new UpdateAppointmentRequest(
-                                null, null, null, null, Status.CANCELED, null, false, null))))
+                                null, null, null, null, null, false, Status.CANCELED, null, null))))
                 .andExpect(status().isOk());
 
         mockMvc.perform(get("/api/me/appointments/upcoming").header("Authorization", token))
@@ -322,48 +476,38 @@ class AppointmentApiTest {
     }
 
     @Test
-    @DisplayName("보낸 필드만 바뀐다")
-    void 부분_수정() throws Exception {
-        long id = create("서울OO병원", kst(2026, 9, 12, 10, 30));
+    @DisplayName("오늘 잡힌 진료는 시각이 지나도 그날 하루는 남는다")
+    void 오늘은_포함() throws Exception {
+        // 시각까지 견주면 오전 10시 진료가 10시 1분에 목록에서 사라진다.
+        create("오늘 진료", LocalDate.now(KST), LocalTime.of(0, 1));
 
-        mockMvc.perform(patch("/api/me/appointments/" + id)
-                        .header("Authorization", token)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(new UpdateAppointmentRequest(
-                                null, "정형외과", null, null, null, null, false, null))))
+        mockMvc.perform(get("/api/me/appointments/upcoming").header("Authorization", token))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.department").value("정형외과"))
-                // 안 보낸 필드는 그대로다.
-                .andExpect(jsonPath("$.clinicName").value("서울OO병원"));
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].clinicName").value("오늘 진료"));
     }
 
     @Test
-    @DisplayName("clearCard로 카드 연결을 끊는다")
-    void 카드_연결_해제() throws Exception {
-        long cardId = createCard();
-        long id = createWithCard("서울OO병원", kst(2026, 9, 12, 10, 30), cardId);
-
-        // cardId: null 은 "안 바꿈"이다. 끊으려면 clearCard 를 써야 한다.
-        mockMvc.perform(patch("/api/me/appointments/" + id)
-                        .header("Authorization", token)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(new UpdateAppointmentRequest(
-                                null, null, null, null, null, null, false, null))))
-                .andExpect(jsonPath("$.cardId").value((int) cardId));
+    @DisplayName("보낸 필드만 바뀐다")
+    void 부분_수정() throws Exception {
+        long id = create("서울OO병원", LocalDate.of(2026, 9, 12), LocalTime.of(10, 30));
 
         mockMvc.perform(patch("/api/me/appointments/" + id)
                         .header("Authorization", token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new UpdateAppointmentRequest(
-                                null, null, null, null, null, null, true, null))))
+                                null, "정형외과", null, null, null, false, null, null, null))))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.cardId").doesNotExist());
+                .andExpect(jsonPath("$.department").value("정형외과"))
+                // 안 보낸 필드는 그대로다.
+                .andExpect(jsonPath("$.clinicName").value("서울OO병원"))
+                .andExpect(jsonPath("$.scheduledOn").value("2026-09-12"));
     }
 
     @Test
     @DisplayName("삭제하면 목록에서 사라진다")
     void 삭제() throws Exception {
-        long id = create("서울OO병원", kst(2026, 9, 12, 10, 30));
+        long id = create("서울OO병원", LocalDate.of(2026, 9, 12), LocalTime.of(10, 30));
 
         mockMvc.perform(delete("/api/me/appointments/" + id).header("Authorization", token))
                 .andExpect(status().isNoContent());
@@ -375,7 +519,7 @@ class AppointmentApiTest {
     @DisplayName("남의 일정과 남의 카드는 건드릴 수 없다")
     void 소유권() throws Exception {
         long cardId = createCard();
-        long id = create("서울OO병원", kst(2026, 9, 12, 10, 30));
+        long id = create("서울OO병원", LocalDate.of(2026, 9, 12), LocalTime.of(10, 30));
         String otherToken = loginAsOther();
 
         mockMvc.perform(patch("/api/me/appointments/" + id)
@@ -391,7 +535,8 @@ class AppointmentApiTest {
                         .header("Authorization", otherToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new CreateAppointmentRequest(
-                                "남의 병원", null, null, kst(2026, 9, 12, 10, 30), cardId, null))))
+                                "남의 병원", null, null,
+                                LocalDate.of(2026, 9, 12), null, List.of(cardId), null, null))))
                 .andExpect(status().isNotFound());
     }
 
@@ -406,20 +551,22 @@ class AppointmentApiTest {
 
     // ---------- helpers ----------
 
-    private Instant kst(int y, int m, int d, int hour, int minute) {
-        return LocalDateTime.of(y, m, d, hour, minute).atZone(KST).toInstant();
+    private long create(String clinicName, LocalDate on, LocalTime at) throws Exception {
+        return createAppointment(clinicName, on, at, null);
     }
 
-    private long create(String clinicName, Instant at) throws Exception {
-        return createWithCard(clinicName, at, null);
+    private long createWithCards(String clinicName, LocalDate on, List<Long> cardIds)
+            throws Exception {
+        return createAppointment(clinicName, on, null, cardIds);
     }
 
-    private long createWithCard(String clinicName, Instant at, Long cardId) throws Exception {
+    private long createAppointment(String clinicName, LocalDate on, LocalTime at,
+                                   List<Long> cardIds) throws Exception {
         String body = mockMvc.perform(post("/api/me/appointments")
                         .header("Authorization", token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new CreateAppointmentRequest(
-                                clinicName, null, null, at, cardId, null))))
+                                clinicName, null, null, on, at, cardIds, null, null))))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
         return objectMapper.readTree(body).path("appointmentId").asLong();

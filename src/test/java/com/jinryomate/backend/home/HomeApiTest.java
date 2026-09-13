@@ -131,14 +131,14 @@ class HomeApiTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new CreateAppointmentRequest(
                                 "서울OO병원", "내과", "재진",
-                                Instant.now().plus(5, ChronoUnit.DAYS), cardId, null))))
+                                LocalDate.now().plusDays(5), null, List.of(cardId), null, null))))
                 .andExpect(status().isOk());
 
         mockMvc.perform(get("/api/me/home").header("Authorization", token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.lastVisitedOn").value("2026-09-04"))
                 .andExpect(jsonPath("$.nextAppointment.clinicName").value("서울OO병원"))
-                .andExpect(jsonPath("$.nextAppointment.cardTitle").exists());
+                .andExpect(jsonPath("$.nextAppointment.cards[0].title").exists());
     }
 
     @Test

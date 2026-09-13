@@ -24,7 +24,8 @@ import com.jinryomate.backend.profile.entity.HealthProfile;
 import com.jinryomate.backend.profile.repository.HealthProfileRepository;
 import com.jinryomate.backend.visit.entity.VisitRecord;
 import com.jinryomate.backend.visit.repository.VisitRecordRepository;
-import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -39,6 +40,14 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @RequiredArgsConstructor
 public class BriefingCardService {
+
+    /**
+     * 일정이 지났는지 견줄 기준 시간대.
+     *
+     * <p>일정은 날짜만 있어서 "오늘"이 어디의 오늘인지 정해야 한다. 대상이 국내라
+     * KST 로 고정한다 — {@code AppointmentService} 와 같은 이유다.
+     */
+    private static final ZoneId ZONE = ZoneId.of("Asia/Seoul");
 
     private final BriefingCardRepository cardRepository;
     private final HealthProfileRepository profileRepository;
@@ -161,15 +170,15 @@ public class BriefingCardService {
      */
     private CardLinks linksOf(Long cardId) {
         List<Appointment> appointments = appointmentRepository.findAllByCardIdIn(List.of(cardId));
-        Instant now = Instant.now();
+        LocalDate today = LocalDate.now(ZONE);
 
         Appointment upcoming = appointments.stream()
                 .filter(a -> a.getStatus() != Appointment.Status.CANCELED)
-                .filter(a -> !a.getScheduledAt().isBefore(now))
-                .min(Comparator.comparing(Appointment::getScheduledAt))
+                .filter(a -> !a.getScheduledOn().isBefore(today))
+                .min(Comparator.comparing(Appointment::getScheduledOn))
                 .orElseGet(() -> appointments.stream()
                         .filter(a -> a.getStatus() != Appointment.Status.CANCELED)
-                        .max(Comparator.comparing(Appointment::getScheduledAt))
+                        .max(Comparator.comparing(Appointment::getScheduledOn))
                         .orElse(null));
 
         return CardLinks.of(upcoming, visitRecordRepository.findByCardId(cardId).orElse(null));
@@ -246,7 +255,8 @@ public class BriefingCardService {
                 .toList();
 
         // 일정과 진료 기록 둘 다 연결만 끊는다. 끊기 전에 지우면 외래키에 걸린다.
-        appointmentRepository.findAllByCardIdIn(cardIds).forEach(Appointment::detachCard);
+        appointmentRepository.findAllByCardIdIn(cardIds)
+                .forEach(a -> a.detachCards(cardIds));
         visitRecordRepository.findAllByCardIdIn(cardIds).forEach(VisitRecord::detachCard);
 
         // 버전 체인은 자식이 부모를 가리키므로 최신부터 지운다.

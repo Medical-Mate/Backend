@@ -29,7 +29,8 @@ public record CardLinks(CardResponse.Appointment appointment, CardResponse.Visit
                         appointment.getId(),
                         appointment.getClinicName(),
                         appointment.getDepartment(),
-                        appointment.getScheduledAt()),
+                        appointment.getScheduledOn(),
+                        appointment.getScheduledTime()),
                 visit == null ? null : new CardResponse.Visit(
                         visit.getId(),
                         visit.getClinicName(),
