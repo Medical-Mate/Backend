@@ -118,7 +118,9 @@ public class BriefingCardService {
     @Transactional(readOnly = true)
     public List<CardSummary> list(Long userId) {
         Map<Long, String> clinicByCardId = new HashMap<>();
-        visitRecordRepository.findAllByUserIdOrderByVisitedOnDescIdDesc(userId)
+        visitRecordRepository.findAllByUserIdOrderByVisitedOnDescIdDesc(userId).stream()
+                // 카드를 지우면 기록은 남고 연결만 끊긴다. 그 기록은 어느 카드에도 안 붙는다.
+                .filter(v -> v.getCard() != null)
                 .forEach(v -> clinicByCardId.put(v.getCard().getId(), v.getClinicName()));
 
         return cardRepository.findAllByUserIdOrderByCreatedAtDescIdDesc(userId).stream()

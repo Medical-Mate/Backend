@@ -194,6 +194,10 @@ public class VisitRecordController {
             description = """
                     기록 탭의 "진료 기록" 쪽입니다 (화면 1j). 최근 진료일 순으로 옵니다.
 
+                    `followUp` 은 상세와 같은 모양입니다. **`approximate` 가 `true` 면
+                    달력에도 "전후" 를 붙여 주세요** — "2주 뒤" 를 그날만 되는 것처럼
+                    그리면 안 됩니다(화면 1r-1 · 1r-2).
+
                     목록에는 원문(`rawNote`)이 담기지 않습니다. 증상·복용약이 섞인 긴 텍스트라
                     목록마다 실어 나를 이유가 없습니다. 상세는 `GET /api/visits/{id}` 로 봅니다.
 

@@ -378,6 +378,22 @@ class VisitRecordApiTest {
                 .andExpect(status().isUnauthorized());
     }
 
+
+    @Test
+    @DisplayName("카드를 지운 뒤에도 카드 목록이 열린다")
+    void 카드_삭제후_목록() throws Exception {
+        // #88 로 진료 기록이 살아남게 되면서 card 가 null 인 기록이 생긴다.
+        // 목록이 그 기록의 카드 id 를 읽으면 터진다.
+        long cardId = confirmedCard();
+        createVisitOn(cardId);
+
+        mockMvc.perform(delete("/api/cards/" + cardId).header("Authorization", token))
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(get("/api/me/cards").header("Authorization", token))
+                .andExpect(status().isOk());
+    }
+
     // ---------- helpers ----------
 
     private CreateVisitRequest fullRecord() {
