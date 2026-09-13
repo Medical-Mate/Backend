@@ -1,5 +1,7 @@
 package com.jinryomate.backend.ai.dto;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+
 /**
  * 무엇이 문장에 라벨을 붙였나. AI 계약의 {@code labels_meta} · {@code provenance}.
  *
@@ -15,6 +17,14 @@ package com.jinryomate.backend.ai.dto;
  */
 public record LabelsMeta(String modelId, String promptVersion) {
 
+    /**
+     * 응답에 나가지 않는다.
+     *
+     * <p>{@code isEmpty} 라 Jackson 이 {@code empty} 라는 필드로 읽어 응답에 실었다.
+     * {@link FollowUp} 에서 같은 것을 고쳐 놓고 여기서 되풀이했다 — 파생 메서드를
+     * 붙일 때마다 응답에 새는지 봐야 한다.
+     */
+    @JsonIgnore
     public boolean isEmpty() {
         return (modelId == null || modelId.isBlank())
                 && (promptVersion == null || promptVersion.isBlank());
