@@ -44,17 +44,13 @@ public class AppointmentService {
     @Transactional(readOnly = true)
     public List<AppointmentResponse> listByMonth(Long userId, int year, int month) {
         YearMonth ym = YearMonth.of(year, month);
-        return listBetween(userId,
-                ym.atDay(1).atStartOfDay(ZONE).toInstant(),
-                ym.plusMonths(1).atDay(1).atStartOfDay(ZONE).toInstant());
+        return listBetween(userId, ym.atDay(1), ym.atEndOfMonth());
     }
 
     /** 캘린더 일자별. */
     @Transactional(readOnly = true)
     public List<AppointmentResponse> listByDate(Long userId, LocalDate date) {
-        return listBetween(userId,
-                date.atStartOfDay(ZONE).toInstant(),
-                date.plusDays(1).atStartOfDay(ZONE).toInstant());
+        return listBetween(userId, date, date);
     }
 
     /**
@@ -62,12 +58,14 @@ public class AppointmentService {
      *
      * <p>아직 안 지났고 취소되지 않은 것만. 홈은 보통 하나만 쓰지만 목록으로 돌려준다 —
      * 같은 날 둘이 잡힐 수 있고, 앱이 몇 개를 보여줄지는 화면이 정한다.
+     *
+     * <p><b>오늘은 포함한다.</b> 날짜로 견주므로 오전에 잡힌 진료도 그날 하루는 남는다.
+     * 시각까지 견주면 오전 10시 진료가 10시 1분에 목록에서 사라진다.
      */
     @Transactional(readOnly = true)
     public List<AppointmentResponse> listUpcoming(Long userId) {
         return appointmentRepository
-                .findAllByUserIdAndStatusAndScheduledAtGreaterThanEqualOrderByScheduledAtAsc(
-                        userId, Appointment.Status.SCHEDULED, Instant.now())
+                .findUpcoming(userId, Appointment.Status.SCHEDULED, LocalDate.now(ZONE))
                 .stream()
                 .map(AppointmentResponse::from)
                 .toList();
@@ -79,9 +77,10 @@ public class AppointmentService {
                 userRepository.findById(userId)
                         .orElseThrow(() -> new ApiException(ErrorCode.UNAUTHORIZED, "다시 로그인해주세요.")),
                 request.clinicName(),
-                request.scheduledAt());
-        appointment.applyDetails(
-                request.department(), request.purpose(), findCard(userId, request.cardId()));
+                request.scheduledOn());
+        appointment.applyDetails(request.department(), request.purpose(), request.origin());
+        appointment.applySchedule(request.scheduledOn(), request.scheduledTime(), false);
+        appointment.applyCards(findCards(userId, request.cardIds()));
         appointment.applyTodos(toTodos(request.todos()));
 
         appointmentRepository.save(appointment);
@@ -95,14 +94,11 @@ public class AppointmentService {
     public AppointmentResponse update(Long userId, Long appointmentId,
                                       UpdateAppointmentRequest request) {
         Appointment appointment = findOwned(userId, appointmentId);
-        appointment.update(
-                request.clinicName(),
-                request.department(),
-                request.purpose(),
-                request.scheduledAt(),
-                request.status(),
-                findCard(userId, request.cardId()),
-                request.clearCard());
+        appointment.update(request.clinicName(), request.department(),
+                request.purpose(), request.status());
+        appointment.applySchedule(
+                request.scheduledOn(), request.scheduledTime(), request.clearTime());
+        appointment.applyCards(findCards(userId, request.cardIds()));
         appointment.applyTodos(toTodos(request.todos()));
 
         log.info("일정 수정 userId={} appointmentId={}", userId, appointmentId);
@@ -117,11 +113,8 @@ public class AppointmentService {
 
     // ---------- 내부 ----------
 
-    private List<AppointmentResponse> listBetween(Long userId, Instant from, Instant to) {
-        return appointmentRepository
-                .findAllByUserIdAndScheduledAtGreaterThanEqualAndScheduledAtLessThanOrderByScheduledAtAsc(
-                        userId, from, to)
-                .stream()
+    private List<AppointmentResponse> listBetween(Long userId, LocalDate from, LocalDate to) {
+        return appointmentRepository.findInRange(userId, from, to).stream()
                 .map(AppointmentResponse::from)
                 .toList();
     }
@@ -141,9 +134,20 @@ public class AppointmentService {
                 .toList();
     }
 
-    /** 남의 카드를 자기 일정에 붙일 수 없다. findOwned 가 소유를 검사한다. */
-    private BriefingCard findCard(Long userId, Long cardId) {
-        return cardId == null ? null : briefingCardService.findOwned(userId, cardId);
+    /**
+     * 붙일 카드를 찾는다. <b>남의 카드는 붙일 수 없다</b> — findOwned 가 소유를 검사한다.
+     *
+     * <p>{@code null} 이면 {@code null} 을 그대로 돌려준다. 엔티티가 그걸 "안 바꿈"으로
+     * 읽고, 빈 목록은 "전부 뗌"이라 구별해야 한다.
+     */
+    private List<BriefingCard> findCards(Long userId, List<Long> cardIds) {
+        if (cardIds == null) {
+            return null;
+        }
+        return cardIds.stream()
+                .distinct()
+                .map(id -> briefingCardService.findOwned(userId, id))
+                .toList();
     }
 
     /** 남의 일정은 존재 자체를 알려주지 않는다. */

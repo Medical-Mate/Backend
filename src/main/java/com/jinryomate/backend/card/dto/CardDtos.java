@@ -13,6 +13,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.List;
 import java.util.Map;
 
@@ -253,9 +254,15 @@ public final class CardDtos {
         /** 무엇이 이 카드를 만들었는지. 프롬프트가 같아도 모델이 바뀌면 결과가 달라진다. */
         public record Meta(String promptVersion, String modelId, String ontologySnapshot, String requestId) {}
 
-        /** 카드에 연결된 진료 예정 일정. 진료를 <b>받을</b> 병원이다. */
+        /**
+         * 카드에 연결된 진료 예정 일정. 진료를 <b>받을</b> 병원이다.
+         *
+         * @param scheduledTime 시각을 아직 안 정했으면 {@code null} 이다. 날짜만 잡아 두는
+         *                      상태가 화면 {@code 1r-2-A} 에 있다
+         */
         public record Appointment(Long appointmentId, String clinicName,
-                                  String department, Instant scheduledAt) {}
+                                  String department, LocalDate scheduledOn,
+                                  LocalTime scheduledTime) {}
 
         /** 카드에 달린 진료 후 기록. 진료를 <b>받은</b> 병원이다. */
         public record Visit(Long visitId, String clinicName, LocalDate visitedOn) {}

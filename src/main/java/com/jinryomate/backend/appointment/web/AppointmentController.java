@@ -41,11 +41,12 @@ public class AppointmentController {
                     - 월 뷰의 점 표시 → `year`·`month`
                     - 일자를 눌렀을 때 → `date`
 
-                    날짜 경계는 **한국 시각(KST)** 기준으로 자릅니다. UTC 로 자르면
-                    오전 9시 이전 일정이 전날로 밀립니다.
+                    **날짜(`scheduledOn`)와 시각(`scheduledTime`)이 따로 옵니다.**
+                    날짜로 견주므로 시간대 때문에 하루가 밀리는 일이 없습니다.
+                    `scheduledTime` 이 `null` 이면 **시간 미정**입니다.
 
-                    `scheduledAt` 은 날짜·시각만 옵니다. **D-day 는 앱이 세세요** —
-                    서버가 계산하면 사용자 시간대와 어긋날 때 하루 틀립니다.
+                    **D-day 는 앱이 세세요** — 서버가 계산하면 사용자 시간대와
+                    어긋날 때 하루 틀립니다.
                     """)
     @GetMapping
     public List<AppointmentResponse> list(
@@ -83,8 +84,16 @@ public class AppointmentController {
             description = """
                     캘린더의 `+` 버튼입니다.
 
-                    **카드 연결은 선택입니다.** 카드 없이 "다음 주 치과"만 적을 수 있어야 합니다.
-                    남의 카드를 연결하려 하면 404입니다.
+                    **날짜(`scheduledOn`)만 필수입니다.** 시각(`scheduledTime`)은 빼고
+                    만들 수 있고, 그 일정은 "시간 미정"으로 옵니다 — 화면 `1r-2-A` 의
+                    "시간 정하고 확정하기" 가 그 상태입니다.
+
+                    **카드는 여러 장 붙일 수 있습니다.** `cardIds` 에 배열로 보내세요 —
+                    화면 `1r-4-B` 가 체크박스이고 개수를 찍습니다. 카드 없이
+                    "다음 주 치과"만 적어도 됩니다. 남의 카드를 붙이려 하면 404입니다.
+
+                    **`origin`** 은 이 일정이 어디서 왔는지입니다. 진료 후 기록의
+                    재방문에서 만들었으면 `VISIT_FOLLOW_UP`, 안 보내면 `MANUAL` 입니다.
 
                     병원명과 진료과는 따로 받습니다. 병원 검색이 붙으면 그대로 채워집니다.
                     화면의 "서울OO병원 내과 재진"은 앱이 세 필드를 조합해 만드세요.
@@ -100,8 +109,16 @@ public class AppointmentController {
             description = """
                     보낸 필드만 바뀝니다.
 
-                    **카드 연결을 끊으려면 `clearCard: true`** 를 보내세요. `cardId: null` 은
-                    "안 바꿈"으로 봅니다 — null 을 두 뜻으로 쓰면 연결을 끊을 방법이 없습니다.
+                    **`cardIds` 는 통째로 갈아끼웁니다.** 체크를 하나 풀었을 때도 화면에
+                    남아 있는 목록을 전부 보내세요. `null` 은 "안 바꿈", `[]` 는
+                    "전부 뗌" 입니다.
+
+                    **시각을 다시 "미정"으로 되돌리려면 `clearTime: true`** 를 보내세요.
+                    `scheduledTime: null` 은 "안 바꿈"으로 봅니다 — null 을 두 뜻으로
+                    쓰면 시각을 지울 방법이 없습니다.
+
+                    **날짜(`scheduledOn`)는 지울 수 없습니다.** 날짜 없는 일정은
+                    캘린더에 그릴 자리가 없어서, 없앨 거면 일정을 지우는 게 맞습니다.
                     """)
     @PatchMapping("/{appointmentId}")
     public AppointmentResponse update(@AuthenticationPrincipal Long userId,
