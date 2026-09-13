@@ -254,8 +254,13 @@ public final class VisitDtos {
             String clinicName,
             LocalDate visitedOn,
 
-            /** 달력에 점을 찍는 데 쓴다. 없으면 {@code null}. */
-            LocalDate followUpDate
+            /**
+             * 재방문 시점. <b>상세와 같은 모양</b>이라 파싱을 한 벌로 씁니다.
+             *
+             * <p>날짜만 주다가 객체로 바꿨습니다 — {@code approximate} 없이는 달력이
+             * "2주 뒤"를 그날만 되는 것처럼 그립니다(화면 1r-1 · 1r-2).
+             */
+            FollowUp followUp
     ) {
         public static VisitSummary from(VisitRecord v) {
             return new VisitSummary(
@@ -265,7 +270,7 @@ public final class VisitDtos {
                     v.displayCardTitle(),
                     v.getClinicName(),
                     v.getVisitedOn(),
-                    v.getFollowUpDate());
+                    v.followUp());
         }
     }
 }
