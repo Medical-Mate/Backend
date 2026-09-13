@@ -126,6 +126,18 @@ public class BriefingCard {
     @Column(length = 40)
     private String title;
 
+    /**
+     * 진료받을 병원. 시안 {@code 1m-B} 에서 고르고 {@code 1e-1} 하단에 찍힌다.
+     *
+     * <p><b>안 고를 수 있다.</b> "아직 정하지 않았다면 건너뛰어도 돼요" 가 그 화면에 있고,
+     * 그때 목록은 "병원 미정" 으로 찍는다.
+     */
+    @Column(length = 60)
+    private String clinicName;
+
+    @Column(length = 200)
+    private String clinicAddress;
+
     /** 환자가 말한 그대로. <b>줄이지 않는다</b> — 줄이는 순간 환자 말이 아니다. */
     @Column(columnDefinition = "text")
     private String chiefComplaint;
@@ -236,6 +248,25 @@ public class BriefingCard {
         return conditions == null ? List.of() : conditions;
     }
 
+    /**
+     * 진료받을 병원을 정하거나 바꾼다. 화면 {@code 1m-B} 와 {@code 1e-1} 의 "변경".
+     *
+     * <p>{@code null} 이면 그대로 둔다 — 카드 수정은 "보낸 것만 바뀐다"가 규칙이다.
+     */
+    public void applyClinic(Clinic clinic) {
+        if (clinic == null) {
+            return;
+        }
+        this.clinicName = clinic.name();
+        this.clinicAddress = clinic.address();
+    }
+
+    /** 진료받을 병원. 안 골랐으면 {@link Clinic#NONE}. */
+    public Clinic clinic() {
+        Clinic clinic = new Clinic(clinicName, clinicAddress);
+        return clinic.isBlank() ? Clinic.NONE : clinic;
+    }
+
     /** 이 카드가 들고 있는 인적사항. 새 버전에 그대로 물려준다. */
     public PatientSnapshot patientSnapshot() {
         return new PatientSnapshot(patientName, patientAge, patientSex,
@@ -315,6 +346,7 @@ public class BriefingCard {
         next.version = this.version + 1;
         next.parentCard = this;
         next.applyPatientSnapshot(patientSnapshot());
+        next.applyClinic(clinic());
         next.applyTrace(promptVersion, modelId, ontologySnapshot, aiRequestId);
         next.title = title;
         next.chiefComplaint = chiefComplaint;

@@ -18,6 +18,8 @@ import com.jinryomate.backend.auth.client.KakaoClient;
 import com.jinryomate.backend.auth.dto.AuthDtos.KakaoLoginRequest;
 import com.jinryomate.backend.auth.dto.AuthDtos.TokenResponse;
 import com.jinryomate.backend.card.dto.CardDtos.AxisEdit;
+import com.jinryomate.backend.card.dto.CardDtos.ClinicRequest;
+import com.jinryomate.backend.card.dto.CardDtos.GenerateCardRequest;
 import com.jinryomate.backend.card.dto.CardDtos.UpdateCardRequest;
 import com.jinryomate.backend.intake.dto.IntakeDtos.StartSessionRequest;
 import com.jinryomate.backend.intake.entity.Side;
@@ -117,6 +119,112 @@ class BriefingCardApiTest {
     }
 
     @Test
+    @DisplayName("병원을 고르고 카드를 만들면 카드가 그 병원을 들고 다닌다")
+    void 카드의_병원() throws Exception {
+        // 시안 1m-B 의 버튼이 "브리핑 카드 만들기" 다. 병원을 고른 다음에 카드를 만든다.
+        completeOnboarding();
+        long sessionId = startSession();
+
+        String body = mockMvc.perform(post("/api/sessions/" + sessionId + "/card")
+                        .header("Authorization", token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new GenerateCardRequest(
+                                new ClinicRequest("서울OO병원 내과",
+                                        "서울 관악구 남부순환로 1820, 3층")))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.clinic.name").value("서울OO병원 내과"))
+                .andExpect(jsonPath("$.clinic.address").value("서울 관악구 남부순환로 1820, 3층"))
+                .andReturn().getResponse().getContentAsString();
+        long cardId = objectMapper.readTree(body).path("cardId").asLong();
+
+        // 며칠 뒤 기록 탭에서 다시 열어도 남아 있어야 한다. 그게 저장하는 이유다.
+        mockMvc.perform(get("/api/cards/" + cardId).header("Authorization", token))
+                .andExpect(jsonPath("$.clinic.name").value("서울OO병원 내과"));
+
+        // 1r-4-B 의 "09.04 작성 · 서울OO병원 내과" 는 목록에서 그린다.
+        mockMvc.perform(get("/api/me/cards").header("Authorization", token))
+                .andExpect(jsonPath("$[0].clinic.name").value("서울OO병원 내과"));
+
+        // 1e-1 의 "변경".
+        mockMvc.perform(patch("/api/cards/" + cardId)
+                        .header("Authorization", token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new UpdateCardRequest(
+                                null, null, null, null,
+                                new ClinicRequest("OO정형외과의원", "서울 관악구 신림로 245, 5층")))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.clinic.name").value("OO정형외과의원"));
+    }
+
+    @Test
+    @DisplayName("병원을 건너뛰어도 카드가 만들어진다")
+    void 병원_미정() throws Exception {
+        // 1m-B 에 "아직 정하지 않았다면 건너뛰어도 돼요" 가 있다. 정상 상태다.
+        completeOnboarding();
+        long cardId = generateCard(startSession()).path("cardId").asLong();
+
+        mockMvc.perform(get("/api/cards/" + cardId).header("Authorization", token))
+                .andExpect(status().isOk())
+                // 화면은 이때 "병원 미정" 으로 찍는다.
+                .andExpect(jsonPath("$.clinic.name").doesNotExist());
+
+        // 본문을 안 보내도 돈다. 기존 호출이 그대로 살아야 한다.
+        mockMvc.perform(get("/api/me/cards").header("Authorization", token))
+                .andExpect(jsonPath("$[0].clinic.name").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("병원을 안 보내면 이미 정한 병원이 안 바뀐다")
+    void 병원_안_보내면_유지() throws Exception {
+        completeOnboarding();
+        long sessionId = startSessionWithUtterance();
+
+        String body = mockMvc.perform(post("/api/sessions/" + sessionId + "/card")
+                        .header("Authorization", token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new GenerateCardRequest(
+                                new ClinicRequest("서울OO병원 내과", "서울 관악구 …")))))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        long cardId = objectMapper.readTree(body).path("cardId").asLong();
+
+        // 카드 수정은 "보낸 것만 바뀐다"가 규칙이다.
+        mockMvc.perform(patch("/api/cards/" + cardId)
+                        .header("Authorization", token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new UpdateCardRequest(
+                                "고친 설명", null, null, null, null))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.clinic.name").value("서울OO병원 내과"));
+
+        // 확정 뒤 새 버전에도 따라간다.
+        mockMvc.perform(post("/api/cards/" + cardId + "/confirm").header("Authorization", token))
+                .andExpect(status().isOk());
+        mockMvc.perform(patch("/api/cards/" + cardId)
+                        .header("Authorization", token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new UpdateCardRequest(
+                                "또 고친 설명", null, null, null, null))))
+                .andExpect(jsonPath("$.version").value(2))
+                .andExpect(jsonPath("$.clinic.name").value("서울OO병원 내과"));
+    }
+
+    @Test
+    @DisplayName("병원명 없이 주소만 보내면 400")
+    void 병원명_필수() throws Exception {
+        completeOnboarding();
+        long sessionId = startSession();
+
+        mockMvc.perform(post("/api/sessions/" + sessionId + "/card")
+                        .header("Authorization", token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"clinic": {"address": "서울 관악구 …"}}"""))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("INVALID_REQUEST"));
+    }
+
+    @Test
     @DisplayName("카드를 지우면 문답까지 사라진다")
     void 카드_삭제() throws Exception {
         // 증상 대화가 남아 있는데 카드만 지우면, 환자는 지웠다고 생각하면서
@@ -150,7 +258,7 @@ class BriefingCardApiTest {
                         .header("Authorization", token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new UpdateCardRequest(
-                                "고친 설명", null, null, null))))
+                                "고친 설명", null, null, null, null))))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
         long newCardId = objectMapper.readTree(updated).path("cardId").asLong();
@@ -312,7 +420,7 @@ class BriefingCardApiTest {
                         .header("Authorization", token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new UpdateCardRequest(
-                                null, null, null, List.of("어제부터 심해졌어요")))))
+                                null, null, null, List.of("어제부터 심해졌어요"), null))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.version").value(2))
                 .andReturn().getResponse().getContentAsString();
@@ -350,7 +458,7 @@ class BriefingCardApiTest {
                         .header("Authorization", token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new UpdateCardRequest(
-                                null, null, List.of("가".repeat(41)), null))))
+                                null, null, List.of("가".repeat(41)), null, null))))
                 // AI 가 준 값은 unknown 으로 낮춰 저장하지만, 환자가 직접 넣은 값은 400 으로
                 // 되돌린다. 환자는 화면에서 바로 고칠 수 있어 조용히 버리면 오히려 혼란스럽다.
                 .andExpect(status().isBadRequest());
@@ -368,7 +476,7 @@ class BriefingCardApiTest {
                         .content(objectMapper.writeValueAsString(new UpdateCardRequest(
                                 null,
                                 List.of(new AxisEdit("onset", "3주 전 시작")),
-                                null, null))))
+                                null, null, null))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.cardId").value(cardId))
                 .andExpect(jsonPath("$.version").value(1))
@@ -391,7 +499,7 @@ class BriefingCardApiTest {
                         .header("Authorization", token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new UpdateCardRequest(
-                                "바뀐 증상 설명", null, null, null))))
+                                "바뀐 증상 설명", null, null, null, null))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.version").value(2))
                 .andExpect(jsonPath("$.status").value("DRAFT"))

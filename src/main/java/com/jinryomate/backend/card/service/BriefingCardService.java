@@ -3,11 +3,14 @@ package com.jinryomate.backend.card.service;
 import com.jinryomate.backend.card.dto.CardDtos.AxisEdit;
 import com.jinryomate.backend.card.dto.CardDtos.CardResponse;
 import com.jinryomate.backend.card.dto.CardDtos.CardSummary;
+import com.jinryomate.backend.card.dto.CardDtos.ClinicRequest;
+import com.jinryomate.backend.card.dto.CardDtos.GenerateCardRequest;
 import com.jinryomate.backend.card.dto.CardLinks;
 import com.jinryomate.backend.card.dto.CardDtos.UpdateCardRequest;
 import com.jinryomate.backend.card.entity.BriefingCard;
 import com.jinryomate.backend.card.entity.CardAxis;
 import com.jinryomate.backend.card.entity.CardContent;
+import com.jinryomate.backend.card.entity.Clinic;
 import com.jinryomate.backend.card.entity.PatientSnapshot;
 import com.jinryomate.backend.appointment.entity.Appointment;
 import com.jinryomate.backend.appointment.repository.AppointmentRepository;
@@ -71,7 +74,7 @@ public class BriefingCardService {
      * 이미 만들어진 카드는 그대로 남는다.
      */
     @Transactional
-    public CardResponse generate(Long userId, Long sessionId) {
+    public CardResponse generate(Long userId, Long sessionId, GenerateCardRequest request) {
         IntakeSession session = intakeSessionService.findOwned(userId, sessionId);
 
         BriefingCard existing = cardRepository.findFirstBySessionIdOrderByVersionDesc(sessionId).orElse(null);
@@ -88,6 +91,7 @@ public class BriefingCardService {
         // 알레르기·복용약·기저질환도 여기서 박는다. 의사에게 보여주는 한 장이 안전 정보를
         // 얻으려고 API 를 두 번 부르게 하면 안 된다.
         card.applyPatientSnapshot(PatientSnapshot.from(profile));
+        card.applyClinic(toClinic(request == null ? null : request.clinic()));
         card.applyContent(validated.content());
         if (assembled.provenance() != null) {
             card.applyTrace(
@@ -136,6 +140,16 @@ public class BriefingCardService {
     }
 
     /**
+     * 요청의 병원을 저장할 값으로 옮긴다.
+     *
+     * <p>안 보냈으면 {@code null} 을 돌려준다 — 엔티티가 그걸 "안 바꿈"으로 읽는다.
+     * 카드 수정은 "보낸 것만 바뀐다"가 규칙이다.
+     */
+    private Clinic toClinic(ClinicRequest requested) {
+        return requested == null ? null : new Clinic(requested.name(), requested.address());
+    }
+
+    /**
      * 카드에 매달린 일정과 진료 기록을 찾는다.
      *
      * <p><b>카드에는 병원이 없다.</b> 시안 {@code 1e-1} 의 "진료받을 병원"은 연결된
@@ -180,6 +194,7 @@ public class BriefingCardService {
         CardContent merged = merge(target, request);
         CardContentValidator.Result validated = validator.validate(merged);
         target.applyContent(validated.content());
+        target.applyClinic(toClinic(request.clinic()));
 
         log.info("카드 수정 userId={} cardId={} version={} rejected={}",
                 userId, target.getId(), target.getVersion(), validated.rejectedFields());
