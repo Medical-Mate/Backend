@@ -3,6 +3,7 @@ package com.jinryomate.backend.visit.entity;
 import com.jinryomate.backend.auth.entity.User;
 import com.jinryomate.backend.card.entity.BriefingCard;
 import com.jinryomate.backend.ai.dto.FollowUp;
+import com.jinryomate.backend.ai.dto.LabelsMeta;
 import com.jinryomate.backend.card.entity.CardAxis;
 import jakarta.persistence.*;
 import java.time.Instant;
@@ -199,10 +200,27 @@ public class VisitRecord {
                 followUpApproximate != null && followUpApproximate);
     }
 
-    /** 무엇이 나눴는지. 환자가 직접 적은 기록이면 부르지 않는다. */
-    public void applyTrace(String promptVersion, String modelId) {
-        this.promptVersion = promptVersion;
-        this.modelId = modelId;
+    /**
+     * 무엇이 이 기록을 나눴는지 박는다.
+     *
+     * <p><b>앱이 알려줘야 안다.</b> 저장은 분류와 별개 호출이라, 환자가 1q-1-E 에서 고친 뒤
+     * 저장할 때 서버는 그 값이 어디서 왔는지 알 길이 없다. 안 보내면 비워 둔다 — 환자가
+     * 직접 적은 기록과 구별되지 않지만, 지어내는 것보다 낫다.
+     *
+     * <p>폰이 나눴으면 폰 모델이 찍힌다({@code Qwen3-1.7B-Q4_0}). 온디바이스에서는 이게
+     * 유일한 추적 수단이다 — 우리도 AI 도 그 추론을 본 적이 없다.
+     */
+    public void applyExtractedBy(LabelsMeta extractedBy) {
+        if (extractedBy == null || extractedBy.isEmpty()) {
+            return;
+        }
+        this.modelId = extractedBy.modelId();
+        this.promptVersion = extractedBy.promptVersion();
+    }
+
+    /** 무엇이 나눴는지. 환자가 직접 적었으면 안쪽이 비어 있다. */
+    public LabelsMeta extractedBy() {
+        return new LabelsMeta(modelId, promptVersion);
     }
 
     public void changeVisitedOn(LocalDate visitedOn) {

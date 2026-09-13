@@ -124,7 +124,7 @@ class HomeApiTest {
                         .header("Authorization", token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new CreateVisitRequest(
-                                "서울OO병원", LocalDate.of(2026, 9, 4), null, null, null, "피검사"))))
+                                "서울OO병원", LocalDate.of(2026, 9, 4), null, null, null, "피검사", null))))
                 .andExpect(status().isOk());
         mockMvc.perform(post("/api/me/appointments")
                         .header("Authorization", token)

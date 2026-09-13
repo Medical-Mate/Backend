@@ -5,7 +5,9 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.jinryomate.backend.ai.dto.FollowUp;
+import com.jinryomate.backend.ai.dto.LabelsMeta;
 import com.jinryomate.backend.ai.dto.MemoClassification;
+import com.jinryomate.backend.ai.dto.MemoRequest;
 import com.jinryomate.backend.card.entity.AxisSource;
 import com.jinryomate.backend.card.entity.AxisStatus;
 import com.jinryomate.backend.card.entity.CardAxis;
@@ -44,21 +46,30 @@ public class HttpAiMemoClient implements AiMemoClient {
     }
 
     @Override
-    public MemoClassification classify(String memo, LocalDate visitedOn, String clinicName,
-                                       Map<String, String> labels) {
+    public MemoClassification classify(MemoRequest request) {
         ObjectNode body = objectMapper.createObjectNode();
-        body.put("memo", memo);
-        if (visitedOn != null) {
-            body.put("visit_date", visitedOn.toString());
+        body.put("memo", request.memo());
+        if (request.visitedOn() != null) {
+            body.put("visit_date", request.visitedOn().toString());
         }
-        if (clinicName != null && !clinicName.isBlank()) {
-            body.put("clinic", clinicName);
+        if (request.clinicName() != null && !request.clinicName().isBlank()) {
+            body.put("clinic", request.clinicName());
         }
-        if (labels != null && !labels.isEmpty()) {
+        if (request.hasLabels()) {
             // 라벨이 있으면 AI 가 모델을 부르지 않고 조립만 한다.
             ObjectNode node = body.putObject("labels");
-            labels.forEach(node::put);
-            body.put("classify", false);
+            request.labels().forEach(node::put);
+        }
+        // 기본값이 true 라, 문장만 받으려면 false 를 명시해야 한다.
+        body.put("classify", request.effectiveClassify());
+
+        // 폰이 라벨을 붙였으면 무엇으로 붙였는지 알려준다. 안 보내면 AI 가 provenance 를
+        // client 로 뭉뚱그려 적어, 어느 버전이 이상하게 나눴는지 못 되짚는다.
+        LabelsMeta meta = request.labelsMeta();
+        if (meta != null && !meta.isEmpty()) {
+            ObjectNode node = body.putObject("labels_meta");
+            node.put("model_id", meta.modelId());
+            node.put("prompt_version", meta.promptVersion());
         }
 
         MemoResponse response = caller.call(MEMO_PATH, body, "메모 분류", MemoResponse.class);
