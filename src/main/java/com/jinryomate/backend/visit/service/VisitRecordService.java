@@ -2,7 +2,9 @@ package com.jinryomate.backend.visit.service;
 
 import com.jinryomate.backend.ai.client.AiMemoClient;
 import com.jinryomate.backend.ai.dto.FollowUp;
+import com.jinryomate.backend.ai.dto.LabelsMeta;
 import com.jinryomate.backend.ai.dto.MemoClassification;
+import com.jinryomate.backend.ai.dto.MemoRequest;
 import com.jinryomate.backend.card.dto.CardDtos.Axis;
 import com.jinryomate.backend.card.entity.AxisSource;
 import com.jinryomate.backend.card.entity.AxisStatus;
@@ -16,6 +18,7 @@ import com.jinryomate.backend.visit.dto.VisitDtos.ClassifyMemoRequest;
 import com.jinryomate.backend.visit.dto.VisitDtos.ClassifyMemoResponse;
 import com.jinryomate.backend.visit.dto.VisitDtos.CreateVisitRequest;
 import com.jinryomate.backend.visit.dto.VisitDtos.FollowUpRequest;
+import com.jinryomate.backend.visit.dto.VisitDtos.LabelsMetaRequest;
 import com.jinryomate.backend.visit.dto.VisitDtos.UpdateVisitRequest;
 import com.jinryomate.backend.visit.dto.VisitDtos.VisitAxisRequest;
 import com.jinryomate.backend.visit.dto.VisitDtos.VisitResponse;
@@ -63,6 +66,7 @@ public class VisitRecordService {
                 request.patientNotes(),
                 request.rawNote());
         record.applyAxes(toAxes(request.axes()));
+        record.applyExtractedBy(toLabelsMeta(request.extractedBy()));
         visitRecordRepository.save(record);
 
         // 진료 내용은 민감정보라 값을 로그에 남기지 않는다.
@@ -88,6 +92,7 @@ public class VisitRecordService {
                 request.patientNotes() != null ? request.patientNotes() : record.getPatientNotes(),
                 request.rawNote() != null ? request.rawNote() : record.getRawNote());
         record.applyAxes(toAxes(request.axes()));
+        record.applyExtractedBy(toLabelsMeta(request.extractedBy()));
 
         log.info("진료 후 기록 수정 userId={} visitId={}", userId, visitId);
         return VisitResponse.from(record);
@@ -102,22 +107,35 @@ public class VisitRecordService {
      * 붙일지는 아직 앱만 안다.
      */
     public ClassifyMemoResponse classify(Long userId, ClassifyMemoRequest request) {
-        MemoClassification result = aiMemoClient.classify(
-                request.memo(), request.visitedOn(), request.clinicName(), request.labels());
+        MemoRequest toAi = new MemoRequest(
+                request.memo(), request.visitedOn(), request.clinicName(),
+                request.labels(), request.classify(), toLabelsMeta(request.labelsMeta()));
+
+        MemoClassification result = aiMemoClient.classify(toAi);
 
         Map<String, Axis> axes = new LinkedHashMap<>();
         result.axes().forEach((name, a) -> axes.put(name, Axis.from(a)));
 
-        // 메모 본문은 민감정보라 남기지 않는다. 몇 줄로 나뉘었는지만 남긴다.
-        log.info("메모 분류 userId={} 문장={} 항목={}",
-                userId, result.sentences().size(), axes.size());
+        // 메모 본문은 민감정보라 남기지 않는다. 몇 줄로 나뉘었는지와 모델을 썼는지만 남긴다.
+        log.info("메모 분류 userId={} 문장={} 항목={} 모델호출={}",
+                userId, result.sentences().size(), axes.size(), toAi.effectiveClassify());
 
         return new ClassifyMemoResponse(
                 axes,
                 result.sentences(),
                 result.labels(),
                 result.patientNotes(),
-                result.followUp());
+                result.followUp(),
+                new LabelsMeta(result.modelId(), result.promptVersion()));
+    }
+
+    /** 요청의 폰 모델 정보를 AI 쪽 값으로 옮긴다. 안 보냈으면 null 이다. */
+    private LabelsMeta toLabelsMeta(LabelsMetaRequest requested) {
+        if (requested == null) {
+            return null;
+        }
+        LabelsMeta meta = new LabelsMeta(requested.modelId(), requested.promptVersion());
+        return meta.isEmpty() ? null : meta;
     }
 
     /**

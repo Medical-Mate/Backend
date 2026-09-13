@@ -27,6 +27,7 @@ import com.jinryomate.backend.profile.entity.Sex;
 import com.jinryomate.backend.visit.dto.VisitDtos.ClassifyMemoRequest;
 import com.jinryomate.backend.visit.dto.VisitDtos.CreateVisitRequest;
 import com.jinryomate.backend.visit.dto.VisitDtos.FollowUpRequest;
+import com.jinryomate.backend.visit.dto.VisitDtos.LabelsMetaRequest;
 import com.jinryomate.backend.visit.dto.VisitDtos.UpdateVisitRequest;
 import com.jinryomate.backend.visit.dto.VisitDtos.VisitAxisRequest;
 import java.time.LocalDate;
@@ -127,7 +128,7 @@ class VisitRecordApiTest {
                                 null, null,
                                 List.of(new VisitAxisRequest("medication_instructions", "나프록센 250mg")),
                                 new FollowUpRequest(LocalDate.now().plusDays(7), "1주 뒤", true),
-                                null, null))))
+                                null, null, null))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.axes.medication_instructions.value").value("나프록센 250mg"))
                 // 지운 줄은 사라져야 한다. 병합이면 여기가 남는다.
@@ -148,7 +149,7 @@ class VisitRecordApiTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new ClassifyMemoRequest(
                                 "선생님이 허리 디스크 초기래요. 나프록센 먹으라고 하셨어요. 다음 주에 오라고 하셨어요.",
-                                LocalDate.now(), "○○정형외과", null))))
+                                LocalDate.now(), "○○정형외과", null, null, null))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.sentences.length()").value(3))
                 // 라벨의 키가 sentences 의 인덱스다. 앱이 이걸로 줄을 옮긴다.
@@ -169,9 +170,82 @@ class VisitRecordApiTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new ClassifyMemoRequest(
                                 "선생님이 허리 디스크 초기래요. 나프록센 먹으라고 하셨어요. 다음 주에 오라고 하셨어요.",
-                                LocalDate.now(), "○○정형외과", labels))))
+                                LocalDate.now(), "○○정형외과", labels, null, null))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.labels").value(labels));
+    }
+
+    @Test
+    @DisplayName("classify=false 면 문장만 나눠 주고 모델을 안 부른다")
+    void 문장만_나누기() throws Exception {
+        // 온디바이스 1단계. 폰이 분류하기 전에 같은 번호를 보려고 서버에서 문장만 받는다.
+        mockMvc.perform(post("/api/visits/classify")
+                        .header("Authorization", token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new ClassifyMemoRequest(
+                                "혈액검사를 받았어요. 2주 뒤에 다시 오세요. 약은 없어요.",
+                                LocalDate.now(), "○○정형외과", null, false, null))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.sentences.length()").value(3))
+                // 아직 아무 축에도 안 들어갔다. 라벨은 폰이 붙인다.
+                .andExpect(jsonPath("$.axes.tests.status").value("NOT_ASKED"))
+                .andExpect(jsonPath("$.axes.medication_instructions.status").value("NOT_ASKED"))
+                .andExpect(jsonPath("$.labels['0']").value("none"))
+                // 버리지 않는다. 아직 안 나뉜 문장이 전부 여기 있다.
+                .andExpect(jsonPath("$.patientNotes.length()").value(3));
+    }
+
+    @Test
+    @DisplayName("폰이 붙인 라벨과 폰 모델이 기록에 남는다")
+    void 온디바이스_왕복() throws Exception {
+        String memo = "혈액검사를 받았어요. 2주 뒤에 다시 오세요. 약은 없어요.";
+
+        // 3단계. 폰이 붙인 라벨로 조립하고, 무엇이 붙였는지도 함께 보낸다.
+        String body = mockMvc.perform(post("/api/visits/classify")
+                        .header("Authorization", token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new ClassifyMemoRequest(
+                                memo, LocalDate.now(), "○○정형외과",
+                                Map.of("0", "tests", "1", "follow_up", "2", "medication_instructions"),
+                                null,
+                                new LabelsMetaRequest("Qwen3-1.7B-Q4_0", "small-v4")))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.axes.tests.value").value("혈액검사를 받았어요."))
+                .andExpect(jsonPath("$.axes.follow_up.value").value("2주 뒤에 다시 오세요."))
+                // 서버 모델이 아니라 폰 모델이 돌아와야 한다.
+                .andExpect(jsonPath("$.extractedBy.modelId").value("Qwen3-1.7B-Q4_0"))
+                .andExpect(jsonPath("$.extractedBy.promptVersion").value("small-v4"))
+                .andReturn().getResponse().getContentAsString();
+
+        // 저장할 때 그대로 옮기면 기록에 남는다. 온디바이스에서는 이게 유일한 추적 수단이다.
+        JsonNode classified = objectMapper.readTree(body);
+        long cardId = confirmedCard();
+        mockMvc.perform(post("/api/cards/" + cardId + "/visit")
+                        .header("Authorization", token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new CreateVisitRequest(
+                                "○○정형외과", LocalDate.now(),
+                                List.of(new VisitAxisRequest("tests",
+                                        classified.path("axes").path("tests").path("value").asText())),
+                                null, null, memo,
+                                new LabelsMetaRequest("Qwen3-1.7B-Q4_0", "small-v4")))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.extractedBy.modelId").value("Qwen3-1.7B-Q4_0"))
+                .andExpect(jsonPath("$.extractedBy.promptVersion").value("small-v4"));
+    }
+
+    @Test
+    @DisplayName("폰 모델 정보는 둘 다 있어야 한다")
+    void 라벨_출처_검증() throws Exception {
+        mockMvc.perform(post("/api/visits/classify")
+                        .header("Authorization", token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new ClassifyMemoRequest(
+                                "혈액검사를 받았어요.", null, null, Map.of("0", "tests"), null,
+                                new LabelsMetaRequest("Qwen3-1.7B-Q4_0", "  ")))))
+                // AI 는 필드 둘을 다 요구한다. 여기서 막아야 422 대신 제대로 된 400 이 간다.
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("INVALID_REQUEST"));
     }
 
     @Test
@@ -181,7 +255,7 @@ class VisitRecordApiTest {
                         .header("Authorization", token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(
-                                new ClassifyMemoRequest("  ", null, null, null))))
+                                new ClassifyMemoRequest("  ", null, null, null, null, null))))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error.code").value("INVALID_REQUEST"));
     }
@@ -195,7 +269,7 @@ class VisitRecordApiTest {
                         .header("Authorization", token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new CreateVisitRequest(
-                                null, null, null, null, null, "피검사 해보자고 하셨어요"))))
+                                null, null, null, null, null, "피검사 해보자고 하셨어요", null))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.rawNote").value("피검사 해보자고 하셨어요"));
     }
@@ -314,7 +388,8 @@ class VisitRecordApiTest {
                         new VisitAxisRequest("medication_instructions", "나프록센 500mg·하루 2번 식후")),
                 new FollowUpRequest(LocalDate.now().plusDays(14), "2주 뒤", true),
                 List.of("다음에 올 때 실비보험 서류 챙기기"),
-                "피검사 해보자고 하시고, 결과는 3일 뒤에 나온대요");
+                "피검사 해보자고 하시고, 결과는 3일 뒤에 나온대요",
+                new LabelsMetaRequest("Qwen3-1.7B-Q4_0", "small-v4"));
     }
 
     private long createVisitOn(long cardId) throws Exception {
@@ -328,7 +403,7 @@ class VisitRecordApiTest {
                         .content(objectMapper.writeValueAsString(new CreateVisitRequest(
                                 clinic, visitedOn,
                                 List.of(new VisitAxisRequest("tests", "혈액검사")),
-                                null, null, "피검사 해보자고 하셨어요"))))
+                                null, null, "피검사 해보자고 하셨어요", null))))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
         return objectMapper.readTree(body).path("visitId").asLong();

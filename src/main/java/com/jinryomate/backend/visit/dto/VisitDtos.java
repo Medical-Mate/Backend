@@ -1,6 +1,7 @@
 package com.jinryomate.backend.visit.dto;
 
 import com.jinryomate.backend.ai.dto.FollowUp;
+import com.jinryomate.backend.ai.dto.LabelsMeta;
 import com.jinryomate.backend.card.dto.CardDtos.Axis;
 import com.jinryomate.backend.visit.entity.VisitRecord;
 import jakarta.validation.Valid;
@@ -80,7 +81,10 @@ public final class VisitDtos {
             List<@Size(max = 500) String> patientNotes,
 
             @Size(max = 2000, message = "2000자 이내로 입력해주세요.")
-            String rawNote
+            String rawNote,
+
+            @Valid
+            LabelsMetaRequest extractedBy
     ) {}
 
     /**
@@ -106,7 +110,10 @@ public final class VisitDtos {
             List<@Size(max = 500) String> patientNotes,
 
             @Size(max = 2000, message = "2000자 이내로 입력해주세요.")
-            String rawNote
+            String rawNote,
+
+            @Valid
+            LabelsMetaRequest extractedBy
     ) {}
 
     /**
@@ -129,7 +136,38 @@ public final class VisitDtos {
             String clinicName,
 
             @Size(max = 200, message = "문장이 너무 많습니다.")
-            Map<String, String> labels
+            Map<String, String> labels,
+
+            /**
+             * 모델을 부르지 말라는 표시. 온디바이스 1단계.
+             *
+             * <p>비우면 서버가 정합니다 — {@code labels} 가 있으면 어차피 모델을 안 부릅니다.
+             * <b>{@code false} 를 명시하면 문장만 나눠 돌려줍니다.</b> 그때 {@code axes} 는
+             * 비어 있고 {@code labels} 는 전부 {@code "none"} 입니다.
+             */
+            Boolean classify,
+
+            /** 폰이 라벨을 붙였으면 무엇으로 붙였는지. {@code labels} 와 함께 보냅니다. */
+            @Valid
+            LabelsMetaRequest labelsMeta
+    ) {}
+
+    /**
+     * 폰이 문장에 라벨을 붙였을 때 무엇으로 붙였는지.
+     *
+     * <p><b>안 보내면 기록에 "무엇이 나눴는지"가 안 남습니다.</b> 서버는 라벨만 받으므로
+     * 알 길이 없고, 나중에 "어느 버전이 이상하게 나눴나"를 못 되짚습니다.
+     *
+     * <p>AI 계약이 필드 둘만 받습니다. 더 보내면 거부됩니다.
+     */
+    public record LabelsMetaRequest(
+            @NotBlank(message = "모델 이름이 필요합니다.")
+            @Size(max = 80, message = "모델 이름은 80자 이내입니다.")
+            String modelId,
+
+            @NotBlank(message = "프롬프트 버전이 필요합니다.")
+            @Size(max = 40, message = "프롬프트 버전은 40자 이내입니다.")
+            String promptVersion
     ) {}
 
     // ---------- 응답 ----------
@@ -148,7 +186,15 @@ public final class VisitDtos {
             List<String> patientNotes,
 
             /** 재방문 시점. 저장 요청의 {@code followUp} 으로 그대로 옮기면 됩니다. */
-            FollowUp followUp
+            FollowUp followUp,
+
+            /**
+             * 무엇이 이 문장들을 나눴는지. 저장 요청의 {@code extractedBy} 로 옮겨 주세요.
+             *
+             * <p>서버가 나눴으면 {@code memo-small-v4} / {@code apac.amazon.nova-pro-v1:0},
+             * 폰이 나눴으면 보내신 {@code labelsMeta} 가 그대로 돌아옵니다.
+             */
+            LabelsMeta extractedBy
     ) {}
 
     /** 와이어프레임의 요약 카드. */
@@ -167,9 +213,12 @@ public final class VisitDtos {
             List<String> patientNotes,
             String rawNote,
 
-            /** 무엇이 나눴는지. 환자가 직접 적었으면 둘 다 {@code null} 이다. */
-            String promptVersion,
-            String modelId
+            /**
+             * 무엇이 나눴는지. 환자가 직접 적었으면 안쪽이 비어 있습니다.
+             *
+             * <p>폰이 나눴으면 여기에 폰 모델이 찍힙니다 — {@code Qwen3-1.7B-Q4_0}.
+             */
+            LabelsMeta extractedBy
     ) {
         public static VisitResponse from(VisitRecord v) {
             Map<String, Axis> axes = new LinkedHashMap<>();
@@ -185,8 +234,7 @@ public final class VisitDtos {
                     v.followUp(),
                     List.copyOf(v.getPatientNotes()),
                     v.getRawNote(),
-                    v.getPromptVersion(),
-                    v.getModelId());
+                    v.extractedBy());
         }
     }
 

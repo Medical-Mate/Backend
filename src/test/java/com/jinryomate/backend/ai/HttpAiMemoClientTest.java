@@ -10,6 +10,7 @@ import com.jinryomate.backend.ai.client.AiSigner;
 import com.jinryomate.backend.ai.client.HttpAiMemoClient;
 import com.jinryomate.backend.ai.dto.FollowUp;
 import com.jinryomate.backend.ai.dto.MemoClassification;
+import com.jinryomate.backend.ai.dto.MemoRequest;
 import com.jinryomate.backend.card.entity.AxisSource;
 import com.jinryomate.backend.card.entity.AxisStatus;
 import java.time.LocalDate;
@@ -216,7 +217,7 @@ class HttpAiMemoClientTest {
                 .andRespond(withSuccess(REAL_RESPONSE, MediaType.APPLICATION_JSON));
 
         new HttpAiMemoClient(builder.build(), new ObjectMapper(), new AiSigner("test-secret"))
-                .classify("메모", null, null, null);
+                .classify(MemoRequest.classifyOnServer("메모", null, null));
 
         server.verify();
     }
@@ -228,6 +229,6 @@ class HttpAiMemoClientTest {
                 .andRespond(withSuccess(response, MediaType.APPLICATION_JSON));
 
         return new HttpAiMemoClient(builder.build(), new ObjectMapper(), new AiSigner("test-secret"))
-                .classify("메모", LocalDate.of(2026, 9, 12), "OO정형외과", null);
+                .classify(MemoRequest.classifyOnServer("메모", LocalDate.of(2026, 9, 12), "OO정형외과"));
     }
 }

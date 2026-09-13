@@ -1,8 +1,7 @@
 package com.jinryomate.backend.ai.client;
 
 import com.jinryomate.backend.ai.dto.MemoClassification;
-import java.time.LocalDate;
-import java.util.Map;
+import com.jinryomate.backend.ai.dto.MemoRequest;
 
 /**
  * 진료 후 메모를 항목으로 나눠주는 AI 서비스 호출. 화면 {@code 1p} 의 "AI로 정리하기".
@@ -18,15 +17,13 @@ public interface AiMemoClient {
     /**
      * 메모를 네 축으로 나눈다.
      *
-     * <p><b>{@code labels} 가 있으면 모델을 부르지 않는다.</b> 앞선 호출이 돌려준 라벨을 그대로
-     * 넘기면 AI 가 재조립만 한다. 환자가 줄을 옮길 때마다 Bedrock 을 부르지 않기 위한
-     * 자리이고, 비용은 우리 크레딧에서 나간다.
+     * <p><b>모델을 안 부르는 경로가 둘 있다.</b> 둘 다 비용이 0 이고, 그 비용은 우리
+     * 크레딧에서 나가므로 켜는 시점을 우리가 쥔다.
      *
-     * @param memo       환자가 적은 원문. 2000자까지
-     * @param visitedOn  진료일. 재방문 날짜를 "2주 뒤"에서 계산하는 기준이 된다. 없으면 {@code null}
-     * @param clinicName 병원 이름. 없으면 {@code null}
-     * @param labels     문장 인덱스 → 축 이름. 있으면 이대로 조립한다. 처음 부를 때는 {@code null}
+     * <ul>
+     *   <li>{@code classify=false} · 라벨 없음 — <b>문장만</b> 나눠 돌려준다. 폰이 분류할 때 1단계
+     *   <li>라벨 있음 — 그 라벨대로 <b>조립만</b> 한다. 1q-1-E 수정과 온디바이스 3단계가 같은 경로다
+     * </ul>
      */
-    MemoClassification classify(String memo, LocalDate visitedOn, String clinicName,
-                                Map<String, String> labels);
+    MemoClassification classify(MemoRequest request);
 }

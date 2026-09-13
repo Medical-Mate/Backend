@@ -63,6 +63,33 @@ public class VisitRecordController {
                     한 번 정리에 Bedrock 호출이 열 번 나갑니다.
 
                     `sentences` 의 인덱스가 `labels` 의 키입니다.
+
+                    ### 온디바이스 — 폰이 분류할 때
+
+                    한 엔드포인트를 세 가지로 씁니다.
+
+                    | 보내는 것 | 하는 일 | 모델 |
+                    |---|---|---|
+                    | `memo` 만 | 서버가 나눈다 (기본) | 씁니다 |
+                    | `memo` + `classify: false` | **문장만** 나눠 준다 | 안 씁니다 |
+                    | `memo` + `labels` + `labelsMeta` | 그 라벨대로 조립 | 안 씁니다 |
+
+                    **문장 분리는 항상 서버가 합니다.** 폰과 서버가 같은 번호를 봐야
+                    `labels` 인덱스가 맞기 때문입니다. 폰에서 따로 쪼개지 마세요.
+
+                    ```
+                    ① POST /api/visits/classify  { memo, classify: false }
+                       → sentences[3], axes 전부 NOT_ASKED, labels 전부 "none"
+                    ② 폰 모델이 문장마다 라벨을 붙인다
+                    ③ POST /api/visits/classify  { memo, labels, labelsMeta }
+                       → 조립된 axes + followUp
+                    ```
+
+                    `labelsMeta` 는 **폰 모델 정보**입니다(`Qwen3-1.7B-Q4_0` / `small-v4`).
+                    안 보내시면 기록에 "무엇이 나눴는지"가 안 남습니다 — 서버는 라벨만
+                    받으므로 알 길이 없고, 나중에 어느 버전이 이상하게 나눴는지 못 되짚습니다.
+
+                    응답의 `extractedBy` 를 저장 요청의 `extractedBy` 로 그대로 옮겨 주세요.
                     """)
     @PostMapping("/visits/classify")
     public ClassifyMemoResponse classify(@AuthenticationPrincipal Long userId,
@@ -103,6 +130,12 @@ public class VisitRecordController {
                     `POST /api/me/appointments` 를 앱에서 따로 불러주세요. 환자가 보고
                     등록하는 흐름(`1r-2-A`)이고, AI 가 날짜를 잘못 뽑아도 조용히 일정이
                     생기지 않아야 합니다.
+
+                    ### 무엇이 나눴는지
+
+                    분류 응답의 `extractedBy` 를 그대로 옮겨 주세요. 폰이 나눴으면 폰 모델이
+                    기록에 남습니다. 안 보내시면 비어 있고, 환자가 직접 적은 기록과
+                    구별되지 않습니다.
 
                     **녹음은 저장하지 않습니다.** 오디오 컬럼 자체가 없습니다.
                     """)
