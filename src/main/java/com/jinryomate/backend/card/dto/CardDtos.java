@@ -11,6 +11,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 
@@ -131,6 +132,21 @@ public final class CardDtos {
 
             Patient patient,
 
+            /**
+             * 진료를 <b>받을</b> 병원. 시안 {@code 1e-1} 의 "진료받을 병원".
+             *
+             * <p>카드에 연결된 일정에서 옵니다. 일정을 안 잡았으면 {@code null} 입니다.
+             */
+            Appointment appointment,
+
+            /**
+             * 진료를 <b>받은</b> 병원. 아직 진료 전이면 {@code null} 입니다.
+             *
+             * <p>{@code appointment} 와 다를 수 있습니다 — 예약은 A 병원에 잡아 두고
+             * 실제로는 B 병원에 갈 수 있습니다.
+             */
+            Visit visit,
+
             String title,
             String chiefComplaint,
             Map<String, Axis> axes,
@@ -183,11 +199,18 @@ public final class CardDtos {
         /** 무엇이 이 카드를 만들었는지. 프롬프트가 같아도 모델이 바뀌면 결과가 달라진다. */
         public record Meta(String promptVersion, String modelId, String ontologySnapshot, String requestId) {}
 
-        public static CardResponse from(BriefingCard c) {
-            return from(c, List.of());
+        /** 카드에 연결된 진료 예정 일정. 진료를 <b>받을</b> 병원이다. */
+        public record Appointment(Long appointmentId, String clinicName,
+                                  String department, Instant scheduledAt) {}
+
+        /** 카드에 달린 진료 후 기록. 진료를 <b>받은</b> 병원이다. */
+        public record Visit(Long visitId, String clinicName, LocalDate visitedOn) {}
+
+        public static CardResponse from(BriefingCard c, CardLinks links) {
+            return from(c, List.of(), links);
         }
 
-        public static CardResponse from(BriefingCard c, List<String> rejectedFields) {
+        public static CardResponse from(BriefingCard c, List<String> rejectedFields, CardLinks links) {
             Map<String, Axis> axes = new java.util.LinkedHashMap<>();
             c.axesByName().forEach((name, a) -> axes.put(name, Axis.from(a)));
 
@@ -201,6 +224,8 @@ public final class CardDtos {
                             new Allergies(c.getAllergiesStatus(), c.getAllergiesText()),
                             new ListField(c.getMedicationsStatus(), List.copyOf(c.getMedications())),
                             new ListField(c.getConditionsStatus(), List.copyOf(c.getConditions()))),
+                    links.appointment(),
+                    links.visit(),
                     c.getTitle(),
                     c.getChiefComplaint(),
                     axes,
