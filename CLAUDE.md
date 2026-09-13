@@ -324,7 +324,26 @@ S5 되묻기는 기억 재구성 방식입니다. 오디오 컬럼 자체를 만
 
 **앱·AI 담당자에게는 CloudFront 주소를 줍니다.** 일부 기관 방화벽(FortiGate)이 신규 등록 도메인을 `Newly Observed Domain`으로 24~72시간 차단하는데, `cloudfront.net`은 그 분류에 걸리지 않습니다. 발표장 네트워크에서도 같은 이유로 더 안전합니다.
 
-**배포는 `main`에 머지하면 자동입니다.** GitHub Actions가 GHCR에 이미지를 올리고, 서버에서 `docker compose pull && up -d`로 갈아끼웁니다. **서버에서 빌드하지 않습니다** — 2GB에 컨테이너가 넷 올라가는데 거기서 Gradle을 돌리면 OOM입니다.
+**머지해도 서버는 안 바뀝니다. 마지막 한 걸음은 사람이 합니다.**
+
+GitHub Actions는 **GHCR에 이미지를 올리는 데서 끝납니다**(`image.yml`). 서버에 접속해 갈아끼우는 잡은 없습니다. `main`에 머지한 뒤 직접 하세요.
+
+```bash
+ssh -i ~/.ssh/lightsail-jinryomate.pem ubuntu@54.116.115.128
+cd /opt/jinryomate
+docker compose -f docker-compose.prod.yml pull backend
+docker compose -f docker-compose.prod.yml up -d backend
+```
+
+**`sudo`를 붙이지 마세요.** GHCR 자격 증명이 `~ubuntu/.docker/config.json`에만 있고 `root`에는 없어서, `sudo`로 돌리면 비공개 이미지를 못 당깁니다. `ubuntu`가 이미 `docker` 그룹이라 필요도 없습니다.
+
+**되돌릴 수 없는 마이그레이션 앞에는 `pg_dump`를 먼저 뜹니다.** 컬럼을 지우거나 이름을 바꾸는 것이 여기 들어갑니다(V21이 `scheduled_at`·`card_id`를 드롭했습니다). 절차는 [`docs/deploy-lightsail.md`](docs/deploy-lightsail.md)의 백업 절에 있습니다.
+
+**갈아끼운 뒤에는 확인까지 합니다.** 컨테이너가 `healthy`가 됐는지, `flyway_schema_history`의 맨 위가 방금 낸 버전이고 `success = t`인지 봅니다. 계약이 바뀐 배포라면 운영 `/v3/api-docs`에 새 필드가 떠 있는지가 가장 확실한 증거입니다.
+
+**자동 배포를 안 붙인 이유** — 서버 SSH 키를 Actions 시크릿에 태워야 하고, 그러면 되돌릴 수 없는 마이그레이션도 무인으로 나갑니다. 3주 일정에서는 운영 DB를 건드리는 순간에 사람이 개입하는 편이 낫다고 봤습니다. 배포가 하루 여러 번이 되면 다시 볼 일입니다.
+
+**서버에서 빌드하지 않습니다** — 2GB에 컨테이너가 넷 올라가는데 거기서 Gradle을 돌리면 OOM입니다. `:latest` 말고 `:<커밋 SHA>` 태그도 함께 올라가는데, 롤백할 때 짚는 태그입니다.
 
 **인터넷에 열리는 것은 Caddy뿐입니다.** AI와 Postgres는 호스트 포트를 열지 않아 밖에서 보이지 않습니다. 방화벽은 80·443만 열고 22는 관리자 IP로 제한합니다.
 

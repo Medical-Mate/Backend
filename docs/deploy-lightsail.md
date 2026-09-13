@@ -138,12 +138,38 @@ Swagger 는 `https://<PUBLIC_HOST>/swagger-ui.html` 입니다.
 
 ## 다시 배포할 때
 
-`main` 에 머지되면 GitHub Actions 가 이미지를 GHCR 에 올립니다. 서버에서는 받아서 갈아끼우기만 합니다.
+`main` 에 머지되면 GitHub Actions 가 이미지를 GHCR 에 올립니다. **거기까지가 자동입니다** — 서버에 접속해 갈아끼우는 잡은 없으니 아래를 직접 돌리세요.
 
 ```bash
 docker compose -f docker-compose.prod.yml pull backend
 docker compose -f docker-compose.prod.yml up -d backend
 ```
+
+> **`sudo` 를 붙이지 마세요.** GHCR 자격 증명이 `~ubuntu/.docker/config.json` 에만 있고 `root` 에는 없습니다. `sudo` 로 돌리면 root 로 도는데 자격 증명이 없어 비공개 이미지를 못 당깁니다. `ubuntu` 는 이미 `docker` 그룹이라 `sudo` 가 필요 없습니다.
+
+**되돌릴 수 없는 마이그레이션이 들어 있으면 [백업](#백업) 을 먼저 뜹니다.** 컬럼을 지우거나 이름을 바꾸는 것이 여기 들어갑니다.
+
+### 갈아끼운 뒤 확인
+
+```bash
+# 1. 컨테이너가 떴는가
+docker inspect -f '{{.State.Health.Status}}' jinryomate-backend-1
+
+# 2. 마이그레이션이 적용됐는가 — 맨 위가 방금 낸 버전이고 success = t 여야 합니다
+docker compose -f docker-compose.prod.yml exec -T postgres \
+  psql -U jinryomate -d jinryomate \
+  -c "select version, script, success from flyway_schema_history order by installed_rank desc limit 3;"
+
+# 3. 새 코드가 도는가 — 계약이 바뀐 배포라면 이게 가장 확실합니다.
+#    이번에 낸 필드가 운영 스펙에 떠 있는지 봅니다. 없어진 필드도 함께 보세요.
+curl -s https://api.medicalmate.site/v3/api-docs > /tmp/spec.json
+grep -o '"scheduledOn"' /tmp/spec.json | wc -l    # 새 필드: 1 이상이어야 합니다
+grep -o '"scheduledAt"' /tmp/spec.json | wc -l    # 없앤 필드: 0 이어야 합니다
+```
+
+> 스펙 전체가 **한 줄**이라 `grep -c` 는 항상 `0` 아니면 `1` 입니다. 개수를 세려면 위처럼 `grep -o | wc -l` 를 쓰세요.
+
+`healthy` 가 안 되면 `docker compose -f docker-compose.prod.yml logs --tail=100 backend` 를 봅니다. **로그에 요청 본문이 찍히지 않도록 해 두었으니** 그대로 읽어도 됩니다.
 
 **AI 만 바꿀 때도 백엔드는 건드리지 않습니다.**
 
@@ -180,7 +206,21 @@ docker compose -f docker-compose.prod.yml exec -T postgres \
   pg_dump -U jinryomate jinryomate | gzip > backup-$(date +%Y%m%d).sql.gz
 ```
 
-**발표 전날에는 반드시 한 번 떠두세요.**
+**언제 떠야 하나**
+
+- **되돌릴 수 없는 마이그레이션을 내보내기 직전.** 컬럼·테이블을 지우거나 이름을 바꾸는 것이 여기 들어갑니다. Flyway 는 되돌리기가 없어서, 적용한 뒤에는 이 덤프 말고 되살릴 방법이 없습니다
+- **발표 전날 한 번**
+
+마이그레이션 앞이라면 **무엇이 지워지는지 먼저 세어 두면** 옮겨진 것을 나중에 대조할 수 있습니다.
+
+```bash
+# 예: V21 이 scheduled_at 과 card_id 를 드롭하기 전
+docker compose -f docker-compose.prod.yml exec -T postgres \
+  psql -U jinryomate -d jinryomate \
+  -c "select count(*), count(card_id), count(scheduled_at) from appointments;"
+```
+
+덤프는 서버의 `/opt/jinryomate/` 에 남습니다. **환자 데이터가 평문으로 들어 있으므로** 로컬로 내려받거나 어딘가에 올리지 마세요.
 
 ---
 
