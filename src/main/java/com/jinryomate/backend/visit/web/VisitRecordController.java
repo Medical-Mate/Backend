@@ -36,7 +36,18 @@ public class VisitRecordController {
             summary = "진료 후 메모를 항목으로 나눈다",
             description = """
                     화면 `1p` 의 "AI로 정리하기"입니다. 환자가 적은 메모 한 덩이를
-                    **소견 · 검사 · 약 · 재방문**으로 나눠 돌려줍니다.
+                    네 항목으로 나눠 돌려줍니다.
+
+                    | 항목 | 화면 라벨 |
+                    |---|---|
+                    | `findings` | 소견 |
+                    | `tests` | 검사 |
+                    | `medication_instructions` | **약 · 생활 지시** |
+                    | `follow_up` | 재방문 |
+
+                    ⚠️ **`medication_instructions` 는 약만이 아닙니다.** AI 가 축 여섯을
+                    넷으로 줄이면서 생활 지시·금지를 이 축에 접었습니다. 라벨을 "약"으로만
+                    달면 그 줄에 `무거운 거 들지 말라고 하셨어요` 가 찍힙니다.
 
                     **저장하지 않습니다.** 나눈 결과를 `1q-1-E` 에서 고친 뒤
                     `POST /api/cards/{cardId}/visit` 로 따로 저장하세요.
