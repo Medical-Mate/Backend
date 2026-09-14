@@ -37,6 +37,15 @@ public class StubAiMemoClient implements AiMemoClient {
 
     private static final List<String> ALL = List.of(FINDINGS, TESTS, MEDICATION, FOLLOW_UP);
 
+    /**
+     * 이 흉내가 문장을 나누는 규칙의 이름.
+     *
+     * <p><b>실제 AI 값({ split-v2})을 쓰지 않는다.</b> 쪼개는 방식이 전혀 다른데 같은
+     * 이름을 달면, 흉내로 받은 라벨을 진짜 AI 에 되보냈을 때 409 가 안 나고 조용히 어긋난다.
+     * 그게 이 필드로 막으려던 사고다.
+     */
+    private static final String SPLIT_VERSION = "stub-split-v1";
+
     /** AI 가 라벨 없이 나누기만 했을 때 쓰는 표시. 실제 서버와 같은 값이다. */
     private static final String UNLABELED = "none";
 
@@ -54,7 +63,7 @@ public class StubAiMemoClient implements AiMemoClient {
             ALL.forEach(axis -> empty.put(axis, CardAxis.notAsked(axis)));
 
             return new MemoClassification(empty, sentences, unlabeled, List.copyOf(sentences),
-                    FollowUp.NONE, "client-labels", "client");
+                    FollowUp.NONE, "client-labels", "client", SPLIT_VERSION);
         }
 
         Map<String, String> resolved = request.hasLabels() ? request.labels() : guess(sentences);
@@ -84,7 +93,7 @@ public class StubAiMemoClient implements AiMemoClient {
         }
 
         return new MemoClassification(axes, sentences, resolved, notes, FollowUp.NONE,
-                promptVersion(request), modelId(request));
+                promptVersion(request), modelId(request), SPLIT_VERSION);
     }
 
     /** 폰이 붙였다고 알려주면 그 값을 되돌려준다. 실제 AI 도 provenance 를 그렇게 적는다. */

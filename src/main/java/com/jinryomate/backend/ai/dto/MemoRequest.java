@@ -6,8 +6,8 @@ import java.util.Map;
 /**
  * 메모 분류 요청. AI 계약의 {@code MemoRequest} 를 우리 말로 옮긴 것.
  *
- * <p><b>값이 여섯이라 따로 묶었다.</b> 인자로 늘어놓으면 {@code String} 이 둘, 참조형이
- * 넷이라 순서를 틀려도 컴파일러가 못 잡는다.
+ * <p><b>값이 일곱이라 따로 묶었다.</b> 인자로 늘어놓으면 {@code String} 이 셋이라
+ * 순서를 틀려도 컴파일러가 못 잡는다.
  *
  * <p>세 가지로 쓰인다.
  *
@@ -19,9 +19,11 @@ import java.util.Map;
  *   <tr><td>라벨로 조립 (수정 · 온디바이스 3단계)</td><td>있음</td><td>무시</td><td>안 쓴다</td></tr>
  * </table>
  *
- * @param classify   {@code null} 이면 우리가 정한다 — 라벨이 있으면 {@code false}.
- *                   {@code false} 를 명시하면 <b>문장만</b> 나눠 받는다
- * @param labelsMeta 폰이 라벨을 붙였을 때 무엇으로 붙였는지. 서버가 나눌 때는 {@code null}
+ * @param classify     {@code null} 이면 우리가 정한다 — 라벨이 있으면 {@code false}.
+ *                     {@code false} 를 명시하면 <b>문장만</b> 나눠 받는다
+ * @param labelsMeta   폰이 라벨을 붙였을 때 무엇으로 붙였는지. 서버가 나눌 때는 {@code null}
+ * @param splitVersion 앞 응답에서 받은 문장 분리 규칙의 이름({@code "split-v2"}).
+ *                     <b>{@code labels} 와 함께 보낸다</b> — 아래 참고
  */
 public record MemoRequest(
         String memo,
@@ -29,12 +31,13 @@ public record MemoRequest(
         String clinicName,
         Map<String, String> labels,
         Boolean classify,
-        LabelsMeta labelsMeta
+        LabelsMeta labelsMeta,
+        String splitVersion
 ) {
 
     /** 서버가 나누는 기본 호출. */
     public static MemoRequest classifyOnServer(String memo, LocalDate visitedOn, String clinicName) {
-        return new MemoRequest(memo, visitedOn, clinicName, null, null, null);
+        return new MemoRequest(memo, visitedOn, clinicName, null, null, null, null);
     }
 
     /** 라벨이 있으면 조립만 한다. 없을 때만 {@code classify} 가 뜻을 갖는다. */
@@ -48,5 +51,18 @@ public record MemoRequest(
             return false;
         }
         return classify == null || classify;
+    }
+
+    /**
+     * 분리 규칙 이름을 실어 보낼지.
+     *
+     * <p><b>라벨이 있을 때만 뜻이 있다.</b> 라벨이 없으면 AI 가 새로 나누고 새 이름을
+     * 돌려주므로 견줄 대상이 없다. 그때 보내면 방금 만들 값을 미리 단정하는 꼴이 된다.
+     *
+     * <p>없으면 안 보낸다. 계약이 "안 보내면 검사하지 않는다" 라, 앱이 아직 안 실어
+     * 보내도 지금까지처럼 동작한다.
+     */
+    public boolean shouldSendSplitVersion() {
+        return hasLabels() && splitVersion != null && !splitVersion.isBlank();
     }
 }

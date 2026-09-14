@@ -149,7 +149,24 @@ public final class VisitDtos {
 
             /** 폰이 라벨을 붙였으면 무엇으로 붙였는지. {@code labels} 와 함께 보냅니다. */
             @Valid
-            LabelsMetaRequest labelsMeta
+            LabelsMetaRequest labelsMeta,
+
+            /**
+             * 앞 응답의 {@code splitVersion} 을 <b>{@code labels} 와 함께</b> 그대로 보내세요.
+             *
+             * <p><b>문장 번호가 라벨의 주소입니다.</b> AI 가 문장 나누는 규칙을 고치면 같은
+             * 메모가 다른 개수·다른 번호로 나뉩니다. 그 배포가 {@code 1p}(메모 작성)와
+             * {@code 1q-2}(라벨 수정) 사이에 끼면, 앱은 예전 번호로 매긴 라벨을 보내고
+             * 서버는 새 문장에 그 번호를 붙입니다 — <b>200 이 나가고 카드도 멀쩡해 보이는데
+             * 내용만 어긋납니다.</b>
+             *
+             * <p>어긋나면 <b>409</b> 가 옵니다. {@code labels} 를 빼고 같은 메모를 다시 보내
+             * 새 문장과 번호를 받으세요. 환자에게는 "다시 정리했어요" 를 보여주면 됩니다.
+             *
+             * <p>안 보내면 검사하지 않습니다 — 붙이기 전까지는 지금과 똑같이 동작합니다.
+             */
+            @Size(max = 40, message = "분리 버전은 40자 이내입니다.")
+            String splitVersion
     ) {}
 
     /**
@@ -194,7 +211,16 @@ public final class VisitDtos {
              * <p>서버가 나눴으면 {@code memo-small-v4} / {@code apac.amazon.nova-pro-v1:0},
              * 폰이 나눴으면 보내신 {@code labelsMeta} 가 그대로 돌아옵니다.
              */
-            LabelsMeta extractedBy
+            LabelsMeta extractedBy,
+
+            /**
+             * 무엇이 이 문장들을 나눴는지({@code "split-v2"}).
+             *
+             * <p><b>들고 계시다가 {@code labels} 를 되보낼 때 같이 보내세요.</b> 그래야
+             * 그 사이 규칙이 바뀐 것을 서버가 잡아냅니다. 자세한 것은 요청 쪽
+             * {@code splitVersion} 설명에 있습니다.
+             */
+            String splitVersion
     ) {}
 
     /** 와이어프레임의 요약 카드. */
