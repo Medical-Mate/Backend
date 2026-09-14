@@ -48,6 +48,38 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
                                    @Param("from") LocalDate from);
 
     /**
+     * <b>진료 후 기록이 아직 없는 지난 일정</b> 가운데 가장 최근 날. 없으면 {@code null}.
+     *
+     * <p>홈의 "9월 12일 진료, 기록이 아직 없어요"에 쓴다. 날짜 하나면 문구를 만들 수 있어
+     * 일정을 통째로 내지 않는다.
+     *
+     * <p><b>기록이 있는지는 날짜로 견준다.</b> 일정과 기록을 잇는 열쇠가 없어서다 — 기록은
+     * 카드에 붙고 일정은 카드 없이도 만들 수 있다. 그래서 "그날 날짜로 남긴 기록이 있는가"로
+     * 판단한다. 진료를 다녀와 <b>다음 날</b> 적으면서 날짜를 그날로 두면 이 일정은 계속
+     * "기록 없음"으로 남는다 — 실제로 안 적은 것과 구별하지 못한다.
+     *
+     * <p><b>취소한 일정은 세지 않는다.</b> 안 간 진료의 기록을 재촉할 이유가 없다.
+     * {@code DONE} 은 거르지 않는다 — 서버가 그 값을 세우는 곳이 없어서 믿을 수 없다.
+     *
+     * @param since 이 날짜 이후만 본다. 오래된 것까지 올리면 <b>때를 놓친 알림</b>이 된다
+     */
+    @Query("""
+            select max(a.scheduledOn) from Appointment a
+            where a.user.id = :userId
+              and a.status <> :canceled
+              and a.scheduledOn < :today
+              and a.scheduledOn >= :since
+              and not exists (
+                  select 1 from VisitRecord v
+                  where v.user.id = :userId
+                    and v.visitedOn = a.scheduledOn)
+            """)
+    LocalDate findPendingRecordOn(@Param("userId") Long userId,
+                                  @Param("canceled") Appointment.Status canceled,
+                                  @Param("today") LocalDate today,
+                                  @Param("since") LocalDate since);
+
+    /**
      * 이 카드들을 가져가기로 한 일정을 찾는다. 카드를 지울 때 연결을 끊는 데 쓴다.
      *
      * <p>일정 자체는 남는다 — 카드 없이도 성립한다.

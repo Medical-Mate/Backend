@@ -3,6 +3,7 @@ package com.jinryomate.backend.home;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.BDDMockito.given;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -11,6 +12,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jinryomate.backend.TestcontainersConfig;
 import com.jinryomate.backend.appointment.dto.AppointmentDtos.CreateAppointmentRequest;
+import com.jinryomate.backend.appointment.dto.AppointmentDtos.UpdateAppointmentRequest;
+import com.jinryomate.backend.appointment.entity.Appointment.Status;
 import com.jinryomate.backend.auth.client.KakaoClient;
 import com.jinryomate.backend.auth.dto.AuthDtos.KakaoLoginRequest;
 import com.jinryomate.backend.auth.dto.AuthDtos.TokenResponse;
@@ -24,6 +27,7 @@ import com.jinryomate.backend.profile.entity.Sex;
 import com.jinryomate.backend.visit.dto.VisitDtos.CreateVisitRequest;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
@@ -155,10 +159,116 @@ class HomeApiTest {
     }
 
     @Test
+    @DisplayName("오늘 일정은 시각이 지나도 다음 일정에 남는다")
+    void 오늘_일정은_하루_종일() throws Exception {
+        // 앱이 "오늘 진료가 있어요"와 "오늘 진료는 어떠셨어요?"를 가르려면 시각이 지난
+        // 뒤에도 일정이 와야 한다. 시각까지 견줘 빼면 오전 10시 진료가 10시 1분에 사라진다.
+        createAppointment("오늘 병원", LocalDate.now(), LocalTime.of(0, 1));
+
+        mockMvc.perform(get("/api/me/home").header("Authorization", token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.nextAppointment.clinicName").value("오늘 병원"))
+                .andExpect(jsonPath("$.nextAppointment.scheduledOn")
+                        .value(LocalDate.now().toString()));
+    }
+
+    @Test
+    @DisplayName("기록이 빠진 지난 일정의 날짜가 온다")
+    void 기록_없는_지난_일정() throws Exception {
+        LocalDate past = LocalDate.now().minusDays(2);
+        createAppointment("지난 병원", past, null);
+
+        mockMvc.perform(get("/api/me/home").header("Authorization", token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.pendingRecordOn").value(past.toString()));
+    }
+
+    @Test
+    @DisplayName("그날 기록을 남기면 사라진다")
+    void 기록을_남기면_빠진다() throws Exception {
+        LocalDate past = LocalDate.now().minusDays(2);
+        long cardId = createCard();
+        mockMvc.perform(post("/api/cards/" + cardId + "/confirm").header("Authorization", token))
+                .andExpect(status().isOk());
+        createAppointment("지난 병원", past, null);
+
+        mockMvc.perform(post("/api/cards/" + cardId + "/visit")
+                        .header("Authorization", token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new CreateVisitRequest(
+                                "지난 병원", past, null, null, null, "적었어요", null))))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/me/home").header("Authorization", token))
+                .andExpect(jsonPath("$.pendingRecordOn").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("취소한 일정은 기록을 재촉하지 않는다")
+    void 취소한_일정은_안_센다() throws Exception {
+        // 안 간 진료의 기록을 재촉할 이유가 없다.
+        long id = createAppointment("취소한 병원", LocalDate.now().minusDays(2), null);
+        mockMvc.perform(patch("/api/me/appointments/" + id)
+                        .header("Authorization", token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new UpdateAppointmentRequest(
+                                null, null, null, null, null, false, Status.CANCELED, null, null))))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/me/home").header("Authorization", token))
+                .andExpect(jsonPath("$.pendingRecordOn").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("오래된 일정은 이제 와 재촉하지 않는다")
+    void 오래된_것은_안_올린다() throws Exception {
+        // 2주가 넘으면 알림이 아니라 잔소리다. 환자도 그때 들은 말이 이미 흐릿하다.
+        createAppointment("아주 지난 병원", LocalDate.now().minusDays(20), null);
+
+        mockMvc.perform(get("/api/me/home").header("Authorization", token))
+                .andExpect(jsonPath("$.pendingRecordOn").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("여럿이면 가장 최근 것을 준다")
+    void 가장_최근_것() throws Exception {
+        createAppointment("먼저", LocalDate.now().minusDays(9), null);
+        LocalDate recent = LocalDate.now().minusDays(3);
+        createAppointment("나중", recent, null);
+
+        mockMvc.perform(get("/api/me/home").header("Authorization", token))
+                .andExpect(jsonPath("$.pendingRecordOn").value(recent.toString()));
+    }
+
+    @Test
+    @DisplayName("오늘 일정은 아직 재촉하지 않는다")
+    void 오늘_것은_안_올린다() throws Exception {
+        // 진료를 마치기도 전에 "기록이 없어요"가 뜨면 안 된다. 오늘 것은 nextAppointment
+        // 로 이미 오고, 앱이 시각을 보고 "어떠셨어요?"를 그린다.
+        createAppointment("오늘 병원", LocalDate.now(), LocalTime.of(0, 1));
+
+        mockMvc.perform(get("/api/me/home").header("Authorization", token))
+                .andExpect(jsonPath("$.pendingRecordOn").doesNotExist());
+    }
+
+    @Test
     @DisplayName("토큰이 없으면 401")
     void 인증_필요() throws Exception {
         mockMvc.perform(get("/api/me/home"))
                 .andExpect(status().isUnauthorized());
+    }
+
+    /** 일정 하나를 만든다. 일정 id 를 돌려준다. */
+    private long createAppointment(String clinicName, LocalDate on, LocalTime at)
+            throws Exception {
+        String body = mockMvc.perform(post("/api/me/appointments")
+                        .header("Authorization", token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new CreateAppointmentRequest(
+                                clinicName, null, null, on, at, null, null, null))))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        return objectMapper.readTree(body).path("appointmentId").asLong();
     }
 
     // ---------- helpers ----------
