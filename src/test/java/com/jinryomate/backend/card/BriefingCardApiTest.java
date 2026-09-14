@@ -610,7 +610,106 @@ class BriefingCardApiTest {
                 .andExpect(jsonPath("$[0].clinicName").doesNotExist());
     }
 
+    @Test
+    @DisplayName("확정한 카드를 고쳐도 목록은 한 장이고, 최신 버전을 가리킨다")
+    void 목록은_버전을_접는다() throws Exception {
+        // 앱에서 올라온 신고다 — 고칠 때마다 제목·날짜·병원이 똑같은 줄이 한 장씩 늘었다.
+        // 버전은 "의사가 본 카드를 보존한다"는 서버 사정이고 환자에게는 한 장이다.
+        long v1 = createCard();
+        mockMvc.perform(post("/api/cards/" + v1 + "/confirm").header("Authorization", token))
+                .andExpect(status().isOk());
+
+        long v2 = editOnce(v1);
+        long v3 = editOnce(v2);
+
+        // 세 번 고쳤는데 세 줄이 서면 안 된다.
+        mockMvc.perform(get("/api/me/cards").header("Authorization", token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                // 눌러 들어가면 최신이 열려야 한다. 옛 버전을 가리키면 방금 고친 게 안 보인다.
+                .andExpect(jsonPath("$[0].cardId").value((int) v3));
+
+        // 홈의 "최근 브리핑 카드"도 같은 CardSummary 라 함께 걸렸다.
+        mockMvc.perform(get("/api/me/home").header("Authorization", token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.recentCards.length()").value(1))
+                .andExpect(jsonPath("$.recentCards[0].cardId").value((int) v3));
+    }
+
+    @Test
+    @DisplayName("고쳐도 작성 시각이 바뀌지 않는다")
+    void 고쳐도_작성일이_그대로다() throws Exception {
+        // 최신 행의 createdAt 을 그대로 내면 고칠 때마다 "09.04 작성"이 오늘로 바뀐다.
+        // 고친 것이지 새로 쓴 것이 아니다.
+        long v1 = createCard();
+        mockMvc.perform(post("/api/cards/" + v1 + "/confirm").header("Authorization", token))
+                .andExpect(status().isOk());
+
+        String before = objectMapper.readTree(
+                        mockMvc.perform(get("/api/me/cards").header("Authorization", token))
+                                .andReturn().getResponse().getContentAsString())
+                .get(0).path("createdAt").asText();
+
+        editOnce(v1);
+
+        mockMvc.perform(get("/api/me/cards").header("Authorization", token))
+                .andExpect(jsonPath("$[0].createdAt").value(before));
+    }
+
+    @Test
+    @DisplayName("진료 기록이 옛 버전에 붙어 있어도 진료 완료로 본다")
+    void 옛_버전에_붙은_기록도_센다() throws Exception {
+        // 목록이 최신 버전만 내는데 기록은 v1 에 붙어 있다. 카드 id 로 찾으면 "진료 전"이
+        // 되어, 다녀온 진료가 목록에서 사라진다.
+        long v1 = createCard();
+        mockMvc.perform(post("/api/cards/" + v1 + "/confirm").header("Authorization", token))
+                .andExpect(status().isOk());
+        mockMvc.perform(post("/api/cards/" + v1 + "/visit")
+                        .header("Authorization", token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"clinicName\":\"서울OO병원 내과\",\"rawNote\":\"피검사 했어요\"}"))
+                .andExpect(status().isOk());
+
+        long v2 = editOnce(v1);
+
+        mockMvc.perform(get("/api/me/cards").header("Authorization", token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].cardId").value((int) v2))
+                .andExpect(jsonPath("$[0].visited").value(true))
+                .andExpect(jsonPath("$[0].clinicName").value("서울OO병원 내과"));
+    }
+
+    @Test
+    @DisplayName("문답이 다르면 따로 선다")
+    void 다른_문답은_따로_센다() throws Exception {
+        // 버전을 접는 기준은 문답이다. 카드를 접는다고 다른 증상까지 합치면 안 된다.
+        long first = createCard();
+        mockMvc.perform(post("/api/cards/" + first + "/confirm").header("Authorization", token))
+                .andExpect(status().isOk());
+        editOnce(first);
+        long second = createCard();
+
+        mockMvc.perform(get("/api/me/cards").header("Authorization", token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(2))
+                // 나중에 쓴 것이 위다.
+                .andExpect(jsonPath("$[0].cardId").value((int) second));
+    }
+
     // ---------- helpers ----------
+
+    /** 확정된 카드를 한 번 고친다. 새 버전 id 를 돌려준다. */
+    private long editOnce(long cardId) throws Exception {
+        String body = mockMvc.perform(patch("/api/cards/" + cardId)
+                        .header("Authorization", token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"axes": [{"axis": "onset", "value": "지난주부터"}]}"""))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        return objectMapper.readTree(body).path("cardId").asLong();
+    }
 
     private TokenResponse login() throws Exception {
         String body = mockMvc.perform(post("/api/auth/kakao")

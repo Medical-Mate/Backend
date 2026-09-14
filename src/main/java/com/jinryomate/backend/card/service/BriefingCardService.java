@@ -24,13 +24,16 @@ import com.jinryomate.backend.profile.entity.HealthProfile;
 import com.jinryomate.backend.profile.repository.HealthProfileRepository;
 import com.jinryomate.backend.visit.entity.VisitRecord;
 import com.jinryomate.backend.visit.repository.VisitRecordRepository;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -129,22 +132,70 @@ public class BriefingCardService {
     /**
      * 기록 탭의 "브리핑 카드" 목록 (화면 1j). 최근 작성 순.
      *
+     * <p><b>문답 하나가 카드 한 장이다.</b> 확정한 카드를 고치면 버전이 올라간 새 행이
+     * 생기는데, 그걸 전부 내보내면 <b>고칠 때마다 목록에 한 줄씩 늘어난다</b> — 제목·날짜·
+     * 병원이 똑같은 줄이 넷씩 선다. 버전은 "의사가 본 카드를 보존한다"는 우리 사정이지
+     * 환자에게 보일 것이 아니다. {@code DELETE} 가 이미 "버전을 가리지 않고 전부" 지우는
+     * 것과도 이제 앞뒤가 맞는다.
+     *
+     * <p><b>작성 시각은 체인 첫 행의 것을 쓴다.</b> 최신 행의 시각을 그대로 내면 고칠 때마다
+     * "09.04 작성"이 "09.14 작성"으로 바뀐다. 고친 것이지 새로 쓴 것이 아니다.
+     *
      * <p>진료 기록을 카드마다 따로 조회하면 카드 수만큼 쿼리가 나간다(N+1).
      * 이 사용자의 기록을 한 번에 가져와 카드에 붙인다.
      */
     @Transactional(readOnly = true)
     public List<CardSummary> list(Long userId) {
-        Map<Long, String> clinicByCardId = new HashMap<>();
+        List<BriefingCard> all = cardRepository.findAllByUserIdOrderByCreatedAtDescIdDesc(userId);
+
+        // 카드 → 문답. 이미 읽어온 것으로만 만들어 추가 쿼리가 없다.
+        // session 은 LAZY 지만 프록시에서 id 만 꺼내는 것은 조회를 일으키지 않는다.
+        Map<Long, Long> sessionByCardId = new HashMap<>();
+        all.forEach(c -> sessionByCardId.put(c.getId(), c.getSession().getId()));
+
+        // 진료 기록이 체인의 어느 버전에 붙어 있을지 모른다. 문답 단위로 모은다.
+        // 목록이 최신 버전만 내는데 기록은 v1 에 붙어 있으면 "진료 완료"가 사라진다.
+        //
+        // 병원명은 선택 입력이라 비어 있을 수 있다. "기록이 있다"와 "병원명이 있다"를
+        // 따로 둔다 — 한 맵에 담으면 최근 기록의 병원명이 비었을 때 옛 기록의 이름이
+        // 올라와 엉뚱한 병원을 찍는다.
+        Set<Long> visitedSessionIds = new HashSet<>();
+        Map<Long, String> clinicBySessionId = new HashMap<>();
         visitRecordRepository.findAllByUserIdOrderByVisitedOnDescIdDesc(userId).stream()
                 // 카드를 지우면 기록은 남고 연결만 끊긴다. 그 기록은 어느 카드에도 안 붙는다.
                 .filter(v -> v.getCard() != null)
-                .forEach(v -> clinicByCardId.put(v.getCard().getId(), v.getClinicName()));
+                .forEach(v -> {
+                    Long sessionId = sessionByCardId.get(v.getCard().getId());
+                    if (sessionId == null) {
+                        return;
+                    }
+                    // 진료일 내림차순이라 먼저 오는 것이 최근이다. 그것만 쓴다.
+                    if (visitedSessionIds.add(sessionId)) {
+                        clinicBySessionId.put(sessionId, v.getClinicName());
+                    }
+                });
 
-        return cardRepository.findAllByUserIdOrderByCreatedAtDescIdDesc(userId).stream()
-                // 병원명이 null 이어도 기록은 있을 수 있다. 키가 있는지로 판단한다.
+        Map<Long, BriefingCard> latestBySession = new HashMap<>();
+        Map<Long, Instant> writtenBySession = new HashMap<>();
+        for (BriefingCard c : all) {
+            Long sessionId = c.getSession().getId();
+            latestBySession.merge(c.getSession().getId(), c,
+                    (kept, other) -> kept.getVersion() >= other.getVersion() ? kept : other);
+            // 체인 첫 행의 시각이 "언제 쓴 카드인가"다.
+            writtenBySession.merge(sessionId, c.getCreatedAt(),
+                    (kept, other) -> kept.isBefore(other) ? kept : other);
+        }
+
+        return latestBySession.values().stream()
+                .sorted(Comparator
+                        .comparing((BriefingCard c) -> writtenBySession.get(c.getSession().getId()))
+                        .thenComparing(BriefingCard::getId)
+                        .reversed())
+                // 병원명이 null 이어도 기록은 있을 수 있다. 집합에 있는지로 판단한다.
                 .map(c -> CardSummary.of(c,
-                        clinicByCardId.containsKey(c.getId()),
-                        clinicByCardId.get(c.getId())))
+                        visitedSessionIds.contains(c.getSession().getId()),
+                        clinicBySessionId.get(c.getSession().getId()),
+                        writtenBySession.get(c.getSession().getId())))
                 .toList();
     }
 
