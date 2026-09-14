@@ -91,7 +91,7 @@ public class BriefingCardService {
 
         BriefingCard existing = cardRepository.findFirstBySessionIdOrderByVersionDesc(sessionId).orElse(null);
         if (existing != null) {
-            return CardResponse.from(existing, linksOf(existing.getId()));
+            return CardResponse.from(existing, linksOf(existing.getId(), sessionId));
         }
 
         HealthProfile profile = profileRepository.findByUserId(userId).orElse(null);
@@ -120,13 +120,13 @@ public class BriefingCardService {
 
         log.info("카드 생성 userId={} cardId={} prompt={} rejected={}",
                 userId, card.getId(), card.getPromptVersion(), validated.rejectedFields());
-        return CardResponse.from(card, validated.rejectedFields(), linksOf(card.getId()));
+        return CardResponse.from(card, validated.rejectedFields(), linksOf(card.getId(), sessionId));
     }
 
     @Transactional(readOnly = true)
     public CardResponse get(Long userId, Long cardId) {
         BriefingCard card = findOwned(userId, cardId);
-        return CardResponse.from(card, linksOf(cardId));
+        return CardResponse.from(card, linksOf(cardId, card.getSession().getId()));
     }
 
     /**
@@ -220,6 +220,10 @@ public class BriefingCardService {
      * 지금 준비하는 진료다. 전부 지났으면 가장 최근 것으로 둔다.
      */
     private CardLinks linksOf(Long cardId) {
+        return linksOf(cardId, null);
+    }
+
+    private CardLinks linksOf(Long cardId, Long sessionId) {
         List<Appointment> appointments = appointmentRepository.findAllByCardIdIn(List.of(cardId));
         LocalDate today = LocalDate.now(ZONE);
 
@@ -232,7 +236,31 @@ public class BriefingCardService {
                         .max(Comparator.comparing(Appointment::getScheduledOn))
                         .orElse(null));
 
-        return CardLinks.of(upcoming, visitRecordRepository.findByCardId(cardId).orElse(null));
+        return CardLinks.of(upcoming, latestVisitOf(cardId, sessionId));
+    }
+
+    /**
+     * 카드 상세의 "진료받은 병원". <b>기록이 여럿이면 가장 최근 것</b>이다.
+     *
+     * <p>화면 {@code 1e-1} 은 병원 한 줄을 그린다. 재방문이 쌓여도 거기 물어보는 것은
+     * "지금 이 카드로 마지막에 어디를 다녀왔나"다. 전부 보려면
+     * {@code GET /api/cards/{cardId}/visits} 를 쓴다.
+     *
+     * <p><b>문답으로 찾는다.</b> 재방문 전에 카드를 고치면 버전이 올라가서 기록이 서로
+     * 다른 행에 붙는다 — 행으로 찾으면 방금 남긴 기록이 카드 상세에서 안 보인다.
+     */
+    private VisitRecord latestVisitOf(Long cardId, Long sessionId) {
+        Long chain = sessionId != null ? sessionId : sessionIdOf(cardId);
+        if (chain == null) {
+            return null;
+        }
+        return visitRecordRepository.findAllBySessionId(chain).stream().findFirst().orElse(null);
+    }
+
+    private Long sessionIdOf(Long cardId) {
+        return cardRepository.findById(cardId)
+                .map(c -> c.getSession().getId())
+                .orElse(null);
     }
 
     /**
@@ -269,7 +297,8 @@ public class BriefingCardService {
 
         log.info("카드 수정 userId={} cardId={} version={} rejected={}",
                 userId, target.getId(), target.getVersion(), validated.rejectedFields());
-        return CardResponse.from(target, validated.rejectedFields(), linksOf(target.getId()));
+        return CardResponse.from(target, validated.rejectedFields(),
+                linksOf(target.getId(), target.getSession().getId()));
     }
 
     /** 확정. 이미 확정된 카드를 다시 확정하려 하면 막는다. */

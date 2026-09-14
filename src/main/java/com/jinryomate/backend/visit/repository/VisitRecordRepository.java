@@ -3,14 +3,25 @@ package com.jinryomate.backend.visit.repository;
 import com.jinryomate.backend.auth.entity.User;
 import com.jinryomate.backend.visit.entity.VisitRecord;
 import java.util.List;
-import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 public interface VisitRecordRepository extends JpaRepository<VisitRecord, Long> {
 
-    Optional<VisitRecord> findByCardId(Long cardId);
-
-    boolean existsByCardId(Long cardId);
+    /**
+     * 이 문답에서 나온 카드들에 붙은 기록 전부. 최근 진료일 순.
+     *
+     * <p><b>카드 행이 아니라 문답으로 찾는다.</b> 환자가 재방문 전에 카드를 고치면 버전이
+     * 올라가서, 첫 기록과 두 번째 기록이 서로 다른 행에 붙는다. 행으로 찾으면 한쪽만
+     * 나오고 시안 {@code 1j-3-R} 의 "진료 2회" 가 1회로 보인다.
+     */
+    @Query("""
+            select v from VisitRecord v
+            where v.card.session.id = :sessionId
+            order by v.visitedOn desc, v.id desc
+            """)
+    List<VisitRecord> findAllBySessionId(@Param("sessionId") Long sessionId);
 
     /**
      * 기록 탭의 목록.

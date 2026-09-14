@@ -45,7 +45,15 @@ public class VisitRecordService {
     /**
      * 진료 직후 기록.
      *
-     * <p>확정한 카드에만, 카드 하나에 기록 하나다.
+     * <p>확정한 카드에만 남긴다. <b>카드 하나에 기록이 여럿일 수 있다.</b>
+     *
+     * <p>같은 증상으로 다시 가는 것이 진료의 보통 모양이다. 첫 진료에서 검사를 받고
+     * 두 번째에 결과를 듣는데, 그때 들은 말은 첫 기록을 덮어쓸 것이 아니라 따로 쌓여야
+     * 한다. 시안 {@code 1j-3-R} 이 그 화면이다.
+     *
+     * <p><b>같은 날 두 건도 받는다.</b> 하루에 두 병원에 가는 일이 있고, 막으면 그때
+     * 적을 자리가 없다. 실수로 두 번 저장되는 것은 화면이 막을 일이다 — 여기서 날짜로
+     * 막으면 정상 경로가 함께 막힌다.
      */
     @Transactional
     public VisitResponse create(Long userId, Long cardId, CreateVisitRequest request) {
@@ -54,9 +62,6 @@ public class VisitRecordService {
         if (card.getStatus() != CardStatus.CONFIRMED) {
             throw new ApiException(ErrorCode.INVALID_REQUEST,
                     "카드를 먼저 확정해주세요. 진료를 마친 뒤에 남기는 기록입니다.");
-        }
-        if (visitRecordRepository.existsByCardId(cardId)) {
-            throw new ApiException(ErrorCode.INVALID_REQUEST, "이미 기록이 있습니다.");
         }
 
         VisitRecord record = VisitRecord.of(card.getUser(), card, request.visitedOn());
@@ -186,6 +191,24 @@ public class VisitRecordService {
     @Transactional(readOnly = true)
     public List<VisitSummary> list(Long userId) {
         return visitRecordRepository.findAllByUserIdOrderByVisitedOnDescIdDesc(userId).stream()
+                .map(VisitSummary::from)
+                .toList();
+    }
+
+    /**
+     * 이 카드로 다녀온 진료 전부. 화면 {@code 1j-3-R} 의 "진료 2회".
+     *
+     * <p><b>버전을 가리지 않고 모은다.</b> 재방문 전에 카드를 고치면 버전이 올라가서 첫
+     * 기록과 두 번째 기록이 서로 다른 행에 붙는다. 앱이 {@code cardId} 로 목록을 걸러
+     * 모으면 그때 한쪽이 빠지고, 게다가 목록이 주는 {@code cardId} 는 <b>최신 버전 id</b>
+     * 라 고칠 때마다 바뀐다 — 앱이 묶을 안정된 열쇠가 없다.
+     *
+     * <p>그래서 체인의 <b>아무 카드 id</b> 나 주면 그 문답의 기록을 전부 돌려준다.
+     */
+    @Transactional(readOnly = true)
+    public List<VisitSummary> listByCard(Long userId, Long cardId) {
+        BriefingCard card = briefingCardService.findOwned(userId, cardId);
+        return visitRecordRepository.findAllBySessionId(card.getSession().getId()).stream()
                 .map(VisitSummary::from)
                 .toList();
     }
