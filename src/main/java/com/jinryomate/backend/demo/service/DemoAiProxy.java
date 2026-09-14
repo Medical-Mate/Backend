@@ -59,6 +59,10 @@ public class DemoAiProxy {
         String signature = signer.sign("POST", path, now, requestId, payload);
 
         try {
+            // exchange 를 쓴다. retrieve 는 4xx·5xx 에 기본 오류 처리가 걸려 있어서,
+            // onStatus 로 안 잡으면 예외가 되어 502 로 뭉개진다. 처음에 매칭되지 않는
+            // 조건(status -> false)으로 껐다고 생각했는데 그건 끄는 게 아니라 핸들러를
+            // 하나도 안 거는 것이라, 기본 처리가 그대로 돌았다. AI 의 422 가 502 로 나갔다.
             ResponseEntity<byte[]> response = restClient.post()
                     .uri(path)
                     .contentType(MediaType.APPLICATION_JSON)
@@ -66,17 +70,15 @@ public class DemoAiProxy {
                     .header(AiSigner.TIMESTAMP_HEADER, String.valueOf(now.getEpochSecond()))
                     .header(AiSigner.REQUEST_ID_HEADER, requestId)
                     .body(payload)
-                    .retrieve()
-                    // 4xx·5xx 를 예외로 만들지 않는다. 상태와 본문을 그대로 넘기는 것이 일이다.
-                    .onStatus(status -> false, (req, res) -> { })
-                    .toEntity(byte[].class);
+                    .exchange((req, res) -> ResponseEntity
+                            .status(res.getStatusCode())
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .body(res.getBody().readAllBytes()));
 
             log.info("데모 프록시 path={} status={} requestId={}",
                     path, response.getStatusCode().value(), requestId);
 
-            return ResponseEntity.status(response.getStatusCode())
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .body(response.getBody());
+            return response;
 
         } catch (Exception e) {
             // 연결 실패·타임아웃. 예외 메시지에 본문이 실릴 수 있어 종류만 남긴다.
