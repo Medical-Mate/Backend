@@ -6,6 +6,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.jinryomate.backend.TestcontainersConfig;
+import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -21,7 +22,7 @@ import org.springframework.test.web.servlet.MockMvc;
  *
  * <p><b>AI 통로는 여기서 끝까지 못 본다.</b> 테스트에는 HMAC 시크릿이 없어 프록시 빈이
  * 없고, 있어도 실제 AI 를 불러야 한다. 대신 <b>인증 없이 열려 있는지</b>와
- * <b>문진 밖은 안 열렸는지</b>를 고정한다 — 그게 이 경로에서 틀리면 제일 비싼 것이다.
+ * <b>AI 가 하는 일 밖은 안 열렸는지</b>를 고정한다 — 그게 이 경로에서 틀리면 제일 비싸다.
  */
 @Import(TestcontainersConfig.class)
 @SpringBootTest
@@ -42,35 +43,36 @@ class DemoApiTest {
     }
 
     @Test
-    @DisplayName("문답 경로도 토큰 없이 열린다")
-    void 문답_경로가_열려_있다() throws Exception {
+    @DisplayName("AI 경로 셋이 토큰 없이 열린다")
+    void ai_경로가_열려_있다() throws Exception {
         // 시크릿이 없는 환경이라 503 이다. 중요한 것은 401 이 아니라는 것 —
         // 401 이면 SecurityConfig 에서 경로가 빠진 것이다.
-        mockMvc.perform(post("/api/demo/previsit/sessions")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{}"))
-                .andExpect(status().isServiceUnavailable());
-
-        mockMvc.perform(post("/api/demo/previsit/turns")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{}"))
-                .andExpect(status().isServiceUnavailable());
+        for (String path : List.of("/api/demo/previsit/sessions",
+                                   "/api/demo/previsit/turns",
+                                   "/api/demo/postvisit/memo")) {
+            mockMvc.perform(post(path)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{}"))
+                    .andExpect(status().isServiceUnavailable());
+        }
     }
 
     @Test
-    @DisplayName("문진 밖은 데모로 열리지 않는다")
-    void 문진_밖은_안_열린다() throws Exception {
+    @DisplayName("AI 가 하는 일 밖은 데모로 열리지 않는다")
+    void 도메인_경로는_안_열린다() throws Exception {
         // 카드·기록·일정까지 무인증으로 열면 데모가 아니라 계정 없는 서비스가 된다.
         // 누가 편의로 /api/demo 아래에 경로를 더하면 여기서 걸린다.
+        //
+        // 진료 후 메모는 연다 — 받은 텍스트를 분류해 돌려줄 뿐 아무것도 남기지 않아
+        // 문답 통로와 성질이 같다. 저장이 붙는 순간 그 전제가 깨지므로 아래가 지킨다.
         mockMvc.perform(get("/api/demo/cards")).andExpect(status().isNotFound());
         mockMvc.perform(get("/api/demo/visits")).andExpect(status().isNotFound());
         mockMvc.perform(get("/api/demo/appointments")).andExpect(status().isNotFound());
+        mockMvc.perform(get("/api/demo/me")).andExpect(status().isNotFound());
 
-        // 진료 후 메모는 Bedrock 을 부른다. 데모에 열려 있으면 크레딧이 샌다.
-        mockMvc.perform(post("/api/demo/postvisit/memo")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{}"))
-                .andExpect(status().isNotFound());
+        // 메모를 열었다고 그 도메인의 저장·조회까지 따라 열리면 안 된다.
+        mockMvc.perform(get("/api/demo/postvisit/memo")).andExpect(status().isMethodNotAllowed());
+        mockMvc.perform(get("/api/demo/postvisit/visits")).andExpect(status().isNotFound());
     }
 
     @Test

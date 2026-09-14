@@ -27,7 +27,8 @@ import org.springframework.web.bind.annotation.RestController;
         **아무것도 저장하지 않습니다.** `state` 는 브라우저가 들고 다니세요 —
         AI 가 무상태라 가능한 구조입니다. 새로고침하면 문답이 사라집니다.
 
-        **문진까지만 됩니다.** 브리핑 카드·진료 기록·일정은 계정이 있어야 합니다.
+        **AI 가 하는 일만 됩니다** — 문진과 메모 정리 둘입니다.
+        브리핑 카드·진료 기록·일정은 계정이 있어야 합니다.
         """)
 @RestController
 @RequestMapping("/api/demo")
@@ -98,6 +99,47 @@ public class DemoController {
                                        @RequestBody(required = false) byte[] body) {
         rateLimiter.check(request);
         return aiProxy().forward("/v1/previsit/turns", body);
+    }
+
+    @Operation(
+            summary = "진료 후 메모 정리",
+            description = """
+                    AI 의 `POST /v1/postvisit/memo` 로 **본문을 그대로** 넘깁니다.
+                    메모를 넣으면 네 항목(소견 · 검사 · 약·생활 지시 · 재방문)으로 나눠 옵니다.
+
+                    ```jsonc
+                    { "memo": "…", "visit_date": "2026-09-14", "clinic": "서울OO병원" }
+                    ```
+
+                    **카드가 필요 없습니다.** 진료 전 카드와 이어지지 않고, 넣은 메모와
+                    돌려받은 결과만 있습니다.
+
+                    **저장하지 않습니다.** 브라우저가 응답을 들고 있다가 새로고침하면
+                    사라집니다. 목록도 이력도 없습니다 — 그것들은 계정이 있어야 합니다.
+
+                    ### 라벨을 고쳐 다시 부르실 거라면
+
+                    응답의 `labels` 를 되보내면 **모델을 부르지 않고** 재조립만 합니다.
+                    그때는 `split_version` 도 **함께** 보내세요 — 그 사이 문장 분리 규칙이
+                    바뀌었으면 AI 가 409 를 냅니다. 안 보내면 검사하지 않는 대신, 예전
+                    번호가 새 문장에 붙어 **조용히 어긋난 결과**가 나옵니다.
+
+                    ### 오류
+
+                    AI 가 준 상태 코드를 **그대로** 돌려드립니다.
+
+                    | | |
+                    |---|---|
+                    | 422 | 스키마 위반 · 빈 메모 · 2000자 초과 |
+                    | 409 | `split_version` 이 서버 것과 다름 |
+                    | 503 | 일일 LLM 예산 소진. 그날은 더 못 씁니다 |
+                    | 429 | 호출이 너무 잦습니다 (이건 저희가 냅니다) |
+                    """)
+    @PostMapping(value = "/postvisit/memo", produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<byte[]> memo(HttpServletRequest request,
+                                       @RequestBody(required = false) byte[] body) {
+        rateLimiter.check(request);
+        return aiProxy().forward("/v1/postvisit/memo", body);
     }
 
     private DemoAiProxy aiProxy() {
