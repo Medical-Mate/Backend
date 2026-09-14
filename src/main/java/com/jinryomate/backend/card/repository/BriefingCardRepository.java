@@ -28,5 +28,21 @@ public interface BriefingCardRepository extends JpaRepository<BriefingCard, Long
     /** 한 문답에서 나온 카드 전부. 버전 체인이라 함께 다룬다. */
     List<BriefingCard> findAllBySessionIdOrderByVersionDesc(Long sessionId);
 
+    /**
+     * 이 카드를 이어받은 카드가 이미 있는지.
+     *
+     * <p>있으면 그 카드는 <b>이미 고친 카드</b>다. 또 고치면 같은 자리에서 가지가 하나 더
+     * 나서 체인이 갈라지고, 그 가지에 넣은 편집은 어느 화면에도 안 나온다.
+     */
+    boolean existsByParentCardId(Long parentCardId);
+
+    /**
+     * 체인의 맨 끝. 옛 id 로 들어온 앱에게 "이걸로 다시 보내라"고 알려주는 데 쓴다.
+     *
+     * <p>버전만으로 정렬하지 않는다 — 이미 갈라진 데이터에는 같은 버전 번호가 둘 있다.
+     * 그때는 나중에 만들어진 쪽(id 가 큰 쪽)이 최신이다.
+     */
+    Optional<BriefingCard> findFirstBySessionIdOrderByVersionDescIdDesc(Long sessionId);
+
     void deleteAllByUser(User user);
 }

@@ -164,6 +164,28 @@ public class BriefingCardController {
                     **확정된 카드는 고치지 않습니다.** 대신 그 카드를 이어받은 **새 버전이 만들어지고**
                     수정이 거기 반영됩니다. 응답의 `cardId` 와 `version` 이 달라지므로 앱은 그 값으로 갈아타야 합니다.
                     의사가 이미 본 카드가 뒤바뀌면 안 되기 때문입니다.
+
+                    ### 🔴 이미 고친 카드를 또 고치면 409
+
+                    한 번 고친 뒤 **옛 `cardId`** 로 다시 보내면 `409 CARD_ALREADY_EDITED` 입니다.
+
+                    ```jsonc
+                    { "error": { "code": "CARD_ALREADY_EDITED",
+                                 "message": "이미 고친 카드예요. 최신 카드를 불러올게요.",
+                                 "details": { "latestCardId": 23 } } }
+                    ```
+
+                    **`details.latestCardId` 로 갈아타고 한 번 다시 보내면 됩니다.**
+
+                    막지 않으면 같은 자리에서 가지가 하나 더 나서 버전 체인이 갈라집니다.
+
+                    ```
+                    19 ─┬─ 20 ─── 22
+                        └─ 21          ← 여기 넣은 편집은 어느 화면에도 안 나옵니다
+                    ```
+
+                    그때는 **200 이 나가고 응답도 멀쩡해 보입니다.** 환자가 고친 내용이 조용히
+                    사라지고, 나중에 "분명히 고쳤는데 없다"로만 드러납니다.
                     """)
     @PatchMapping("/cards/{cardId}")
     public CardResponse update(@AuthenticationPrincipal Long userId,

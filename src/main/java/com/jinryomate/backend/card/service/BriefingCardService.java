@@ -249,7 +249,18 @@ public class BriefingCardService {
     public CardResponse update(Long userId, Long cardId, UpdateCardRequest request) {
         BriefingCard card = findOwned(userId, cardId);
 
-        BriefingCard target = card.isEditable() ? card : cardRepository.save(card.newVersion());
+        BriefingCard target;
+        if (card.isEditable()) {
+            target = card;
+        } else {
+            // 이미 이어받은 카드가 있으면 여기서 또 새 버전을 만들면 안 된다. 체인이 갈라지고
+            // 그 가지에 넣은 편집은 목록에도 상세에도 안 나온다 — 조용히 사라진다.
+            // 앱이 옛 id 를 들고 있다가 다시 보내면서 실제로 일어났다(#114).
+            if (cardRepository.existsByParentCardId(cardId)) {
+                throw alreadyEdited(card);
+            }
+            target = cardRepository.save(card.newVersion());
+        }
 
         CardContent merged = merge(target, request);
         CardContentValidator.Result validated = validator.validate(merged);
@@ -318,6 +329,24 @@ public class BriefingCardService {
 
         log.info("카드 삭제 userId={} cardId={} sessionId={} versions={}",
                 userId, cardId, sessionId, cardIds.size());
+    }
+
+    /**
+     * "이미 고친 카드다" 를 알린다. <b>최신 id 를 함께 준다.</b>
+     *
+     * <p>그게 없으면 앱은 어느 id 로 다시 조회할지부터 막힌다 — 옛 id 로 조회하면 옛 카드가
+     * 또 오고, 목록을 다시 부르는 것은 화면 하나 고치려고 도는 길이 너무 멀다.
+     */
+    private ApiException alreadyEdited(BriefingCard card) {
+        Long latestId = cardRepository
+                .findFirstBySessionIdOrderByVersionDescIdDesc(card.getSession().getId())
+                .map(BriefingCard::getId)
+                .orElse(null);
+
+        log.info("옛 카드로 수정 시도 cardId={} latestCardId={}", card.getId(), latestId);
+        return new ApiException(ErrorCode.CARD_ALREADY_EDITED,
+                ErrorCode.CARD_ALREADY_EDITED.getDefaultMessage(),
+                latestId == null ? null : Map.of("latestCardId", latestId));
     }
 
     /** 남의 카드는 존재 자체를 알려주지 않는다. */
