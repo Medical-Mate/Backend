@@ -64,6 +64,31 @@ public class VisitRecordController {
 
                     `sentences` 의 인덱스가 `labels` 의 키입니다.
 
+                    ### 🔴 splitVersion 도 함께 돌려주세요
+
+                    응답의 `splitVersion`(예: `"split-v2"`)을 들고 계시다가 **`labels` 를
+                    되보낼 때 같이** 보내주세요.
+
+                    **문장 번호가 라벨의 주소입니다.** AI 가 문장 나누는 규칙을 고치면 같은
+                    메모가 다른 개수·다른 번호로 나뉩니다. 그 배포가 `1p`(메모 작성)와
+                    `1q-2`(라벨 수정) 사이에 끼면 앱은 예전 번호로 매긴 라벨을 보내고 서버는
+                    새 문장에 그 번호를 붙입니다 — **200 이 나가고 카드도 멀쩡해 보이는데
+                    환자가 "약" 이라고 표시한 줄에 검사 얘기가 들어가 있습니다.** 조용히
+                    틀린 진료 기록이 저장됩니다.
+
+                    | 보낸 값이 | |
+                    |---|---|
+                    | 서버와 같으면 | 평소대로 |
+                    | 서버와 다르면 | **409 `SPLIT_VERSION_CHANGED`** |
+                    | 없으면 | 검사하지 않습니다 — 붙이기 전까지는 지금과 똑같이 동작합니다 |
+
+                    **409 를 받으면** `labels` 를 빼고 같은 메모를 다시 보내세요. 새 `sentences`
+                    와 새 `splitVersion` 이 옵니다. 환자가 고쳐 둔 라벨은 살릴 수 없습니다 —
+                    문장 자체가 달라졌기 때문입니다. "다시 정리했어요" 를 띄워 주세요.
+
+                    AI 를 새 이미지로 올리는 순간 `1p` 와 `1q-2` 사이에 떠 있던 세션은
+                    이 409 를 한 번 받게 됩니다.
+
                     ### 온디바이스 — 폰이 분류할 때
 
                     한 엔드포인트를 세 가지로 씁니다.
@@ -79,11 +104,16 @@ public class VisitRecordController {
 
                     ```
                     ① POST /api/visits/classify  { memo, classify: false }
-                       → sentences[3], axes 전부 NOT_ASKED, labels 전부 "none"
+                       → sentences[3], axes 전부 NOT_ASKED, labels 전부 "none",
+                         splitVersion "split-v2"
                     ② 폰 모델이 문장마다 라벨을 붙인다
-                    ③ POST /api/visits/classify  { memo, labels, labelsMeta }
+                    ③ POST /api/visits/classify  { memo, labels, labelsMeta, splitVersion }
                        → 조립된 axes + followUp
                     ```
+
+                    ①에서 받은 `splitVersion` 을 ③에 그대로 실어 보내세요. 온디바이스
+                    경로는 ①과 ③ 사이에 폰 추론이 끼어 시간이 더 걸리므로, 그 사이에
+                    규칙이 바뀔 틈도 그만큼 넓습니다.
 
                     `labelsMeta` 는 **폰 모델 정보**입니다(`Qwen3-1.7B-Q4_0` / `small-v4`).
                     안 보내시면 기록에 "무엇이 나눴는지"가 안 남습니다 — 서버는 라벨만

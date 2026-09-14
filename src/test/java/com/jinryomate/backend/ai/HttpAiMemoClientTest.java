@@ -1,8 +1,11 @@
 package com.jinryomate.backend.ai;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.header;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.jsonPath;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -13,10 +16,14 @@ import com.jinryomate.backend.ai.dto.MemoClassification;
 import com.jinryomate.backend.ai.dto.MemoRequest;
 import com.jinryomate.backend.card.entity.AxisSource;
 import com.jinryomate.backend.card.entity.AxisStatus;
+import com.jinryomate.backend.global.error.ApiException;
+import com.jinryomate.backend.global.error.ErrorCode;
 import java.time.LocalDate;
+import java.util.Map;
 import org.hamcrest.Matchers;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
@@ -203,6 +210,107 @@ class HttpAiMemoClientTest {
         // 축 하나를 "아직 안 물어봤다"로 두는 손해가, 메모가 날아가는 손해보다 작다.
         assertThat(result.axes().get("findings").getStatus()).isEqualTo(AxisStatus.NOT_ASKED);
         assertThat(result.axes().get("findings").getValue()).isEqualTo("선생님이 허리 디스크 초기래요.");
+    }
+
+    @Test
+    @DisplayName("split_version 은 최상위에서 읽는다")
+    void 분리_버전_읽기() {
+        // provenance 안이 아니라 응답 최상위다. 거기서 찾으면 항상 null 이 되고,
+        // 되보낼 값이 없어져 검사가 조용히 꺼진다.
+        MemoClassification result = classifyWith(
+                REAL_RESPONSE.replace("\"request_id\": null", "\"split_version\": \"split-v2\", \"request_id\": null"));
+
+        assertThat(result.splitVersion()).isEqualTo("split-v2");
+    }
+
+    @Test
+    @DisplayName("split_version 이 안 와도 견딘다")
+    void 분리_버전_없음() {
+        // 계약이 붙기 전 이미지에서는 안 온다. 그때는 검사가 꺼진 채로 지금까지처럼 돈다.
+        assertThat(classifyWith(REAL_RESPONSE).splitVersion()).isNull();
+    }
+
+    @Test
+    @DisplayName("라벨과 함께 split_version 을 실어 보낸다")
+    void 분리_버전_보내기() {
+        RestClient.Builder builder = RestClient.builder().baseUrl("http://ai:8000");
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        server.expect(requestTo("http://ai:8000/v1/postvisit/memo"))
+                .andExpect(jsonPath("$.split_version").value("split-v2"))
+                .andExpect(jsonPath("$.labels['0']").value("findings"))
+                .andRespond(withSuccess(REAL_RESPONSE, MediaType.APPLICATION_JSON));
+
+        new HttpAiMemoClient(builder.build(), new ObjectMapper(), new AiSigner("test-secret"))
+                .classify(new MemoRequest("메모", null, null,
+                        Map.of("0", "findings"), null, null, "split-v2"));
+
+        server.verify();
+    }
+
+    @Test
+    @DisplayName("라벨이 없으면 split_version 을 보내지 않는다")
+    void 분리_버전_안_보냄() {
+        // 라벨이 없으면 AI 가 새로 나누고 새 이름을 돌려준다. 견줄 대상이 없는데 보내면
+        // 방금 만들 값을 미리 단정하는 꼴이고, 규칙이 바뀐 직후 첫 분류가 409 로 막힌다.
+        RestClient.Builder builder = RestClient.builder().baseUrl("http://ai:8000");
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        server.expect(requestTo("http://ai:8000/v1/postvisit/memo"))
+                .andExpect(jsonPath("$.split_version").doesNotExist())
+                .andRespond(withSuccess(REAL_RESPONSE, MediaType.APPLICATION_JSON));
+
+        new HttpAiMemoClient(builder.build(), new ObjectMapper(), new AiSigner("test-secret"))
+                .classify(new MemoRequest("메모", null, null, null, null, null, "split-v2"));
+
+        server.verify();
+    }
+
+    @Test
+    @DisplayName("409 는 502 로 뭉개지 않고 '다시 정리해주세요'로 앱에 넘긴다")
+    void 분리_규칙이_바뀜() {
+        RestClient.Builder builder = RestClient.builder().baseUrl("http://ai:8000");
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        server.expect(requestTo("http://ai:8000/v1/postvisit/memo"))
+                .andRespond(withStatus(HttpStatus.CONFLICT)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .body("""
+                                {"detail": "분리 규칙이 바뀌었습니다. 다시 분류해 주세요 (보낸 값 split-v1, 서버 split-v2)"}"""));
+
+        HttpAiMemoClient client = new HttpAiMemoClient(
+                builder.build(), new ObjectMapper(), new AiSigner("test-secret"));
+        MemoRequest request = new MemoRequest("메모", null, null,
+                Map.of("0", "findings"), null, null, "split-v1");
+
+        // 502 로 뭉개면 앱이 "AI 가 죽었다"로 읽고 재시도만 한다. 다시 분류해야 풀린다.
+        assertThatThrownBy(() -> client.classify(request))
+                .isInstanceOf(ApiException.class)
+                .extracting(e -> ((ApiException) e).getErrorCode())
+                .isEqualTo(ErrorCode.SPLIT_VERSION_CHANGED);
+
+        // 한 번만 부른다. 같은 라벨로 다시 보내봐야 또 409 다.
+        server.verify();
+    }
+
+    @Test
+    @DisplayName("409 의 detail 을 로그로도 앱으로도 내보내지 않는다")
+    void 분리_규칙_오류에_메모가_안_샌다() {
+        RestClient.Builder builder = RestClient.builder().baseUrl("http://ai:8000");
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        server.expect(requestTo("http://ai:8000/v1/postvisit/memo"))
+                .andRespond(withStatus(HttpStatus.CONFLICT)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .body("""
+                                {"detail": "분리 규칙이 바뀌었습니다 — 허리 디스크 초기래요"}"""));
+
+        HttpAiMemoClient client = new HttpAiMemoClient(
+                builder.build(), new ObjectMapper(), new AiSigner("test-secret"));
+        MemoRequest request = new MemoRequest("메모", null, null,
+                Map.of("0", "findings"), null, null, "split-v1");
+
+        // AI 가 detail 에 메모 조각을 실어 보낼 수 있다. 그대로 흘리면 증상이 앱 화면과
+        // 로그로 샌다. 우리가 정한 문구만 나간다.
+        assertThatThrownBy(() -> client.classify(request))
+                .isInstanceOf(ApiException.class)
+                .hasMessageNotContaining("허리 디스크");
     }
 
     @Test

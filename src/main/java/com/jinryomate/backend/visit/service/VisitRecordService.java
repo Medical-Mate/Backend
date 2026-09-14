@@ -109,7 +109,8 @@ public class VisitRecordService {
     public ClassifyMemoResponse classify(Long userId, ClassifyMemoRequest request) {
         MemoRequest toAi = new MemoRequest(
                 request.memo(), request.visitedOn(), request.clinicName(),
-                request.labels(), request.classify(), toLabelsMeta(request.labelsMeta()));
+                request.labels(), request.classify(), toLabelsMeta(request.labelsMeta()),
+                request.splitVersion());
 
         MemoClassification result = aiMemoClient.classify(toAi);
 
@@ -117,8 +118,9 @@ public class VisitRecordService {
         result.axes().forEach((name, a) -> axes.put(name, Axis.from(a)));
 
         // 메모 본문은 민감정보라 남기지 않는다. 몇 줄로 나뉘었는지와 모델을 썼는지만 남긴다.
-        log.info("메모 분류 userId={} 문장={} 항목={} 모델호출={}",
-                userId, result.sentences().size(), axes.size(), toAi.effectiveClassify());
+        log.info("메모 분류 userId={} 문장={} 항목={} 모델호출={} split={}",
+                userId, result.sentences().size(), axes.size(), toAi.effectiveClassify(),
+                result.splitVersion());
 
         return new ClassifyMemoResponse(
                 axes,
@@ -126,7 +128,8 @@ public class VisitRecordService {
                 result.labels(),
                 result.patientNotes(),
                 result.followUp(),
-                new LabelsMeta(result.modelId(), result.promptVersion()));
+                new LabelsMeta(result.modelId(), result.promptVersion()),
+                result.splitVersion());
     }
 
     /** 요청의 폰 모델 정보를 AI 쪽 값으로 옮긴다. 안 보냈으면 null 이다. */

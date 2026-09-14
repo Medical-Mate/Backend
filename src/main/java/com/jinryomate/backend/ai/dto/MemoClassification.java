@@ -20,6 +20,8 @@ import java.util.Map;
  * @param labels       문장 인덱스(문자열) → 축 이름. 수정 저장 때 되돌려 보낸다
  * @param patientNotes 어느 축에도 안 들어간 문장. <b>버리지 않는다</b>
  * @param followUp     재방문 시점. 날짜 하나가 아니라 원문·날짜·"전후" 여부를 함께 담는다
+ * @param splitVersion 무엇이 이 문장들을 나눴는지({@code "split-v2"}). <b>{@code labels} 를
+ *                     되보낼 때 같이 보낸다</b> — 그 사이 규칙이 바뀌었으면 409 가 온다
  */
 public record MemoClassification(
         Map<String, CardAxis> axes,
@@ -28,5 +30,6 @@ public record MemoClassification(
         List<String> patientNotes,
         FollowUp followUp,
         String promptVersion,
-        String modelId
+        String modelId,
+        String splitVersion
 ) {}

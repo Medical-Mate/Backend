@@ -7,6 +7,7 @@ import com.jinryomate.backend.global.error.ErrorCode;
 import com.jinryomate.backend.global.web.RequestIdFilter;
 import java.time.Instant;
 import java.util.UUID;
+import java.util.function.IntFunction;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
@@ -46,15 +47,32 @@ class AiHttpCaller {
      * 이어져야 한다.
      */
     <T> T call(String path, ObjectNode body, String what, Class<T> type) {
+        return call(path, body, what, type, status -> null);
+    }
+
+    /**
+     * 상태 코드 몇 개를 우리 오류로 옮겨 가며 호출한다.
+     *
+     * <p><b>기본은 4xx 를 전부 {@link ErrorCode#UPSTREAM_ERROR}(502) 로 뭉갭니다.</b>
+     * 상류가 "네 요청이 잘못됐다"고 한 것을 앱에는 "AI 가 죽었다"로 전하는 셈인데, 대부분은
+     * 그래도 됩니다 — 앱이 할 수 있는 일이 없으니까요.
+     *
+     * <p>할 수 있는 일이 있을 때만 {@code statusMap} 으로 갈라냅니다. 409(분리 규칙 바뀜)가
+     * 그렇습니다 — 앱이 다시 분류하면 풀립니다.
+     *
+     * @param statusMap 이 상태 코드를 무엇으로 옮길지. {@code null} 을 주면 기본대로 간다
+     */
+    <T> T call(String path, ObjectNode body, String what, Class<T> type,
+               IntFunction<ErrorCode> statusMap) {
         String requestId = requestId();
         byte[] bytes = serialize(body);
 
         try {
-            return post(path, bytes, requestId, type);
+            return post(path, bytes, requestId, type, statusMap);
         } catch (RetryableAiException e) {
             log.warn("AI {} 실패, 1회 재시도 requestId={} status={}", what, requestId, e.status);
             try {
-                return post(path, bytes, requestId, type);
+                return post(path, bytes, requestId, type, statusMap);
             } catch (RetryableAiException retry) {
                 log.error("AI {} 재시도도 실패 requestId={} status={}", what, requestId, retry.status);
                 throw new ApiException(ErrorCode.UPSTREAM_ERROR, "잠시 후 다시 시도해주세요.");
@@ -62,7 +80,8 @@ class AiHttpCaller {
         }
     }
 
-    private <T> T post(String path, byte[] body, String requestId, Class<T> type) {
+    private <T> T post(String path, byte[] body, String requestId, Class<T> type,
+                       IntFunction<ErrorCode> statusMap) {
         Instant now = Instant.now();
         String signature = signer.sign("POST", path, now, requestId, body);
 
@@ -81,8 +100,13 @@ class AiHttpCaller {
                             throw new RetryableAiException(status);
                         }
                         // 본문에 환자 발화가 되비쳐 올 수 있어 상태 코드만 남긴다.
+                        // detail 도 마찬가지다 — AI 가 거기에 메모 조각을 실어 보낼 수 있다.
                         log.error("AI 호출 실패 status={} path={} requestId={}", status, path, requestId);
-                        throw new ApiException(ErrorCode.UPSTREAM_ERROR, "잠시 후 다시 시도해주세요.");
+
+                        ErrorCode mapped = statusMap.apply(status);
+                        throw mapped != null
+                                ? new ApiException(mapped)
+                                : new ApiException(ErrorCode.UPSTREAM_ERROR, "잠시 후 다시 시도해주세요.");
                     })
                     .body(type);
         } catch (RetryableAiException | ApiException e) {

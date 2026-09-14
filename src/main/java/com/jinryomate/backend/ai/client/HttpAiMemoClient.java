@@ -60,6 +60,11 @@ public class HttpAiMemoClient implements AiMemoClient {
             ObjectNode node = body.putObject("labels");
             request.labels().forEach(node::put);
         }
+        // 그 라벨을 매길 때 쓰인 문장 분리 규칙. 그 사이 규칙이 바뀌었으면 AI 가 409 를 낸다.
+        // 이게 없으면 예전 번호가 새 문장에 붙어 200 이 나가고, 내용만 조용히 어긋난다.
+        if (request.shouldSendSplitVersion()) {
+            body.put("split_version", request.splitVersion());
+        }
         // 기본값이 true 라, 문장만 받으려면 false 를 명시해야 한다.
         body.put("classify", request.effectiveClassify());
 
@@ -72,7 +77,8 @@ public class HttpAiMemoClient implements AiMemoClient {
             node.put("prompt_version", meta.promptVersion());
         }
 
-        MemoResponse response = caller.call(MEMO_PATH, body, "메모 분류", MemoResponse.class);
+        MemoResponse response = caller.call(MEMO_PATH, body, "메모 분류", MemoResponse.class,
+                status -> status == 409 ? ErrorCode.SPLIT_VERSION_CHANGED : null);
         if (response == null || response.card() == null) {
             log.error("AI 메모 응답에 card 가 없습니다");
             throw new ApiException(ErrorCode.UPSTREAM_ERROR, "잠시 후 다시 시도해주세요.");
@@ -100,7 +106,8 @@ public class HttpAiMemoClient implements AiMemoClient {
                 notes,
                 toFollowUp(card.path("follow_up_date")),
                 card.path("provenance").path("prompt_version").asText(null),
-                card.path("provenance").path("model_id").asText(null));
+                card.path("provenance").path("model_id").asText(null),
+                response.splitVersion());
     }
 
     /**
@@ -201,6 +208,15 @@ public class HttpAiMemoClient implements AiMemoClient {
             JsonNode card,
             List<String> sentences,
             Map<String, String> labels,
-            @JsonProperty("request_id") String requestId
+            @JsonProperty("request_id") String requestId,
+
+            /**
+             * 무엇이 문장을 나눴는지. <b>최상위다</b> — {@code provenance} 안이 아니다.
+             *
+             * <p>계약이 붙기 전 이미지에서는 안 온다. 그때는 {@code null} 이고, 앱에
+             * {@code null} 이 전달돼 되보낼 것이 없어진다 — 검사가 꺼진 채로 지금까지처럼
+             * 동작한다.
+             */
+            @JsonProperty("split_version") String splitVersion
     ) {}
 }

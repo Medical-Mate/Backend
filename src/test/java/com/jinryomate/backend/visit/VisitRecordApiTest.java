@@ -149,11 +149,13 @@ class VisitRecordApiTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new ClassifyMemoRequest(
                                 "선생님이 허리 디스크 초기래요. 나프록센 먹으라고 하셨어요. 다음 주에 오라고 하셨어요.",
-                                LocalDate.now(), "○○정형외과", null, null, null))))
+                                LocalDate.now(), "○○정형외과", null, null, null, null))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.sentences.length()").value(3))
                 // 라벨의 키가 sentences 의 인덱스다. 앱이 이걸로 줄을 옮긴다.
                 .andExpect(jsonPath("$.labels").exists())
+                // 그 번호가 어느 규칙으로 매겨졌는지. 되보낼 때 같이 실어야 한다.
+                .andExpect(jsonPath("$.splitVersion").exists())
                 .andReturn().getResponse().getContentAsString();
 
         // 나누기만 하고 저장하지 않는다. 환자가 고치고 나서 저장하기 때문이다.
@@ -164,13 +166,14 @@ class VisitRecordApiTest {
         JsonNode first = objectMapper.readTree(body);
         Map<String, String> labels = objectMapper.convertValue(
                 first.path("labels"), new TypeReference<Map<String, String>>() {});
+        String splitVersion = first.path("splitVersion").asText(null);
 
         mockMvc.perform(post("/api/visits/classify")
                         .header("Authorization", token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new ClassifyMemoRequest(
                                 "선생님이 허리 디스크 초기래요. 나프록센 먹으라고 하셨어요. 다음 주에 오라고 하셨어요.",
-                                LocalDate.now(), "○○정형외과", labels, null, null))))
+                                LocalDate.now(), "○○정형외과", labels, null, null, splitVersion))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.labels").value(labels));
     }
@@ -184,7 +187,7 @@ class VisitRecordApiTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new ClassifyMemoRequest(
                                 "혈액검사를 받았어요. 2주 뒤에 다시 오세요. 약은 없어요.",
-                                LocalDate.now(), "○○정형외과", null, false, null))))
+                                LocalDate.now(), "○○정형외과", null, false, null, null))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.sentences.length()").value(3))
                 // 아직 아무 축에도 안 들어갔다. 라벨은 폰이 붙인다.
@@ -208,7 +211,8 @@ class VisitRecordApiTest {
                                 memo, LocalDate.now(), "○○정형외과",
                                 Map.of("0", "tests", "1", "follow_up", "2", "medication_instructions"),
                                 null,
-                                new LabelsMetaRequest("Qwen3-1.7B-Q4_0", "small-v4")))))
+                                new LabelsMetaRequest("Qwen3-1.7B-Q4_0", "small-v4"),
+                                null))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.axes.tests.value").value("혈액검사를 받았어요."))
                 .andExpect(jsonPath("$.axes.follow_up.value").value("2주 뒤에 다시 오세요."))
@@ -242,7 +246,7 @@ class VisitRecordApiTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new ClassifyMemoRequest(
                                 "혈액검사를 받았어요.", null, null, Map.of("0", "tests"), null,
-                                new LabelsMetaRequest("Qwen3-1.7B-Q4_0", "  ")))))
+                                new LabelsMetaRequest("Qwen3-1.7B-Q4_0", "  "), null))))
                 // AI 는 필드 둘을 다 요구한다. 여기서 막아야 422 대신 제대로 된 400 이 간다.
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error.code").value("INVALID_REQUEST"));
@@ -255,7 +259,7 @@ class VisitRecordApiTest {
                         .header("Authorization", token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(
-                                new ClassifyMemoRequest("  ", null, null, null, null, null))))
+                                new ClassifyMemoRequest("  ", null, null, null, null, null, null))))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error.code").value("INVALID_REQUEST"));
     }
