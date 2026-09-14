@@ -71,9 +71,21 @@ public final class CardDtos {
              */
             Clinic clinic,
 
+            /**
+             * 언제 쓴 카드인지. 화면의 {@code 09.04 작성}.
+             *
+             * <p><b>고쳐도 안 바뀝니다.</b> 확정한 카드를 고치면 서버에 새 버전 행이 생기지만
+             * 그건 저희 사정이고, 환자에게는 같은 카드를 고친 것입니다. 맨 처음 만든 시각을
+             * 그대로 냅니다.
+             */
             Instant createdAt
     ) {
-        public static CardSummary of(BriefingCard c, boolean visited, String clinicName) {
+        /**
+         * @param cardId  <b>가장 최신 버전의 id</b> 입니다. 눌러 들어가면 최신 카드가 열립니다
+         * @param written 체인 첫 행의 작성 시각. 목록의 {@code createdAt} 이 이 값입니다
+         */
+        public static CardSummary of(BriefingCard c, boolean visited, String clinicName,
+                                     Instant written) {
             return new CardSummary(
                     c.getId(),
                     c.displayTitle(),
@@ -82,7 +94,7 @@ public final class CardDtos {
                     visited,
                     clinicName,
                     c.clinic(),
-                    c.getCreatedAt());
+                    written != null ? written : c.getCreatedAt());
         }
     }
 
