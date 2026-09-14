@@ -70,6 +70,14 @@ public enum ErrorCode {
     CARD_ALREADY_EDITED(HttpStatus.CONFLICT,
             "이미 고친 카드예요. 최신 카드를 불러올게요."),
 
+    /**
+     * 호출이 너무 잦다. <b>웹 데모 경로에서만 난다.</b>
+     *
+     * <p>인증이 없는 경로라 누가 얼마나 부르는지를 요청 빈도로만 가른다. 앱은 계정이
+     * 있어 여기 걸리지 않는다.
+     */
+    TOO_MANY_REQUESTS(HttpStatus.TOO_MANY_REQUESTS, "잠시 후 다시 시도해주세요."),
+
     UPSTREAM_ERROR(HttpStatus.BAD_GATEWAY, "AI 서비스 호출에 실패했습니다."),
     UPSTREAM_TIMEOUT(HttpStatus.GATEWAY_TIMEOUT, "AI 응답이 지연되고 있습니다."),
 

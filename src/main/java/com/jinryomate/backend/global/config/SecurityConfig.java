@@ -65,6 +65,13 @@ public class SecurityConfig {
                     // API 문서. 운영 포함 모든 환경에서 연다.
                     auth.requestMatchers(DOCS_PATHS).permitAll();
 
+                    // 웹 데모. 스토어 제출이 불가해 만든 한시 경로이고 심사가 끝나면
+                    // 이 줄과 demo 패키지를 지운다.
+                    //
+                    // 인증이 없는 대신 컨트롤러가 호출 빈도를 제한하고, 저장을 하지 않아
+                    // 남는 것이 없다. 문진만 열려 있어 카드·기록·일정은 계정이 있어야 한다.
+                    auth.requestMatchers("/api/demo/**").permitAll();
+
                     // --- 나머지는 전부 인증 필요 ---
                     auth.anyRequest().authenticated();
                 })
