@@ -279,16 +279,107 @@ class VisitRecordApiTest {
     }
 
     @Test
-    @DisplayName("한 카드에 기록은 하나뿐이다")
-    void 중복_기록_차단() throws Exception {
+    @DisplayName("같은 카드로 재방문하면 기록이 따로 쌓인다")
+    void 재방문_기록() throws Exception {
+        // 같은 증상으로 다시 가는 것이 진료의 보통 모양이다. 첫 진료에서 검사를 받고
+        // 두 번째에 결과를 듣는데, 그 말이 첫 기록을 덮어쓰면 안 된다.
+        long cardId = confirmedCard();
+        createVisitOn(cardId, LocalDate.of(2026, 9, 16), "서울OO병원");
+        createVisitOn(cardId, LocalDate.of(2026, 9, 23), "서울OO병원");
+
+        // 시안 1j-3-R 의 "진료 2회".
+        mockMvc.perform(get("/api/cards/" + cardId + "/visits").header("Authorization", token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(2))
+                // 최근 진료일 순.
+                .andExpect(jsonPath("$[0].visitedOn").value("2026-09-23"))
+                .andExpect(jsonPath("$[1].visitedOn").value("2026-09-16"));
+
+        // 카드 상세의 "진료받은 병원" 은 가장 최근 한 건이다.
+        mockMvc.perform(get("/api/cards/" + cardId).header("Authorization", token))
+                .andExpect(jsonPath("$.visit.visitedOn").value("2026-09-23"));
+    }
+
+    @Test
+    @DisplayName("같은 날 두 건도 받는다")
+    void 같은_날_두_건() throws Exception {
+        // 하루에 두 병원에 가는 일이 있다. 날짜로 막으면 그때 적을 자리가 없다.
+        long cardId = confirmedCard();
+        createVisitOn(cardId, LocalDate.of(2026, 9, 16), "○○내과");
+        createVisitOn(cardId, LocalDate.of(2026, 9, 16), "○○정형외과");
+
+        mockMvc.perform(get("/api/cards/" + cardId + "/visits").header("Authorization", token))
+                .andExpect(jsonPath("$.length()").value(2));
+    }
+
+    @Test
+    @DisplayName("카드를 고친 뒤 남긴 기록도 같은 카드의 기록으로 모인다")
+    void 버전이_갈려도_모인다() throws Exception {
+        // 재방문 전에 카드를 고치면 버전이 올라가서 두 기록이 서로 다른 행에 붙는다.
+        // 행으로 찾으면 "진료 2회" 가 1회로 보인다.
+        long v1 = confirmedCard();
+        createVisitOn(v1, LocalDate.of(2026, 9, 16), "서울OO병원");
+
+        String edited = mockMvc.perform(patch("/api/cards/" + v1)
+                        .header("Authorization", token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"axes": [{"axis": "onset", "value": "지난주부터"}]}"""))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        long v2 = objectMapper.readTree(edited).path("cardId").asLong();
+        mockMvc.perform(post("/api/cards/" + v2 + "/confirm").header("Authorization", token))
+                .andExpect(status().isOk());
+
+        createVisitOn(v2, LocalDate.of(2026, 9, 23), "서울OO병원");
+
+        // 어느 버전 id 로 물어도 둘 다 나와야 한다.
+        for (long id : new long[]{v1, v2}) {
+            mockMvc.perform(get("/api/cards/" + id + "/visits").header("Authorization", token))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.length()").value(2));
+        }
+
+        // 카드 목록의 "진료 완료" 도 버전을 가리지 않는다.
+        mockMvc.perform(get("/api/me/cards").header("Authorization", token))
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].visited").value(true));
+    }
+
+    @Test
+    @DisplayName("기록을 전부 지우면 카드가 다시 진료 전으로 돌아간다")
+    void 기록을_지우면_진료_전() throws Exception {
+        long cardId = confirmedCard();
+        long first = createVisitOn(cardId, LocalDate.of(2026, 9, 16), "서울OO병원");
+        long second = createVisitOn(cardId, LocalDate.of(2026, 9, 23), "서울OO병원");
+
+        // 한 건만 지우면 아직 다녀온 것이다.
+        mockMvc.perform(delete("/api/visits/" + second).header("Authorization", token))
+                .andExpect(status().isNoContent());
+        mockMvc.perform(get("/api/me/cards").header("Authorization", token))
+                .andExpect(jsonPath("$[0].visited").value(true));
+
+        // 남은 것까지 지우면 진료 전이다. 저장된 값이 아니라 세어서 판단하기 때문이다.
+        mockMvc.perform(delete("/api/visits/" + first).header("Authorization", token))
+                .andExpect(status().isNoContent());
+        mockMvc.perform(get("/api/me/cards").header("Authorization", token))
+                .andExpect(jsonPath("$[0].visited").value(false))
+                .andExpect(jsonPath("$[0].clinicName").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("남의 카드의 진료 목록은 볼 수 없다")
+    void 카드별_목록_소유권() throws Exception {
         long cardId = confirmedCard();
         createVisitOn(cardId);
 
-        mockMvc.perform(post("/api/cards/" + cardId + "/visit")
-                        .header("Authorization", token)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(fullRecord())))
-                .andExpect(status().isBadRequest());
+        // 남의 카드는 존재 자체를 알려주지 않는다 — 403 이 아니라 404 다.
+        given(kakaoClient.resolveKakaoId(anyString())).willReturn(5544332211L);
+        String otherToken = "Bearer " + login().accessToken();
+
+        mockMvc.perform(get("/api/cards/" + cardId + "/visits")
+                        .header("Authorization", otherToken))
+                .andExpect(status().isNotFound());
     }
 
     @Test

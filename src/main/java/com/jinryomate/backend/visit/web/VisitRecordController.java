@@ -130,7 +130,14 @@ public class VisitRecordController {
     @Operation(
             summary = "진료 후 기록 저장",
             description = """
-                    **확정한 카드에만** 남길 수 있고, 카드 하나에 기록 하나입니다.
+                    **확정한 카드에만** 남길 수 있습니다.
+
+                    **카드 하나에 기록이 여럿 쌓입니다.** 같은 증상으로 재방문하면 그 진료의
+                    기록을 또 남기세요 — 첫 기록을 덮어쓰지 않고 따로 쌓입니다. 모아 보려면
+                    `GET /api/cards/{cardId}/visits` 를 쓰세요.
+
+                    **같은 날 두 건도 받습니다.** 하루에 두 병원에 가는 일이 있어서 날짜로
+                    막지 않습니다. 실수로 두 번 저장되지 않게 하는 것은 화면 몫입니다.
 
                     모든 항목이 선택입니다. 병원을 막 나온 환자에게 필수 입력을 강요하면
                     아무것도 안 남습니다. `rawNote`(들은 이야기 원문)만 적어도 저장됩니다.
@@ -174,6 +181,27 @@ public class VisitRecordController {
                                 @PathVariable Long cardId,
                                 @Valid @RequestBody CreateVisitRequest request) {
         return visitRecordService.create(userId, cardId, request);
+    }
+
+    @Operation(
+            summary = "이 카드로 다녀온 진료 전부",
+            description = """
+                    화면 `1j-3-R` (기록 상세 · 재방문 누적)의 **"진료 2회"** 가 이 목록입니다.
+                    최근 진료일 순입니다.
+
+                    **버전을 가리지 않고 모읍니다.** 재방문 전에 카드를 고치면 서버에서
+                    버전이 올라가서 첫 기록과 두 번째 기록이 **서로 다른 카드 행**에 붙습니다.
+                    `GET /api/me/visits` 를 `cardId` 로 걸러 모으시면 그때 한쪽이 빠집니다 —
+                    게다가 목록이 드리는 `cardId` 는 **최신 버전 id** 라 고칠 때마다 바뀌어서
+                    묶을 열쇠로 쓸 수 없습니다.
+
+                    **체인의 아무 카드 id** 나 주시면 됩니다. 목록에서 받은 것을 그대로
+                    넣으세요.
+                    """)
+    @GetMapping("/cards/{cardId}/visits")
+    public List<VisitSummary> listByCard(@AuthenticationPrincipal Long userId,
+                                         @PathVariable Long cardId) {
+        return visitRecordService.listByCard(userId, cardId);
     }
 
     @Operation(
