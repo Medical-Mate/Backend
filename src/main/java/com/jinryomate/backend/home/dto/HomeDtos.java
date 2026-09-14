@@ -29,6 +29,23 @@ public final class HomeDtos {
     public record HomeResponse(
             LocalDate lastVisitedOn,
             AppointmentResponse nextAppointment,
+
+            /**
+             * 진료 후 기록이 아직 없는 <b>지난 일정</b> 가운데 가장 최근 날.
+             * 없으면 {@code null} 입니다.
+             *
+             * <p>화면의 "9월 12일 진료, 기록이 아직 없어요" 입니다. 날짜 하나면 문구를
+             * 만들 수 있어 일정을 통째로 내지 않습니다.
+             *
+             * <p><b>14일까지만 거슬러 봅니다.</b> 그보다 오래된 것을 이제 와 알리는 것은
+             * 때를 놓친 알림입니다.
+             *
+             * <p><b>기록이 있는지는 날짜로 견줍니다.</b> 일정과 기록을 잇는 열쇠가 없어서
+             * "그날 날짜로 남긴 기록이 있는가"로 판단합니다 — 진료 다음 날 적으면서 날짜를
+             * 그날로 두면 이 일정은 계속 "기록 없음"으로 남습니다.
+             */
+            LocalDate pendingRecordOn,
+
             InProgressSession inProgressSession,
             List<CardSummary> recentCards
     ) {

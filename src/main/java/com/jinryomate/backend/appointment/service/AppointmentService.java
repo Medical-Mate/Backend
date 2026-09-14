@@ -36,6 +36,14 @@ public class AppointmentService {
      */
     private static final ZoneId ZONE = ZoneId.of("Asia/Seoul");
 
+    /**
+     * "기록이 아직 없어요"를 며칠까지 거슬러 올릴지.
+     *
+     * <p>2주가 넘은 진료를 이제 와 재촉하면 알림이 아니라 잔소리다. 환자도 그때 무슨 말을
+     * 들었는지 이미 흐릿하다 — 적게 하는 것이 목적인데 적을 수 있는 상태가 아니다.
+     */
+    private static final int PENDING_RECORD_LOOKBACK_DAYS = 14;
+
     private final AppointmentRepository appointmentRepository;
     private final UserRepository userRepository;
     private final BriefingCardService briefingCardService;
@@ -69,6 +77,21 @@ public class AppointmentService {
                 .stream()
                 .map(AppointmentResponse::from)
                 .toList();
+    }
+
+    /**
+     * 진료 후 기록이 아직 없는 지난 일정 가운데 가장 최근 날. 홈이 쓴다.
+     *
+     * <p><b>{@link #PENDING_RECORD_LOOKBACK_DAYS} 일까지만 거슬러 본다.</b> 그보다 오래된
+     * 것을 이제 와 알리는 것은 때를 놓친 알림이다 — 앱이 "그 달만 본다"로 끊어 둔 것과
+     * 같은 판단이고, 달 경계에서 생기던 구멍만 없앤다.
+     */
+    @Transactional(readOnly = true)
+    public LocalDate findPendingRecordOn(Long userId) {
+        LocalDate today = LocalDate.now(ZONE);
+        return appointmentRepository.findPendingRecordOn(
+                userId, Appointment.Status.CANCELED, today,
+                today.minusDays(PENDING_RECORD_LOOKBACK_DAYS));
     }
 
     @Transactional

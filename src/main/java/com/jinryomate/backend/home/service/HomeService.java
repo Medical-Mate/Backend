@@ -44,6 +44,7 @@ public class HomeService {
         return new HomeResponse(
                 lastVisitedOn(userId),
                 nextAppointment(userId),
+                appointmentService.findPendingRecordOn(userId),
                 inProgressSession(userId),
                 recentCards(userId));
     }
