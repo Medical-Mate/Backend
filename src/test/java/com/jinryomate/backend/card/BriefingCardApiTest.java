@@ -697,9 +697,89 @@ class BriefingCardApiTest {
                 .andExpect(jsonPath("$[0].cardId").value((int) second));
     }
 
+    @Test
+    @DisplayName("이미 고친 카드를 또 고치면 409 로 막고 최신 cardId 를 준다")
+    void 옛_카드로_수정하면_막는다() throws Exception {
+        // 앱이 옛 id 를 들고 있다가 다시 보내면서 실제로 일어났다(#114). 막지 않으면
+        // 같은 자리에서 가지가 하나 더 나고, 그 가지에 넣은 편집은 어느 화면에도 안 나온다.
+        long v1 = createCard();
+        mockMvc.perform(post("/api/cards/" + v1 + "/confirm").header("Authorization", token))
+                .andExpect(status().isOk());
+
+        long v2 = editOnce(v1);
+
+        mockMvc.perform(patch("/api/cards/" + v1)
+                        .header("Authorization", token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"axes": [{"axis": "onset", "value": "그저께부터"}]}"""))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.error.code").value("CARD_ALREADY_EDITED"))
+                // 이게 없으면 앱은 어느 id 로 다시 조회할지부터 막힌다.
+                .andExpect(jsonPath("$.error.details.latestCardId").value((int) v2));
+
+        // 막혔으면 가지가 나지 않았어야 한다. 목록은 그대로 한 장이다.
+        mockMvc.perform(get("/api/me/cards").header("Authorization", token))
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].cardId").value((int) v2));
+    }
+
+    @Test
+    @DisplayName("최신 카드로는 계속 고칠 수 있다")
+    void 최신_카드는_막지_않는다() throws Exception {
+        // 막는 것은 "가지가 나는 것"이지 "고치는 것"이 아니다. 체인이 한 줄로 이어지는
+        // 한 몇 번을 고치든 통과해야 한다.
+        long v1 = createCard();
+        mockMvc.perform(post("/api/cards/" + v1 + "/confirm").header("Authorization", token))
+                .andExpect(status().isOk());
+
+        long v2 = editOnce(v1);
+        long v3 = editOnce(v2);
+
+        assertThat(v3).isNotEqualTo(v2);
+        mockMvc.perform(get("/api/cards/" + v3).header("Authorization", token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.version").value(3));
+    }
+
+    @Test
+    @DisplayName("확정 전 초안은 몇 번을 고쳐도 버전이 안 는다")
+    void 초안은_제자리에서_고친다() throws Exception {
+        // 초안은 새 버전을 만들지 않고 그 자리에서 고친다. 여기에 409 가 끼면
+        // 확정 전 편집이 통째로 막힌다.
+        long cardId = createCard();
+
+        for (int i = 0; i < 3; i++) {
+            mockMvc.perform(patch("/api/cards/" + cardId)
+                            .header("Authorization", token)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("""
+                                    {"axes": [{"axis": "onset", "value": "어제부터"}]}"""))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.cardId").value((int) cardId))
+                    .andExpect(jsonPath("$.version").value(1));
+        }
+    }
+
+    @Test
+    @DisplayName("오류 응답의 details 는 필요할 때만 채운다")
+    void 평소_오류에는_details_가_없다() throws Exception {
+        // 전역 봉투라 오류마다 필드가 늘면 앱의 파싱이 갈라진다. 기본은 null 이다.
+        mockMvc.perform(get("/api/cards/999999").header("Authorization", token))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error.code").value("NOT_FOUND"))
+                .andExpect(jsonPath("$.error.details").doesNotExist());
+    }
+
     // ---------- helpers ----------
 
-    /** 확정된 카드를 한 번 고친다. 새 버전 id 를 돌려준다. */
+    /**
+     * 확정된 카드를 고치고 <b>새 버전도 확정한다.</b> 새 버전 id 를 돌려준다.
+     *
+     * <p>확정까지 하는 이유 — 새 버전은 {@code DRAFT} 로 나오고, 초안은 제자리에서 고쳐진다.
+     * 확정하지 않으면 몇 번을 고쳐도 버전이 늘지 않아 체인이 생기지 않는다.
+     * 운영 데이터를 보면 앱도 고칠 때마다 확정을 거친다.
+     */
     private long editOnce(long cardId) throws Exception {
         String body = mockMvc.perform(patch("/api/cards/" + cardId)
                         .header("Authorization", token)
@@ -708,7 +788,11 @@ class BriefingCardApiTest {
                                 {"axes": [{"axis": "onset", "value": "지난주부터"}]}"""))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
-        return objectMapper.readTree(body).path("cardId").asLong();
+
+        long next = objectMapper.readTree(body).path("cardId").asLong();
+        mockMvc.perform(post("/api/cards/" + next + "/confirm").header("Authorization", token))
+                .andExpect(status().isOk());
+        return next;
     }
 
     private TokenResponse login() throws Exception {

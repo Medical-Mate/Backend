@@ -50,6 +50,26 @@ public enum ErrorCode {
     SPLIT_VERSION_CHANGED(HttpStatus.CONFLICT,
             "메모를 나눈 방식이 바뀌었어요. 다시 정리해주세요."),
 
+    /**
+     * 이미 고친 적 있는 카드를 또 고치려 했다.
+     *
+     * <p>확정된 카드를 고치면 그 카드를 이어받은 <b>새 버전</b>이 생긴다. 그 뒤에 <b>옛 id</b>
+     * 로 또 고치면 같은 자리에서 가지가 하나 더 나서 체인이 갈라진다.
+     *
+     * <pre>
+     * 19 ─┬─ 20 ─── 22
+     *     └─ 21          ← 여기 넣은 편집은 어느 화면에도 안 나온다
+     * </pre>
+     *
+     * <p><b>200 이 나가고 응답도 멀쩡해 보인다.</b> 환자가 고친 내용이 조용히 사라지고
+     * 나중에 "분명히 고쳤는데 없다"로만 드러난다. 그래서 그 자리에서 막는다.
+     *
+     * <p>응답 {@code details.latestCardId} 에 최신 카드 id 가 실린다. 앱은 그 id 로
+     * 갈아타고 한 번 다시 보내면 된다.
+     */
+    CARD_ALREADY_EDITED(HttpStatus.CONFLICT,
+            "이미 고친 카드예요. 최신 카드를 불러올게요."),
+
     UPSTREAM_ERROR(HttpStatus.BAD_GATEWAY, "AI 서비스 호출에 실패했습니다."),
     UPSTREAM_TIMEOUT(HttpStatus.GATEWAY_TIMEOUT, "AI 응답이 지연되고 있습니다."),
 

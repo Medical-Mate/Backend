@@ -25,7 +25,7 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleApi(ApiException e) {
         ErrorCode code = e.getErrorCode();
         log.warn("[{}] {}", code.name(), e.getMessage());
-        return build(code, e.getMessage());
+        return build(code, e.getMessage(), e.getDetails());
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
@@ -143,9 +143,14 @@ public class GlobalExceptionHandler {
      * 하필 형식을 잘못 보낸 요청에서 그 형태가 깨지면 원인을 짚기가 제일 어렵다.
      */
     private ResponseEntity<ErrorResponse> build(ErrorCode code, String message) {
+        return build(code, message, null);
+    }
+
+    private ResponseEntity<ErrorResponse> build(ErrorCode code, String message,
+                                                java.util.Map<String, Object> details) {
         return ResponseEntity
                 .status(code.getStatus())
                 .contentType(MediaType.APPLICATION_JSON)
-                .body(ErrorResponse.of(code, message, RequestIdFilter.current()));
+                .body(ErrorResponse.of(code, message, RequestIdFilter.current(), details));
     }
 }
