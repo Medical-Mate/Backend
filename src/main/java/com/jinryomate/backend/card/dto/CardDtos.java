@@ -218,6 +218,17 @@ public final class CardDtos {
              */
             Visit visit,
 
+            /**
+             * 화면 맨 위 한 줄. {@code 복부 통증 · 3주}.
+             *
+             * <p><b>AI 가 부위 + 기간을 결정론으로 조합해 만듭니다.</b> LLM 을 거치지 않는
+             * 값의 조합이라 병명이 들어갈 경로가 없고, 그래서 저희가 검증하지 않습니다.
+             * 환자도 고칠 수 없습니다.
+             *
+             * <p><b>AI 가 못 만들었으면 대신 채웁니다</b> — 주 호소, 그것도 없으면 짚은 부위
+             * 표현입니다. 셋 다 없으면 {@code null} 인데, 문답을 시작만 하고 아무 말도 안 한
+             * 카드가 그렇습니다. 목록과 같은 규칙입니다.
+             */
             String title,
             String chiefComplaint,
             Map<String, Axis> axes,
@@ -304,7 +315,7 @@ public final class CardDtos {
                     c.clinic(),
                     links.appointment(),
                     links.visit(),
-                    c.getTitle(),
+                    c.displayTitle(),
                     c.getChiefComplaint(),
                     axes,
                     List.copyOf(c.getRedFlags()),

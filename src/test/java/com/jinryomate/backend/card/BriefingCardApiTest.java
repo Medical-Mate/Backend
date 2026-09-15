@@ -771,6 +771,45 @@ class BriefingCardApiTest {
                 .andExpect(jsonPath("$.error.details").doesNotExist());
     }
 
+    @Test
+    @DisplayName("상세의 제목이 목록과 같다")
+    void 상세_제목이_목록과_같다() throws Exception {
+        // 목록은 displayTitle 로 대신 채우는데 상세만 title 원본을 내보내고 있었다.
+        // AI 가 제목을 못 만들면(부위가 안 실렸거나 문답이 짧으면) 목록에는 제목이 뜨는데
+        // 상세는 비어서, 같은 카드인데 화면마다 다르게 보였다.
+        long cardId = createCard();
+
+        String listed = objectMapper.readTree(
+                        mockMvc.perform(get("/api/me/cards").header("Authorization", token))
+                                .andExpect(status().isOk())
+                                .andReturn().getResponse().getContentAsString())
+                .get(0).path("title").asText(null);
+
+        assertThat(listed).isNotBlank();
+
+        mockMvc.perform(get("/api/cards/" + cardId).header("Authorization", token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.title").value(listed));
+    }
+
+    @Test
+    @DisplayName("대신 채운 제목이 저장되지는 않는다")
+    void 대신_채운_제목은_저장되지_않는다() throws Exception {
+        // 대신 채운 값이 저장되면 다음 버전부터 그게 진짜 제목이 되고, AI 가 나중에
+        // 제대로 만들어도 덮이지 않는다.
+        long cardId = createCard();
+
+        mockMvc.perform(patch("/api/cards/" + cardId)
+                        .header("Authorization", token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"chiefComplaint": "배가 아파요"}"""))
+                .andExpect(status().isOk())
+                // 주 호소를 고쳤으니 대신 채우는 값도 따라 바뀐다 — 제목이 박혀 있었다면
+                // 옛 값이 그대로 남는다.
+                .andExpect(jsonPath("$.title").value("배가 아파요"));
+    }
+
     // ---------- helpers ----------
 
     /**
