@@ -69,17 +69,27 @@ public class IntakeSessionService {
         session.rememberCard(opening.card());
         session.addMessage(IntakeMessage.fromAi(session, opening.reply()));
 
-        // 부위·증상은 민감정보라 값을 로그에 남기지 않는다. 부위가 붙었는지만 남긴다 —
-        // 그게 없으면 AI 가 "어디가 불편하신지"부터 다시 묻고, 화면은 멀쩡해 보인다.
-        log.info("문답 세션 시작 userId={} sessionId={} 부위={}",
-                userId, session.getId(), session.getSiteNodeId() != null);
+        // 부위·증상은 민감정보라 값을 로그에 남기지 않는다. 무엇이 붙었는지만 남긴다.
+        boolean hasNodeId = session.getSiteNodeId() != null;
+        boolean hasLabel = session.getSiteText() != null && !session.getSiteText().isBlank();
 
-        if (session.getSiteNodeId() == null) {
-            // 부위를 건너뛰는 경로가 와이어프레임에 있어 오류는 아니다. 다만 앱이 보냈는데
-            // 이름이 안 맞아 떨어진 경우와 구별이 안 돼서, 실제로 그걸 한참 못 찾았다
-            // (AI 계약은 site_node_id, 우리는 siteNodeId 였다).
-            log.warn("부위 없이 문답을 시작했습니다 sessionId={}. 앱이 보냈는데 비었다면"
-                    + " 요청 키가 siteNodeId 인지 확인이 필요합니다", session.getId());
+        log.info("문답 세션 시작 userId={} sessionId={} 노드id={} 이름={}",
+                userId, session.getId(), hasNodeId, hasLabel);
+
+        // 부위를 건너뛰는 경로가 와이어프레임에 있어 오류는 아니다. 다만 앱이 보냈는데
+        // 떨어진 경우와 구별이 안 되면 못 찾는다 — 실제로 그걸 한참 못 찾았다.
+        //
+        // 둘을 갈라 남긴다. 앞서 "부위 없이 시작했습니다" 한 줄로만 남겼더니, 이름은
+        // 와서 AI 까지 넘어가고 있는데도 부위가 통째로 없는 것으로 읽혔다.
+        if (!hasNodeId && !hasLabel) {
+            log.warn("부위 없이 문답을 시작했습니다 sessionId={}."
+                    + " 앱이 보냈는데 비었다면 요청 키가 siteNodeId · siteText 인지 봐야 합니다",
+                    session.getId());
+        } else if (!hasNodeId) {
+            log.warn("노드 id 없이 이름만으로 문답을 시작했습니다 sessionId={}."
+                    + " AI 에는 site_label 로 넘어가 문답·되묻기·제목은 돌지만,"
+                    + " 좌우(side)는 노드 id 와 함께만 실을 수 있어 카드에 안 들어갑니다",
+                    session.getId());
         }
         return SessionResponse.from(session, candidateReader.read(session.getAiCard()));
     }
