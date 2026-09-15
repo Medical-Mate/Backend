@@ -57,6 +57,16 @@ public class HttpAiTurnClient implements AiTurnClient {
         if (session.getSiteNodeId() != null) {
             body.put("site_node_id", session.getSiteNodeId());
         }
+        // 노드 id 가 없을 때를 위한 자리. 계약이 "site_node_id 가 있으면 무시한다" 고 해서
+        // 둘 다 실어도 안전하다.
+        //
+        // <b>이걸 안 보내고 있었다.</b> 앱이 짚은 부위의 이름(siteText)은 보내는데 노드 id 는
+        // 안 보내고 있어서, 우리가 그 이름을 들고만 있고 AI 에는 아무 부위도 안 넘겼다.
+        // 그래서 AI 가 "어디가 불편하신지" 부터 다시 묻고, 짚은 곳과 다른 부위를 말해도
+        // 되묻지 못했다. 이름만으로도 그 둘이 돈다.
+        if (session.getSiteText() != null && !session.getSiteText().isBlank()) {
+            body.put("site_label", session.getSiteText());
+        }
         if (session.getSide() != null) {
             body.put("side", session.getSide().toContract());
         }
