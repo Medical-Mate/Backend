@@ -69,8 +69,18 @@ public class IntakeSessionService {
         session.rememberCard(opening.card());
         session.addMessage(IntakeMessage.fromAi(session, opening.reply()));
 
-        // 부위·증상은 민감정보라 값을 로그에 남기지 않는다.
-        log.info("문답 세션 시작 userId={} sessionId={}", userId, session.getId());
+        // 부위·증상은 민감정보라 값을 로그에 남기지 않는다. 부위가 붙었는지만 남긴다 —
+        // 그게 없으면 AI 가 "어디가 불편하신지"부터 다시 묻고, 화면은 멀쩡해 보인다.
+        log.info("문답 세션 시작 userId={} sessionId={} 부위={}",
+                userId, session.getId(), session.getSiteNodeId() != null);
+
+        if (session.getSiteNodeId() == null) {
+            // 부위를 건너뛰는 경로가 와이어프레임에 있어 오류는 아니다. 다만 앱이 보냈는데
+            // 이름이 안 맞아 떨어진 경우와 구별이 안 돼서, 실제로 그걸 한참 못 찾았다
+            // (AI 계약은 site_node_id, 우리는 siteNodeId 였다).
+            log.warn("부위 없이 문답을 시작했습니다 sessionId={}. 앱이 보냈는데 비었다면"
+                    + " 요청 키가 siteNodeId 인지 확인이 필요합니다", session.getId());
+        }
         return SessionResponse.from(session, candidateReader.read(session.getAiCard()));
     }
 

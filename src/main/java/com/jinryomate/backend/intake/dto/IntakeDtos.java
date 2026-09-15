@@ -1,5 +1,6 @@
 package com.jinryomate.backend.intake.dto;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.jinryomate.backend.intake.entity.AiProfile;
 import com.jinryomate.backend.intake.entity.IntakeMessage;
@@ -27,7 +28,17 @@ public final class IntakeDtos {
              * 부위 마스터의 노드 id. {@code ANC:001} · {@code SUR:032}.
              *
              * <p><b>하나만 보낸다.</b> AI 가 세션 시작에 부위 하나를 받는다. 없는 id 는 400이다.
+             *
+             * <p><b>{@code site_node_id} 로 보내도 받는다.</b> 같은 값을 AI 계약은
+             * {@code site_node_id} 로, 우리는 {@code siteNodeId} 로 부른다. 앱이 AI 문서를
+             * 보고 뱀 표기로 보내면 Jackson 이 <b>조용히 버리고</b> 부위 없는 세션이 200 으로
+             * 열린다 — 실제로 그렇게 났다. 400 도 안 나고 화면도 멀쩡해 보인다.
+             *
+             * <p>별칭을 들이는 것이 계약을 흐리는 일인 건 맞다. 다만 여기서는 <b>틀린 이름이
+             * 조용히 통과하는 것</b>이 더 나쁘다 — 부위는 문답 전체의 출발점이라 없으면
+             * 처음부터 다시 묻는다.
              */
+            @JsonAlias("site_node_id")
             @Size(max = 40, message = "부위 코드가 너무 깁니다.")
             String siteNodeId,
 

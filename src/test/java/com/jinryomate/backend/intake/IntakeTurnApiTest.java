@@ -135,6 +135,34 @@ class IntakeTurnApiTest {
     }
 
     @Test
+    @DisplayName("site_node_id 로 보내도 부위가 붙는다")
+    void 뱀_표기로_보내도_받는다() throws Exception {
+        // 같은 값을 AI 계약은 site_node_id, 우리는 siteNodeId 로 부른다. 앱이 AI 문서를
+        // 보고 뱀 표기로 보내면 Jackson 이 조용히 버려서, 부위 없는 세션이 200 으로 열리고
+        // AI 가 "어디가 불편하신지"부터 다시 묻는다. 실제로 그렇게 났다.
+        mockMvc.perform(post("/api/sessions")
+                        .header("Authorization", token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"site_node_id": "SUR:032", "siteText": "아랫배"}"""))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.siteNodeId").value("SUR:032"));
+    }
+
+    @Test
+    @DisplayName("뱀 표기로 보내도 없는 부위는 그대로 400")
+    void 뱀_표기도_검증은_같다() throws Exception {
+        // 별칭은 이름만 받아주는 것이지 검증을 느슨하게 하는 것이 아니다.
+        mockMvc.perform(post("/api/sessions")
+                        .header("Authorization", token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"site_node_id": "SUR:999"}"""))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("INVALID_REQUEST"));
+    }
+
+    @Test
     @DisplayName("답변을 보내면 대화가 두 줄 늘고 진행도가 오른다")
     void 턴_처리() throws Exception {
         long sessionId = startAndGetId();
