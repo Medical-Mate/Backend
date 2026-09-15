@@ -1,5 +1,6 @@
 package com.jinryomate.backend.visit.dto;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
 import com.jinryomate.backend.ai.dto.FollowUp;
 import com.jinryomate.backend.ai.dto.LabelsMeta;
 import com.jinryomate.backend.card.dto.CardDtos.Axis;
@@ -164,7 +165,13 @@ public final class VisitDtos {
              * 새 문장과 번호를 받으세요. 환자에게는 "다시 정리했어요" 를 보여주면 됩니다.
              *
              * <p>안 보내면 검사하지 않습니다 — 붙이기 전까지는 지금과 똑같이 동작합니다.
+             *
+             * <p><b>{@code split_version} 으로 보내도 받습니다.</b> 같은 값을 AI 계약은
+             * 뱀 표기로 부릅니다. 이름이 어긋나면 Jackson 이 조용히 버리고 <b>이 검사가
+             * 통째로 꺼진 채 200 이 나갑니다</b> — 이 필드를 만든 이유와 정확히 같은
+             * 사고라, 이름 때문에 방어가 꺼지게 두지 않습니다.
              */
+            @JsonAlias("split_version")
             @Size(max = 40, message = "분리 버전은 40자 이내입니다.")
             String splitVersion
     ) {}
