@@ -76,10 +76,41 @@ class DemoApiTest {
     }
 
     @Test
+    @DisplayName("토큰 없이 병원을 찾는다")
+    void 병원_검색() throws Exception {
+        // 환자 데이터가 아니라 심평원 목록이다. 이름과 주소만 나간다.
+        mockMvc.perform(get("/api/demo/hospitals").param("q", "서울대"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.hospitals").isArray())
+                .andExpect(jsonPath("$.hospitals[0].name").value("서울대학교병원"))
+                .andExpect(jsonPath("$.totalCount").value(2));
+    }
+
+    @Test
+    @DisplayName("병원 검색의 검증이 실제로 걸린다")
+    void 병원_검색_검증() throws Exception {
+        // @Validated 를 빠뜨리면 이 제약들이 **조용히** 안 걸린다. 200 이 나가고
+        // 상류에 그대로 흘러간다 — 밖에서 안 보이는 고장이라 테스트로 고정한다.
+        mockMvc.perform(get("/api/demo/hospitals")).andExpect(status().isBadRequest());
+        mockMvc.perform(get("/api/demo/hospitals").param("q", " ")).andExpect(status().isBadRequest());
+        mockMvc.perform(get("/api/demo/hospitals").param("q", "가".repeat(61)))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(get("/api/demo/hospitals").param("q", "서울").param("size", "51"))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(get("/api/demo/hospitals").param("q", "서울").param("page", "0"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
     @DisplayName("계정이 필요한 경로는 여전히 401 이다")
     void 본래_경로는_그대로다() throws Exception {
         // 데모 경로를 열면서 다른 경로까지 열리면 안 된다.
         mockMvc.perform(get("/api/me/cards")).andExpect(status().isUnauthorized());
         mockMvc.perform(get("/api/me/appointments/upcoming")).andExpect(status().isUnauthorized());
+
+        // **앱이 쓰는 병원 검색은 그대로 인증이 필요하다.** 데모에 문을 하나 더 낸 것이지
+        // 본래 경로를 연 것이 아니다. 여기가 200 이 되면 앱 경로의 인증이 풀린 것이다.
+        mockMvc.perform(get("/api/hospitals").param("q", "서울대"))
+                .andExpect(status().isUnauthorized());
     }
 }
