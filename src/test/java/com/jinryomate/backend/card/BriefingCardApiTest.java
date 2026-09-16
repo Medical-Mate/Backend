@@ -21,6 +21,8 @@ import com.jinryomate.backend.card.dto.CardDtos.AxisEdit;
 import com.jinryomate.backend.card.dto.CardDtos.ClinicRequest;
 import com.jinryomate.backend.card.dto.CardDtos.GenerateCardRequest;
 import com.jinryomate.backend.card.dto.CardDtos.UpdateCardRequest;
+import com.jinryomate.backend.intake.dto.IntakeDtos;
+import com.jinryomate.backend.intake.dto.IntakeDtos.QuestionsRequest;
 import com.jinryomate.backend.intake.dto.IntakeDtos.StartSessionRequest;
 import com.jinryomate.backend.intake.entity.Side;
 import com.jinryomate.backend.profile.dto.ProfileDtos.HealthProfileRequest;
@@ -28,6 +30,7 @@ import com.jinryomate.backend.profile.dto.ProfileDtos.ListFieldRequest;
 import com.jinryomate.backend.profile.entity.FieldStatus;
 import com.jinryomate.backend.profile.entity.Sex;
 import java.util.List;
+import java.util.stream.IntStream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -458,10 +461,33 @@ class BriefingCardApiTest {
                         .header("Authorization", token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new UpdateCardRequest(
-                                null, null, List.of("가".repeat(41)), null, null))))
+                                null, null,
+                                List.of("가".repeat(IntakeDtos.MAX_QUESTION_LENGTH + 1)),
+                                null, null))))
                 // AI 가 준 값은 unknown 으로 낮춰 저장하지만, 환자가 직접 넣은 값은 400 으로
                 // 되돌린다. 환자는 화면에서 바로 고칠 수 있어 조용히 버리면 오히려 혼란스럽다.
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("카드 편집의 질문 상한이 저장 쪽과 같다")
+    void 카드_편집도_같은_상한() throws Exception {
+        // 같은 목록을 두 화면(1i · 1e-1-E)에서 고치는데 상한이 다르면, 한쪽에서 저장한
+        // 것을 다른 쪽에서 열어 고치는 순간 400 이 난다.
+        completeOnboarding();
+        long cardId = generateCard(startSession()).path("cardId").asLong();
+
+        List<String> full = IntStream.rangeClosed(1, IntakeDtos.MAX_QUESTIONS)
+                .mapToObj(i -> "질문 " + i)
+                .toList();
+
+        mockMvc.perform(patch("/api/cards/" + cardId)
+                        .header("Authorization", token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(
+                                new UpdateCardRequest(null, null, full, null, null))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.questions.length()").value(IntakeDtos.MAX_QUESTIONS));
     }
 
     @Test
@@ -859,6 +885,39 @@ class BriefingCardApiTest {
                 new ListFieldRequest(FieldStatus.NONE, List.of()),
                 new com.jinryomate.backend.profile.dto.ProfileDtos.TextFieldRequest(
                         FieldStatus.UNKNOWN, null));
+    }
+
+    @Test
+    @DisplayName("적어둔 질문이 상한까지 그대로 카드에 실린다")
+    void 질문이_카드까지_간다() throws Exception {
+        // #132 가 여기서 났다. 저장은 통과하는데 카드를 만들 때 한 번 더 세는 자리가 있어서,
+        // 앱에서는 200 을 받고도 카드에 질문이 세 개뿐이었다. 두 곳을 각각 테스트하면
+        // 둘 다 통과하고 사이만 어긋난다 — 그래서 건너서 본다.
+        completeOnboarding();
+        long sessionId = startSessionWithUtterance();
+
+        List<String> written = List.of(
+                "이 증상이 계속되면 어떻게 하나요?",
+                "검사를 받아야 하나요?",
+                "약을 먹어야 하나요?",
+                "일상생활에서 조심할 것이 있나요?",
+                // 41자. 저장은 되고 카드에서 통째로 사라졌던 길이다.
+                "지난번에 받은 혈액검사 결과는 언제 나오고 제가 따로 무엇을 준비하면 되나요");
+
+        mockMvc.perform(put("/api/sessions/" + sessionId + "/questions")
+                        .header("Authorization", token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new QuestionsRequest(written))))
+                .andExpect(status().isOk());
+
+        JsonNode card = generateCard(sessionId);
+
+        assertThat(card.path("questions")).hasSize(written.size());
+        for (int i = 0; i < written.size(); i++) {
+            assertThat(card.path("questions").path(i).asText()).isEqualTo(written.get(i));
+        }
+        // 잘리거나 버려진 것이 있으면 여기 이름이 남는다.
+        assertThat(card.path("rejectedFields").toString()).doesNotContain("questions");
     }
 
     private long startSession() throws Exception {

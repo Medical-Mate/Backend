@@ -6,9 +6,11 @@ import com.jinryomate.backend.card.entity.AxisStatus;
 import com.jinryomate.backend.card.entity.CardAxis;
 import com.jinryomate.backend.card.entity.CardContent;
 import com.jinryomate.backend.card.service.CardContentValidator;
+import com.jinryomate.backend.intake.dto.IntakeDtos;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.IntStream;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -77,27 +79,49 @@ class CardContentValidatorTest {
     }
 
     @Test
-    @DisplayName("질문이 40자를 넘으면 그것만 버린다")
+    @DisplayName("40자를 넘어도 버리지 않는다 — 환자가 쓴 글이다")
     void 질문_길이() {
+        // 40 자는 AI 가 만든 문구의 기준이었는데, 이 목록의 출처는 환자가 직접 쓴
+        // session.getQuestions() 하나뿐이다. 실제로 41 자 질문이 저장은 200 으로 되고
+        // 카드를 만들 때 통째로 사라졌다(#132).
         CardContentValidator.Result result = validator.validate(content(
                 axes -> {}, "제목",
                 List.of("짧은 질문인가요?", "가".repeat(41)),
                 List.of()));
 
-        assertThat(result.content().questions()).containsExactly("짧은 질문인가요?");
-        assertThat(result.rejectedFields()).contains("questions");
+        assertThat(result.content().questions()).containsExactly("짧은 질문인가요?", "가".repeat(41));
+        assertThat(result.rejectedFields()).doesNotContain("questions");
     }
 
     @Test
-    @DisplayName("질문이 3개를 넘으면 앞에서 자른다")
-    void 질문_개수() {
-        // 버리지 않고 앞에서 자르는 이유 — AI 가 순서로 중요도를 표현한다.
-        CardContentValidator.Result result = validator.validate(content(
-                axes -> {}, "제목",
-                List.of("하나", "둘", "셋", "넷"),
-                List.of()));
+    @DisplayName("질문 상한이 저장 쪽과 같다")
+    void 질문_상한이_한_곳에서_온다() {
+        // 여기가 따로 3 을 들고 있어서 겪었다 — 저장은 5 개를 받는데 카드를 만들 때
+        // 앞에서 잘렸다. 상수를 나눠 갖지 말고 같은 값을 보게 한다.
+        List<String> full = IntStream.rangeClosed(1, IntakeDtos.MAX_QUESTIONS)
+                .mapToObj(i -> "질문 " + i)
+                .toList();
 
-        assertThat(result.content().questions()).containsExactly("하나", "둘", "셋");
+        CardContentValidator.Result result = validator.validate(content(
+                axes -> {}, "제목", full, List.of()));
+
+        assertThat(result.content().questions()).isEqualTo(full);
+        assertThat(result.rejectedFields()).doesNotContain("questions");
+    }
+
+    @Test
+    @DisplayName("상한을 넘으면 앞에서 자른다")
+    void 질문_개수() {
+        // 버리지 않고 앞에서 자르는 이유 — 순서가 중요도다.
+        List<String> tooMany = IntStream.rangeClosed(1, IntakeDtos.MAX_QUESTIONS + 1)
+                .mapToObj(i -> "질문 " + i)
+                .toList();
+
+        CardContentValidator.Result result = validator.validate(content(
+                axes -> {}, "제목", tooMany, List.of()));
+
+        assertThat(result.content().questions())
+                .isEqualTo(tooMany.subList(0, IntakeDtos.MAX_QUESTIONS));
         assertThat(result.rejectedFields()).contains("questions");
     }
 

@@ -6,6 +6,7 @@ import com.jinryomate.backend.card.entity.BriefingCard;
 import com.jinryomate.backend.card.entity.CardAxis;
 import com.jinryomate.backend.card.entity.CardStatus;
 import com.jinryomate.backend.card.entity.Clinic;
+import com.jinryomate.backend.intake.dto.IntakeDtos;
 import com.jinryomate.backend.profile.entity.FieldStatus;
 import com.jinryomate.backend.profile.entity.Sex;
 import jakarta.validation.Valid;
@@ -143,8 +144,18 @@ public final class CardDtos {
             @Size(max = 12, message = "한 번에 고칠 수 있는 항목은 12개까지입니다.")
             List<AxisEdit> axes,
 
-            @Size(max = 3, message = "질문은 최대 3개입니다.")
-            List<@Size(max = 40, message = "질문은 40자 이내입니다.") String> questions,
+            /**
+             * 의사에게 물어볼 것. 화면 {@code 1e-1-E}.
+             *
+             * <p><b>상한은 문답 쪽({@link IntakeDtos#MAX_QUESTIONS})이 정한다.</b> 같은
+             * 목록을 두 화면에서 고치는데 상한이 다르면, 한쪽에서 저장한 것이 다른 쪽에서
+             * 거절된다.
+             */
+            @Size(max = IntakeDtos.MAX_QUESTIONS,
+                  message = "질문은 최대 " + IntakeDtos.MAX_QUESTIONS + "개입니다.")
+            List<@Size(max = IntakeDtos.MAX_QUESTION_LENGTH,
+                       message = "질문은 " + IntakeDtos.MAX_QUESTION_LENGTH + "자 이내입니다.")
+                 String> questions,
 
             @Size(max = 10, message = "메모는 최대 10개입니다.")
             List<@Size(max = 200) String> patientNotes,

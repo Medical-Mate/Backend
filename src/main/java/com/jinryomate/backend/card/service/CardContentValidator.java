@@ -3,6 +3,7 @@ package com.jinryomate.backend.card.service;
 import com.jinryomate.backend.card.entity.AxisStatus;
 import com.jinryomate.backend.card.entity.CardAxis;
 import com.jinryomate.backend.card.entity.CardContent;
+import com.jinryomate.backend.intake.dto.IntakeDtos;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -27,8 +28,20 @@ public class CardContentValidator {
     /** 낭독 모드 큰 글자 기준. 이보다 길면 화면에서 잘린다. */
     private static final int MAX_AXIS_VALUE = 80;
 
-    private static final int MAX_QUESTIONS = 3;
-    private static final int MAX_QUESTION_LENGTH = 40;
+    /**
+     * 질문 상한은 <b>문답 쪽이 정한다</b>({@link IntakeDtos#MAX_QUESTIONS}).
+     *
+     * <p><b>여기 값을 따로 들고 있다가 겪었다.</b> 저장은 통과하는데 카드를 만들 때 앞에서
+     * 잘려서, 앱에서는 저장이 성공했는데 카드에는 세 개만 있었다(#132). 두 곳이 같은 것을
+     * 세는 한 값도 한 곳에서 와야 한다.
+     *
+     * <p><b>이 검사는 사실 AI 출력에 안 걸린다.</b> {@code CardContent.questions} 의 출처는
+     * {@code CardAssembler} 의 {@code session.getQuestions()} 한 줄뿐이라 <b>환자가 직접 쓴
+     * 글</b>이다. AI 가 만든 후보는 {@code question_candidates} 로 따로 오고 여기 섞이지
+     * 않는다. 그래서 길이도 AI 기준(40자)이 아니라 환자가 쓸 수 있는 만큼이다.
+     */
+    private static final int MAX_QUESTIONS = IntakeDtos.MAX_QUESTIONS;
+    private static final int MAX_QUESTION_LENGTH = IntakeDtos.MAX_QUESTION_LENGTH;
 
     /**
      * 온톨로지에 등장하는 진료과 전부.

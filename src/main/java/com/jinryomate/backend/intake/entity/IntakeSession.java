@@ -239,7 +239,7 @@ public class IntakeSession {
      * 의사에게 물어볼 것을 통째로 교체한다.
      *
      * <p>추가·편집·삭제·순서변경이 전부 "목록을 다시 보내기" 하나로 처리된다.
-     * 최대 3개짜리 목록에 엔드포인트를 여러 개 둘 이유가 없다.
+     * 몇 개 안 되는 목록에 엔드포인트를 여러 개 둘 이유가 없다.
      */
     public void replaceQuestions(List<String> questions) {
         this.questions.clear();
