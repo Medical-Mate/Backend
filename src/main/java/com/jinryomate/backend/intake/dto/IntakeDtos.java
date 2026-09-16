@@ -118,11 +118,33 @@ public final class IntakeDtos {
             @NotNull(message = "질문 목록이 필요합니다. 비우려면 빈 배열을 보내주세요.")
             @Size(max = MAX_QUESTIONS, message = "질문은 최대 " + MAX_QUESTIONS + "개까지입니다.")
             List<@NotBlank(message = "빈 질문은 담을 수 없습니다.")
-                 @Size(max = 200, message = "질문은 200자 이내입니다.") String> questions
+                 @Size(max = MAX_QUESTION_LENGTH,
+                       message = "질문은 " + MAX_QUESTION_LENGTH + "자 이내입니다.") String> questions
     ) {}
 
-    /** 화면 {@code 1i} 의 "적어둔 질문 · 최대 3개". */
-    public static final int MAX_QUESTIONS = 3;
+    /**
+     * 화면 {@code 1i} 의 "적어둔 질문". <b>이 상한이 유일한 원천이다</b> — 카드 편집
+     * ({@code CardDtos})과 카드 생성 검증({@code CardContentValidator})이 이 값을 본다.
+     *
+     * <p><b>셋이 따로 3 을 들고 있다가 겪었다.</b> 저장은 통과하는데 카드를 만들 때 앞에서
+     * 잘려서, 앱에서는 저장이 성공했는데 카드에는 세 개만 있었다(#132).
+     *
+     * <p><b>3 에서 5 로 올렸다.</b> AI 후보가 3 개라 그걸 다 담으면 환자가 자기 질문을
+     * 하나도 못 적었다. 두 개를 더 적을 자리를 둔다.
+     */
+    public static final int MAX_QUESTIONS = 5;
+
+    /**
+     * 질문 한 줄의 길이.
+     *
+     * <p><b>40 자가 아니다.</b> 40 은 AI 가 만든 문구를 낭독 모드 큰 글자로 보이려는
+     * 기준인데, 카드의 질문은 <b>환자가 직접 쓴 글</b>이라 그 기준이 걸릴 자리가 아니다.
+     * AI 가 만든 후보는 {@code questionCandidates} 로 따로 오고 여기 섞이지 않는다.
+     *
+     * <p>실제로 41 자 질문이 저장은 200 OK 로 되고 카드를 만들 때 <b>통째로 사라졌다.</b>
+     * 화면에서 길어지는 것은 줄바꿈으로 풀 일이지, 환자가 쓴 글을 말없이 버릴 일이 아니다.
+     */
+    public static final int MAX_QUESTION_LENGTH = 200;
 
     /**
      * AI 가 만든 질문 후보. 화면 {@code 1i} 에서 환자가 골라 담는다.

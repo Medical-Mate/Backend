@@ -156,7 +156,7 @@ public class BriefingCard {
     @Column(columnDefinition = "jsonb")
     private List<String> patientNotes = new ArrayList<>();
 
-    /** 환자가 의사에게 묻고 싶어 하는 것. 최대 3개. 확정 시점의 스냅샷이다. */
+    /** 환자가 의사에게 묻고 싶어 하는 것. 상한은 IntakeDtos.MAX_QUESTIONS. 확정 시점의 스냅샷이다. */
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(columnDefinition = "jsonb")
     private List<String> questions = new ArrayList<>();

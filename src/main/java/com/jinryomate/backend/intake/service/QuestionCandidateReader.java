@@ -23,7 +23,7 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class QuestionCandidateReader {
 
-    /** 화면 {@code 1i} 의 "적어둔 질문 · 최대 3개". */
+    /** 화면 {@code 1i} 의 "적어둔 질문" 후보. AI 가 만든 것은 계약대로 최대 3개다. */
     private static final int MAX = 3;
 
     private final ObjectMapper objectMapper;

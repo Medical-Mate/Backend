@@ -13,6 +13,7 @@ import com.jinryomate.backend.TestcontainersConfig;
 import com.jinryomate.backend.auth.client.KakaoClient;
 import com.jinryomate.backend.auth.dto.AuthDtos.KakaoLoginRequest;
 import com.jinryomate.backend.auth.dto.AuthDtos.TokenResponse;
+import com.jinryomate.backend.intake.dto.IntakeDtos;
 import com.jinryomate.backend.intake.dto.IntakeDtos.QuestionsRequest;
 import com.jinryomate.backend.intake.dto.IntakeDtos.SendMessageRequest;
 import com.jinryomate.backend.intake.dto.IntakeDtos.SeverityRequest;
@@ -168,14 +169,38 @@ class IntakeStepApiTest {
     }
 
     @Test
-    @DisplayName("4개를 보내면 400이다")
+    @DisplayName("상한만큼은 받는다")
+    void 질문_상한까지() throws Exception {
+        long sessionId = startAndGetId();
+
+        // AI 후보가 3개라, 그걸 다 담고도 환자가 자기 질문을 적을 자리가 있어야 한다(#132).
+        mockMvc.perform(questions(sessionId, List.of("1", "2", "3", "4", "5")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.questions.length()").value(IntakeDtos.MAX_QUESTIONS));
+    }
+
+    @Test
+    @DisplayName("상한을 넘기면 400이다")
     void 질문_개수_초과() throws Exception {
         long sessionId = startAndGetId();
 
-        // 화면이 3개다.
-        mockMvc.perform(questions(sessionId, List.of("1", "2", "3", "4")))
+        mockMvc.perform(questions(sessionId, List.of("1", "2", "3", "4", "5", "6")))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error.code").value("INVALID_REQUEST"));
+    }
+
+    @Test
+    @DisplayName("긴 질문도 받는다 — 40자가 아니라 200자다")
+    void 질문_길이() throws Exception {
+        long sessionId = startAndGetId();
+
+        // 41자는 저장이 되고 카드를 만들 때 사라졌었다. 이제 양쪽이 같은 값을 본다.
+        mockMvc.perform(questions(sessionId, List.of("가".repeat(41))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.questions[0]").value("가".repeat(41)));
+
+        mockMvc.perform(questions(sessionId, List.of("가".repeat(IntakeDtos.MAX_QUESTION_LENGTH + 1))))
+                .andExpect(status().isBadRequest());
     }
 
     @Test
