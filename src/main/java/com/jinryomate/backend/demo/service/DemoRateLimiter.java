@@ -74,6 +74,19 @@ public class DemoRateLimiter {
         }
     }
 
+    /**
+     * 창을 비운다. <b>테스트 전용이다.</b>
+     *
+     * <p>창이 정적 상태라 한 테스트가 상한을 쓰면 다음 테스트가 429 를 맞는다. 그렇게
+     * 서로를 오염시키면 "빈도 제한이 걸린다"가 아니라 "앞 테스트가 많이 불렀다"를
+     * 검증하게 된다. 운영 코드에서는 아무도 부르지 않는다.
+     */
+    public void reset() {
+        perIp.clear();
+        total.set(0);
+        windowStartedAt = Instant.now();
+    }
+
     private synchronized void rollWindow() {
         if (Duration.between(windowStartedAt, Instant.now()).compareTo(WINDOW) < 0) {
             return;

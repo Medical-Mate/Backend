@@ -78,6 +78,14 @@ public enum ErrorCode {
      */
     TOO_MANY_REQUESTS(HttpStatus.TOO_MANY_REQUESTS, "잠시 후 다시 시도해주세요."),
 
+    /**
+     * 요청 본문이 너무 크다. <b>웹 데모 경로에서만 난다.</b>
+     *
+     * <p>인증이 없는 경로라 본문을 통째로 메모리에 올리는 것이 그대로 공격 면이 된다.
+     * 빈도 제한은 횟수만 막지 크기는 막지 않는다.
+     */
+    PAYLOAD_TOO_LARGE(HttpStatus.PAYLOAD_TOO_LARGE, "요청이 너무 큽니다."),
+
     UPSTREAM_ERROR(HttpStatus.BAD_GATEWAY, "AI 서비스 호출에 실패했습니다."),
     UPSTREAM_TIMEOUT(HttpStatus.GATEWAY_TIMEOUT, "AI 응답이 지연되고 있습니다."),
 
