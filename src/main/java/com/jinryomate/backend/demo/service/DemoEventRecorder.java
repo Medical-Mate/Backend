@@ -39,9 +39,12 @@ public class DemoEventRecorder {
      * 막을 때마다 한 줄씩 쓰면 공격을 우리가 증폭합니다 — 상대는 요청 한 번, 우리는
      * INSERT 한 번. 넘으면 조용히 버립니다. 이벤트는 잃어도 되는 데이터입니다.
      *
-     * <p>정상 트래픽은 여기 근처에도 안 옵니다. 전체 호출 상한이 이미 200회/분입니다.
+     * <p><b>정상 트래픽보다는 넉넉해야 합니다.</b> 요청 한 건당 {@code web.request} 가
+     * 한 줄 나가는데 전체 호출 상한이 200회/분이라, 상한을 그보다 낮게 잡으면 공격을
+     * 막는 게 아니라 <b>평소 지표가 새 버립니다.</b> 300 이면 정상 트래픽을 다 담고도
+     * 남습니다.
      */
-    private static final int MAX_PER_MINUTE = 120;
+    private static final int MAX_PER_MINUTE = 300;
 
     private static final Duration WINDOW = Duration.ofMinutes(1);
 
