@@ -22,6 +22,7 @@ import com.jinryomate.backend.intake.dto.IntakeDtos.SeverityRequest;
 import com.jinryomate.backend.intake.dto.IntakeDtos.StartSessionRequest;
 import com.jinryomate.backend.intake.entity.Side;
 import com.jinryomate.backend.intake.repository.IntakeSessionRepository;
+import com.jinryomate.backend.intake.repository.IntakeTurnAuditRepository;
 import com.jinryomate.backend.profile.dto.ProfileDtos.HealthProfileRequest;
 import com.jinryomate.backend.profile.dto.ProfileDtos.ListFieldRequest;
 import com.jinryomate.backend.profile.dto.ProfileDtos.TextFieldRequest;
@@ -72,6 +73,7 @@ class WithdrawCascadeTest {
     @Autowired UserRepository userRepository;
     @Autowired HealthProfileRepository profileRepository;
     @Autowired IntakeSessionRepository sessionRepository;
+    @Autowired IntakeTurnAuditRepository auditRepository;
     @Autowired BriefingCardRepository cardRepository;
     @Autowired VisitRecordRepository visitRepository;
     @Autowired AppointmentRepository appointmentRepository;
@@ -107,6 +109,9 @@ class WithdrawCascadeTest {
         assertThat(cardRepository.count()).isOne();
         assertThat(visitRepository.count()).isOne();
         assertThat(appointmentRepository.count()).isOne();
+        // 감사 기록은 세션의 자식이다. 여기서 0 이면 저장 자체가 안 된 것이고,
+        // 탈퇴 뒤에 남으면 탈퇴한 사람의 발화가 DB 에 영영 남는다.
+        assertThat(auditRepository.count()).as("턴마다 쌓여야 한다").isPositive();
 
         mockMvc.perform(delete("/api/me").header("Authorization", token))
                 .andExpect(status().isNoContent());
@@ -117,6 +122,7 @@ class WithdrawCascadeTest {
         assertThat(cardRepository.count()).isZero();
         assertThat(visitRepository.count()).isZero();
         assertThat(appointmentRepository.count()).isZero();
+        assertThat(auditRepository.count()).as("발화가 남으면 안 된다").isZero();
     }
 
     // ---------- helpers ----------
@@ -178,6 +184,14 @@ class WithdrawCascadeTest {
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
         long sessionId = objectMapper.readTree(session).path("sessionId").asLong();
+
+        // 문답을 한 턴 한다. 실제 환자가 거치는 길이고, 이 턴에서 감사 기록이 쌓인다 —
+        // 없으면 탈퇴가 그것까지 지우는지 확인할 수 없다.
+        mockMvc.perform(post("/api/sessions/" + sessionId + "/messages")
+                        .header("Authorization", token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"text\":\"어제부터 손목이 시큰거려요\",\"inputMethod\":\"TEXT\"}"))
+                .andExpect(status().isOk());
 
         String card = mockMvc.perform(post("/api/sessions/" + sessionId + "/card")
                         .header("Authorization", token))

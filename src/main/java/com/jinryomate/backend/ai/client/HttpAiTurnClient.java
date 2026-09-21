@@ -134,7 +134,11 @@ public class HttpAiTurnClient implements AiTurnClient {
 
         String state = response.state() == null ? null : response.state().toString();
         String card = response.card() == null || response.card().isNull() ? null : response.card().toString();
-        return new AiTurnResult(response.reply(), response.ended(), response.endReason(), state, card);
+        // 통째로 문자열이다. 안을 읽지 않으므로 AI 쪽이 필드를 늘려도 우리가 안 깨진다.
+        String audit = response.audit() == null || response.audit().isNull()
+                ? null : response.audit().toString();
+        return new AiTurnResult(response.reply(), response.ended(), response.endReason(),
+                state, card, audit);
     }
 
     /**
@@ -175,8 +179,12 @@ public class HttpAiTurnClient implements AiTurnClient {
     /**
      * 턴 응답에서 우리가 쓰는 것만 담는다.
      *
-     * <p>{@code audit} 도 함께 오지만 저장하지 않는다 — 진단 추적용이라 환자 발화가 그대로
-     * 들어 있고, 우리가 쓸 일이 없다. 모르는 필드는 무시된다.
+     * <p><b>{@code audit} 을 받는다.</b> 한동안 "우리가 쓸 일이 없다" 로 버렸는데, AI 트랙이
+     * 회귀 eval 케이스를 채우는 재료로 쓰기로 했다(Medical-Mate/AI#113). 환자 발화가 그대로
+     * 들어 있지만 <b>앱 경로는 이미 {@code intake_messages} 에 발화를 저장한다</b> — 새
+     * 정보가 아니라 이미 있는 것의 다른 모양이다. 웹 데모는 고지가 먼저라 안 받는다.
+     *
+     * <p>모르는 필드는 무시된다.
      */
     private record TurnResponse(
             String reply,
@@ -184,6 +192,7 @@ public class HttpAiTurnClient implements AiTurnClient {
             @com.fasterxml.jackson.annotation.JsonProperty("end_reason") String endReason,
             @com.fasterxml.jackson.annotation.JsonProperty("request_id") String requestId,
             JsonNode state,
-            JsonNode card
+            JsonNode card,
+            JsonNode audit
     ) {}
 }

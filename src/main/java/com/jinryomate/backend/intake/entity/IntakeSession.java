@@ -153,6 +153,18 @@ public class IntakeSession {
     @OrderBy("seq ASC")
     private List<IntakeMessage> messages = new ArrayList<>();
 
+    /**
+     * 턴별 감사 기록. AI 트랙의 회귀 eval 재료다(Medical-Mate/AI#113).
+     *
+     * <p><b>메시지와 같은 cascade 에 얹는다.</b> 그래야 탈퇴가 세션을 지울 때 함께
+     * 사라진다 — {@code AuthService.deleteAllData} 에 줄을 더할 필요가 없다.
+     *
+     * <p>지연 로딩이다. 큰 JSON 이라 세션을 읽을 때마다 딸려 오면 안 된다.
+     */
+    @OneToMany(mappedBy = "session", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OrderBy("seq ASC")
+    private List<IntakeTurnAudit> audits = new ArrayList<>();
+
     @Column(nullable = false, updatable = false)
     private Instant startedAt = Instant.now();
 
@@ -175,6 +187,19 @@ public class IntakeSession {
     /** 다음 메시지 순번. 카드의 evidence 가 이 번호를 참조한다. */
     public int nextSeq() {
         return messages.size() + 1;
+    }
+
+    /**
+     * 감사 기록을 붙인다.
+     *
+     * <p>안 오면 아무것도 안 한다 — 계약에 항상 온다고 적혀 있지 않고, 없다고 해서
+     * 문답이 막힐 이유도 없다.
+     */
+    public void addAudit(String audit) {
+        if (audit == null || audit.isBlank()) {
+            return;
+        }
+        audits.add(IntakeTurnAudit.of(this, audits.size() + 1, audit));
     }
 
     public void addMessage(IntakeMessage message) {
