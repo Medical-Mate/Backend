@@ -7,7 +7,9 @@ import com.jinryomate.backend.ai.client.AiSigner;
 import com.jinryomate.backend.global.error.ApiException;
 import com.jinryomate.backend.global.error.ErrorCode;
 import com.jinryomate.backend.global.web.RequestIdFilter;
+import java.time.Duration;
 import java.time.Instant;
+import java.util.Map;
 import java.util.UUID;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
@@ -36,10 +38,37 @@ public class DemoAiProxy {
     private final ObjectMapper objectMapper;
     private final AiSigner signer;
 
-    public DemoAiProxy(RestClient restClient, ObjectMapper objectMapper, AiProperties properties) {
+    /**
+     * 지연과 막힘을 남긴다.
+     *
+     * <p><b>본문은 여전히 안 읽습니다.</b> 여기서 세는 것은 <b>얼마나 걸렸고 무슨 코드가
+     * 왔는지</b>뿐입니다 — 느린 게 우리인지 Bedrock 인지는 이 자리에서만 갈립니다.
+     */
+    private final DemoEventRecorder recorder;
+
+    public DemoAiProxy(RestClient restClient, ObjectMapper objectMapper, AiProperties properties,
+                       DemoEventRecorder recorder) {
         this.restClient = restClient;
         this.objectMapper = objectMapper;
         this.signer = new AiSigner(properties.hmacSecret());
+        this.recorder = recorder;
+    }
+
+    /**
+     * AI 경로를 카탈로그의 {@code step} 으로 좁힌다.
+     *
+     * <p>{@code /v1/previsit/turns} 는 질문 후보 요청도 같은 길을 쓰지만, 본문을 안 읽으므로
+     * 여기서는 구별하지 못한다. 둘 다 {@code turn} 이다 — 구별하려면 본문을 열어야 하고
+     * 그건 이 클래스가 안 하기로 한 일이다.
+     */
+    private static String stepOf(String path) {
+        if (path.contains("sessions")) {
+            return "session";
+        }
+        if (path.contains("memo")) {
+            return "memo";
+        }
+        return "turn";
     }
 
     /**
@@ -75,8 +104,24 @@ public class DemoAiProxy {
                             .contentType(MediaType.APPLICATION_JSON)
                             .body(res.getBody().readAllBytes()));
 
-            log.info("데모 프록시 path={} status={} requestId={}",
-                    path, response.getStatusCode().value(), requestId);
+            int status = response.getStatusCode().value();
+            log.info("데모 프록시 path={} status={} requestId={}", path, status, requestId);
+
+            String step = stepOf(path);
+            long tookMs = Duration.between(now, Instant.now()).toMillis();
+            recorder.record("ai.responded", Map.of(
+                    "step", step,
+                    "latency_ms", Math.min(tookMs, 300_000L),
+                    "status", status));
+
+            // **예산 소진과 장애는 다른 줄이다.** 둘을 한 코드로 뭉개면 "돈이 말랐다"와
+            // "AI 가 죽었다"를 대시보드에서도 구별 못 한다 — 프록시가 502 로 안 뭉개는
+            // 것과 같은 이유다.
+            if (status == 503) {
+                recorder.record("budget.exhausted", Map.of("step", step));
+            } else if (status == 502) {
+                recorder.record("upstream.failed", Map.of("step", step, "error_code", "502"));
+            }
 
             return response;
 
@@ -84,6 +129,8 @@ public class DemoAiProxy {
             // 연결 실패·타임아웃. 예외 메시지에 본문이 실릴 수 있어 종류만 남긴다.
             log.error("데모 프록시 실패 path={} requestId={} type={}",
                     path, requestId, e.getClass().getSimpleName());
+            recorder.record("upstream.failed",
+                    Map.of("step", stepOf(path), "error_code", "network"));
             throw new ApiException(ErrorCode.UPSTREAM_ERROR, "잠시 후 다시 시도해주세요.");
         }
     }

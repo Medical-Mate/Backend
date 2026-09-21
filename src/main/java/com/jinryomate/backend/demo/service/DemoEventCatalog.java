@@ -149,12 +149,31 @@ public final class DemoEventCatalog {
             entry("budget.exhausted", Map.of("step", oneOf(AI_STEPS))),
             entry("upstream.failed", Map.of(
                     "step", oneOf(AI_STEPS),
-                    "error_code", oneOf(NET_ERRORS)))
+                    "error_code", oneOf(NET_ERRORS))),
+
+            /* ── 서버만 아는 것 ────────────────────────────────────────
+             * 브라우저는 자기가 받은 것만 안다. AI 가 실제로 얼마나 걸렸는지는
+             * 프록시에서만 보인다 — 느린 게 우리인지 Bedrock 인지 여기서 갈린다.
+             */
+            entry("ai.responded", Map.of(
+                    "step", oneOf(AI_STEPS),
+                    "latency_ms", intRange(0, 300_000),
+                    "status", intRange(100, 599)))
     );
 
     /** 아는 이벤트인가. */
     public static boolean knows(String event) {
         return EVENTS.containsKey(event);
+    }
+
+    /**
+     * 아는 데모 경로인가.
+     *
+     * <p>{@code guard.*} 를 남기는 쪽이 요청 URI 를 그대로 넣으면 목록 밖 값이라
+     * 기록이 통째로 떨어진다. 넣기 전에 물어볼 수 있게 연다.
+     */
+    public static boolean knowsDemoPath(String path) {
+        return Set.of(DEMO_PATHS).contains(path);
     }
 
     public static Set<String> names() {

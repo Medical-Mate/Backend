@@ -10,6 +10,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jinryomate.backend.ai.AiProperties;
 import com.jinryomate.backend.ai.client.AiSigner;
 import com.jinryomate.backend.demo.service.DemoAiProxy;
+import com.jinryomate.backend.demo.service.DemoEventRecorder;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import org.hamcrest.Matchers;
@@ -123,9 +124,12 @@ class DemoAiProxyTest {
     }
 
     private DemoAiProxy proxy(RestClient.Builder builder) {
+        // 기록은 여기서 볼 것이 아니다. 저장소가 없으면 record 가 조용히 삼키므로
+        // 프록시의 행동은 그대로 확인된다 — 기록은 DemoServerEventTest 가 본다.
         return new DemoAiProxy(builder.build(), new ObjectMapper(),
                 new AiProperties("http://ai:8000", "test-secret",
-                        new AiProperties.Timeout(Duration.ofSeconds(30), Duration.ofSeconds(30))));
+                        new AiProperties.Timeout(Duration.ofSeconds(30), Duration.ofSeconds(30))),
+                new DemoEventRecorder(null));
     }
 
     private String body(ResponseEntity<byte[]> response) {

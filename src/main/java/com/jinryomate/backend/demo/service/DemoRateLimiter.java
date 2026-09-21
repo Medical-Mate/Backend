@@ -8,6 +8,7 @@ import java.time.Instant;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
@@ -35,7 +36,19 @@ import org.springframework.stereotype.Component;
  */
 @Slf4j
 @Component
+@RequiredArgsConstructor
 public class DemoRateLimiter {
+
+    /** 데모 경로 접두사. 막힌 경로를 카탈로그의 닫힌 값으로 좁히는 데 쓴다. */
+    private static final String PREFIX = "/api/demo/";
+
+    /**
+     * 막힌 횟수를 남긴다.
+     *
+     * <p><b>브라우저는 자기가 막힌 것만 안다.</b> 전체 상한에 걸려 떨어진 사람이 몇인지는
+     * 서버만 안다 — 심사 중에 제일 알고 싶은 숫자다.
+     */
+    private final DemoEventRecorder recorder;
 
     /** 한 IP 가 1분에 보낼 수 있는 요청 수. 문답 한 세션이 6턴 남짓이라 넉넉하다. */
     private static final int PER_IP_PER_MINUTE = 30;
@@ -62,6 +75,9 @@ public class DemoRateLimiter {
 
         if (total.incrementAndGet() > TOTAL_PER_MINUTE) {
             log.warn("데모 전체 호출 제한 초과");
+            // **브라우저는 자기가 막힌 것만 안다.** 전체 상한에 걸려 떨어진 사람이
+            // 몇인지는 서버만 안다 — 심사 중에 제일 알고 싶은 숫자다.
+            recorder.record("guard.rate_limited", pathOf(request));
             throw new ApiException(ErrorCode.TOO_MANY_REQUESTS);
         }
 
@@ -70,6 +86,7 @@ public class DemoRateLimiter {
         if (used > PER_IP_PER_MINUTE) {
             // IP 는 개인정보라 통째로 남기지 않는다. 몇 번째인지만 남긴다.
             log.warn("데모 IP 호출 제한 초과 count={}", used);
+            recorder.record("guard.rate_limited", pathOf(request));
             throw new ApiException(ErrorCode.TOO_MANY_REQUESTS);
         }
     }
@@ -85,6 +102,22 @@ public class DemoRateLimiter {
         perIp.clear();
         total.set(0);
         windowStartedAt = Instant.now();
+    }
+
+    /**
+     * 막힌 경로를 카탈로그의 닫힌 목록으로 좁힌다.
+     *
+     * <p>요청 URI 를 그대로 넣으면 목록 밖 값이라 <b>기록이 통째로 떨어진다.</b> 모르는
+     * 경로면 속성 없이 남긴다 — "어디서" 를 잃어도 "몇 번" 은 남는 편이 낫다.
+     */
+    private static Map<String, Object> pathOf(HttpServletRequest request) {
+        String uri = request.getRequestURI();
+        int at = uri.indexOf(PREFIX);
+        if (at < 0) {
+            return Map.of();
+        }
+        String rest = uri.substring(at + PREFIX.length());
+        return DemoEventCatalog.knowsDemoPath(rest) ? Map.of("path", rest) : Map.of();
     }
 
     private synchronized void rollWindow() {
