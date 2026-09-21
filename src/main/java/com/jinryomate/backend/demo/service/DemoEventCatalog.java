@@ -158,7 +158,18 @@ public final class DemoEventCatalog {
             entry("ai.responded", Map.of(
                     "step", oneOf(AI_STEPS),
                     "latency_ms", intRange(0, 300_000),
-                    "status", intRange(100, 599)))
+                    "status", intRange(100, 599))),
+
+            /*
+             * 요청 한 건당 한 줄. 트래픽·응답속도·에러율이 전부 여기서 나온다.
+             *
+             * ai.responded 와 빼면 "우리가 쓴 시간" 이 된다 — 느린 게 우리인지
+             * Bedrock 인지가 그때 갈린다.
+             */
+            entry("web.request", Map.of(
+                    "path", oneOf(DEMO_PATHS),
+                    "status", intRange(100, 599),
+                    "duration_ms", intRange(0, 300_000)))
     );
 
     /** 아는 이벤트인가. */

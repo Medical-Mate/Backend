@@ -63,6 +63,17 @@ class DemoEventTest {
                 """.formatted(now(), props);
     }
 
+    /**
+     * <b>보낸 것만 센다.</b>
+     *
+     * <p>{@code DemoRequestMetricsFilter} 가 요청마다 {@code web.request} 를 한 줄 더 쓴다 —
+     * 전체를 세면 "저장되지 않았다"를 확인하려던 단언이 그 줄에 걸려 넘어진다. 브라우저가
+     * 보낸 것은 {@code surface = web}, 서버가 쓴 것은 {@code server} 다.
+     */
+    private long stored() {
+        return repository.findAll().stream().filter(r -> "web".equals(r.getSurface())).count();
+    }
+
     private int send(String body) throws Exception {
         return mockMvc.perform(post("/api/demo/events")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -80,7 +91,7 @@ class DemoEventTest {
                 .andExpect(status().isAccepted())
                 .andExpect(jsonPath("$.accepted").value(1));
 
-        assertThat(repository.count()).isEqualTo(1);
+        assertThat(stored()).isEqualTo(1);
     }
 
     /** 속성은 선택이다. 지연을 못 재는 브라우저가 있어 강제하면 이벤트가 통째로 막힌다. */
@@ -88,7 +99,7 @@ class DemoEventTest {
     @DisplayName("속성이 없어도 통과한다")
     void 속성_없음() throws Exception {
         assertThat(send(one("{}"))).isEqualTo(202);
-        assertThat(repository.count()).isEqualTo(1);
+        assertThat(stored()).isEqualTo(1);
     }
 
     @Test
@@ -101,7 +112,7 @@ class DemoEventTest {
                         .content(body))
                 .andExpect(status().isBadRequest());
 
-        assertThat(repository.count()).isZero();
+        assertThat(stored()).isZero();
     }
 
     /**
@@ -116,7 +127,7 @@ class DemoEventTest {
         assertThat(send(one("""
                 {"turn_no":3,"utterance":"배가 쥐어짜듯 아파요"}"""))).isEqualTo(400);
 
-        assertThat(repository.count()).isZero();
+        assertThat(stored()).isZero();
     }
 
     @Test
@@ -130,7 +141,7 @@ class DemoEventTest {
         assertThat(send(one("""
                 {"input_mode":"telepathy"}"""))).isEqualTo(400);
 
-        assertThat(repository.count()).isZero();
+        assertThat(stored()).isZero();
     }
 
     /**
@@ -154,7 +165,7 @@ class DemoEventTest {
                 """.formatted(now(), now(), now());
 
         assertThat(send(body)).isEqualTo(400);
-        assertThat(repository.count()).as("앞의 둘도 들어가면 안 된다").isZero();
+        assertThat(stored()).as("앞의 둘도 들어가면 안 된다").isZero();
     }
 
     /**
@@ -173,7 +184,7 @@ class DemoEventTest {
                 """;
 
         assertThat(send(body)).isEqualTo(400);
-        assertThat(repository.count()).isZero();
+        assertThat(stored()).isZero();
     }
 
     /** 배치 상한. 넘으면 한 요청이 너무 커지고 빈도 제한의 의미도 흐려진다. */
@@ -188,7 +199,7 @@ class DemoEventTest {
                 .collect(Collectors.joining(","));
 
         assertThat(send("{\"events\":[" + items + "]}")).isEqualTo(400);
-        assertThat(repository.count()).isZero();
+        assertThat(stored()).isZero();
     }
 
     /** 문답 세션 id 를 그대로 쓰지 못하게 형식을 좁혀 둔다. */
@@ -198,6 +209,6 @@ class DemoEventTest {
         String body = one("{}").replace("s_abcd1234efgh", "짧음");
 
         assertThat(send(body)).isEqualTo(400);
-        assertThat(repository.count()).isZero();
+        assertThat(stored()).isZero();
     }
 }

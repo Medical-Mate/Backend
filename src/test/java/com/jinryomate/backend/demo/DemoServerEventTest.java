@@ -122,12 +122,72 @@ class DemoServerEventTest {
     @Test
     @DisplayName("분당 상한을 넘으면 더 쓰지 않는다")
     void 기록에도_상한이_있다() {
-        for (int i = 0; i < 200; i++) {
+        for (int i = 0; i < 500; i++) {
             recorder.record("severity.viewed");
         }
 
         assertThat(repository.count())
-                .as("120 에서 멈춰야 한다")
-                .isEqualTo(120);
+                .as("300 에서 멈춰야 한다")
+                .isEqualTo(300);
+    }
+
+    /**
+     * 백엔드가 보여줄 셋 — 트래픽 · 응답속도 · 에러율 — 이 여기서 나온다.
+     *
+     * <p>이 줄이 없으면 AI 를 부른 요청만 남아, {@code body-map} 같은 호출은 트래픽에도
+     * 안 잡히고 우리 구간의 지연은 아예 측정되지 않는다.
+     */
+    @Test
+    @DisplayName("요청 한 건에 web.request 한 줄이 남는다")
+    void 요청을_남긴다() throws Exception {
+        mockMvc.perform(get("/api/demo/body-map").with(from("203.0.113.40")));
+
+        List<DemoEvent> rows = rowsOf("web.request");
+        assertThat(rows).hasSize(1);
+
+        DemoEvent row = rows.get(0);
+        assertThat(row.getSurface()).isEqualTo("server");
+        assertThat(row.getProps())
+                .containsEntry("path", "body-map")
+                .containsEntry("status", 200)
+                .containsKey("duration_ms");
+    }
+
+    /** 실패도 재야 에러율이 맞는다. 413 은 필터가 체인을 끊는 길이라 특히 빠지기 쉽다. */
+    @Test
+    @DisplayName("413 도 남는다 — 예외로 빠져나가는 길이라 빠지기 쉽다")
+    void 실패도_남긴다() throws Exception {
+        byte[] tooBig = new byte[(int) DemoBodySizeFilter.MAX_BYTES + 1];
+        Arrays.fill(tooBig, (byte) 'a');
+
+        mockMvc.perform(post("/api/demo/previsit/turns")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(tooBig)
+                .with(from("203.0.113.41")));
+
+        assertThat(rowsOf("web.request"))
+                .singleElement()
+                .satisfies(r -> assertThat(r.getProps()).containsEntry("status", 413));
+    }
+
+    /**
+     * 429 는 세지 않는다.
+     *
+     * <p>{@code guard.rate_limited} 가 이미 세고 있어 두 번 세는 셈이고, 더 중요하게는
+     * <b>429 는 상한을 넘어선 요청마다 나가므로 개수에 천장이 없다.</b> 그걸 다 기록하면
+     * 공격을 우리가 증폭한다 — 상대는 요청 한 번, 우리는 INSERT 한 번.
+     */
+    @Test
+    @DisplayName("429 는 web.request 로 세지 않는다")
+    void 막힌_것은_두_번_세지_않는다() throws Exception {
+        String ip = "203.0.113.42";
+        for (int i = 0; i < 35; i++) {
+            mockMvc.perform(get("/api/demo/body-map").with(from(ip)));
+        }
+
+        assertThat(rowsOf("guard.rate_limited")).as("막힌 것은 남아야 한다").isNotEmpty();
+        assertThat(rowsOf("web.request"))
+                .as("통과한 30건만 남고 429 는 빠져야 한다")
+                .hasSize(30);
     }
 }
