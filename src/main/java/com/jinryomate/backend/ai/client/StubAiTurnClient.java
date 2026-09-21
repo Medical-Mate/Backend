@@ -26,6 +26,9 @@ public class StubAiTurnClient implements AiTurnClient {
 
     static final String STUB_STATE = "{\"stub\":true}";
 
+    /** 실제 모양을 흉내만 낸다. 저장 경로가 도는지 보려는 값이다. */
+    static final String STUB_AUDIT = "{\"asked\":[\"onset\"],\"usage\":{\"input\":10,\"output\":5}}";
+
     /** AI 계약의 SOCRATES 8축. 순서까지 실제와 같게 둔다. */
     private static final List<String> AXES = List.of(
             "site", "onset", "character", "radiation",
@@ -56,13 +59,13 @@ public class StubAiTurnClient implements AiTurnClient {
     public AiTurnResult start(IntakeSession session) {
         return new AiTurnResult(
                 "어디가 어떻게 불편해서 오셨는지 편하게 말씀해 주세요.",
-                false, null, STUB_STATE, card(session, null));
+                false, null, STUB_STATE, card(session, null), null);
     }
 
     @Override
     public AiTurnResult requestQuestionCandidates(IntakeSession session, PatientProfile profile) {
         // 스텁은 후보를 만들지 않는다. 카드를 그대로 두고 아무것도 바꾸지 않는다.
-        return new AiTurnResult(CLOSING, true, "complete", STUB_STATE, card(session, null));
+        return new AiTurnResult(CLOSING, true, "complete", STUB_STATE, card(session, null), null);
     }
 
     @Override
@@ -75,9 +78,9 @@ public class StubAiTurnClient implements AiTurnClient {
 
         String card = card(session, utterance);
         if (answered >= QUESTIONS.size()) {
-            return new AiTurnResult(CLOSING, true, "complete", STUB_STATE, card);
+            return new AiTurnResult(CLOSING, true, "complete", STUB_STATE, card, null);
         }
-        return new AiTurnResult(QUESTIONS.get((int) answered), false, null, STUB_STATE, card);
+        return new AiTurnResult(QUESTIONS.get((int) answered), false, null, STUB_STATE, card, STUB_AUDIT);
     }
 
     /**

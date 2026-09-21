@@ -22,5 +22,13 @@ public record AiTurnResult(
         boolean ended,
         String endReason,
         String state,
-        String card
+        String card,
+
+        /**
+         * 감사 기록. <b>열어보지 않는다</b> — 문자열로 들고 다니다 그대로 저장한다.
+         *
+         * <p>AI 트랙이 회귀 eval 케이스를 채우는 재료다(Medical-Mate/AI#113).
+         * 안 오면 {@code null} 이다 — 계약에 항상 온다고 적혀 있지 않다.
+         */
+        String audit
 ) {}

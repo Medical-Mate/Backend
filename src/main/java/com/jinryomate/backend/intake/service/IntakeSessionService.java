@@ -119,6 +119,7 @@ public class IntakeSessionService {
                 session, request.text(), request.extraction(), request.extractionMeta());
         session.rememberState(result.state());
         session.rememberCard(result.card());
+        session.addAudit(result.audit());
         session.addMessage(IntakeMessage.fromAi(session, result.reply()));
 
         if (result.ended()) {
