@@ -5,6 +5,8 @@ import com.jinryomate.backend.ai.dto.FollowUp;
 import com.jinryomate.backend.ai.dto.LabelsMeta;
 import com.jinryomate.backend.ai.dto.MemoClassification;
 import com.jinryomate.backend.ai.dto.MemoRequest;
+import com.jinryomate.backend.auth.entity.User;
+import com.jinryomate.backend.auth.repository.UserRepository;
 import com.jinryomate.backend.card.dto.CardDtos.Axis;
 import com.jinryomate.backend.card.entity.AxisSource;
 import com.jinryomate.backend.card.entity.AxisStatus;
@@ -23,7 +25,9 @@ import com.jinryomate.backend.visit.dto.VisitDtos.UpdateVisitRequest;
 import com.jinryomate.backend.visit.dto.VisitDtos.VisitAxisRequest;
 import com.jinryomate.backend.visit.dto.VisitDtos.VisitResponse;
 import com.jinryomate.backend.visit.dto.VisitDtos.VisitSummary;
+import com.jinryomate.backend.visit.entity.VisitMemoAudit;
 import com.jinryomate.backend.visit.entity.VisitRecord;
+import com.jinryomate.backend.visit.repository.VisitMemoAuditRepository;
 import com.jinryomate.backend.visit.repository.VisitRecordRepository;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -39,6 +43,8 @@ import org.springframework.transaction.annotation.Transactional;
 public class VisitRecordService {
 
     private final VisitRecordRepository visitRecordRepository;
+    private final VisitMemoAuditRepository visitMemoAuditRepository;
+    private final UserRepository userRepository;
     private final BriefingCardService briefingCardService;
     private final AiMemoClient aiMemoClient;
 
@@ -106,10 +112,19 @@ public class VisitRecordService {
     /**
      * 메모를 항목으로 나눈다. 화면 {@code 1p} 의 "AI로 정리하기".
      *
-     * <p><b>저장하지 않는다.</b> 환자가 나눈 결과를 고치고 나서 저장하기 때문이다.
+     * <p><b>결과를 저장하지 않는다.</b> 환자가 나눈 결과를 고치고 나서 저장하기 때문이다.
      *
      * <p>카드에 매이지 않는다 — 1p 는 병원을 고른 직후 화면이고, 그 시점에 어느 카드에
      * 붙일지는 아직 앱만 안다.
+     *
+     * <p><b>감사 기록은 남긴다.</b> AI 회귀 eval 재료다(Medical-Mate/AI#113). 결과와
+     * 달리 이것은 환자가 저장을 누르지 않아도 남는다 — {@link VisitMemoAudit} 에 그
+     * 이유와 지우는 날을 적어 두었다.
+     *
+     * <p><b>여기에 {@code @Transactional} 을 붙이지 않는다.</b> 붙이면 감사 저장이
+     * 실패했을 때 트랜잭션이 롤백 표시를 달고, 잡아서 넘어가도 바깥 커밋이
+     * {@code UnexpectedRollbackException} 으로 터진다 — 삼키려던 500 이 그대로
+     * 되살아난다. 트랜잭션 없이 두면 저장 한 번이 제 트랜잭션을 갖는다.
      */
     public ClassifyMemoResponse classify(Long userId, ClassifyMemoRequest request) {
         MemoRequest toAi = new MemoRequest(
@@ -118,6 +133,7 @@ public class VisitRecordService {
                 request.splitVersion());
 
         MemoClassification result = aiMemoClient.classify(toAi);
+        rememberAudit(userId, result);
 
         Map<String, Axis> axes = new LinkedHashMap<>();
         result.axes().forEach((name, a) -> axes.put(name, Axis.from(a)));
@@ -135,6 +151,30 @@ public class VisitRecordService {
                 result.followUp(),
                 new LabelsMeta(result.modelId(), result.promptVersion()),
                 result.splitVersion());
+    }
+
+    /**
+     * AI 가 무엇을 보고 무엇을 뱉었는지 남긴다.
+     *
+     * <p><b>실패해도 넘어간다.</b> 감사 행 하나를 못 써서 환자가 방금 적은 메모 분류가
+     * 500 이 되면 안 된다 — {@code HttpAiMemoClient} 가 "모르는 값이 와도 막지 않는다"
+     * 로 잡아 둔 것과 같은 저울이다. 대신 예외 종류를 남겨, 켜 놓고 안 걸려 있는 상태를
+     * 로그로 알아챌 수 있게 한다.
+     *
+     * <p>계약이 {@code audit} 을 안 주면(예전 이미지) 조용히 넘어간다.
+     */
+    private void rememberAudit(Long userId, MemoClassification result) {
+        if (result.audit() == null || result.audit().isBlank()) {
+            return;
+        }
+        try {
+            User user = userRepository.findById(userId)
+                    .orElseThrow(() -> new ApiException(ErrorCode.UNAUTHORIZED, "다시 로그인해주세요."));
+            visitMemoAuditRepository.save(VisitMemoAudit.of(user, result.source(), result.audit()));
+        } catch (RuntimeException e) {
+            // 메모 본문은 민감정보라 예외 메시지를 남기지 않는다. 종류만 남긴다.
+            log.warn("메모 감사 기록을 못 남겼습니다 userId={} 예외={}", userId, e.getClass().getSimpleName());
+        }
     }
 
     /** 요청의 폰 모델 정보를 AI 쪽 값으로 옮긴다. 안 보냈으면 null 이다. */

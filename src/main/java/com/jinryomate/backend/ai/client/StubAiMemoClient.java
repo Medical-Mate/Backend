@@ -29,6 +29,9 @@ import java.util.Map;
  */
 public class StubAiMemoClient implements AiMemoClient {
 
+    /** 실제 모양을 흉내만 낸다. 저장 경로가 도는지 보려는 값이다. */
+    static final String STUB_AUDIT = "{\"memo\":\"스텁\",\"usage\":{\"input_tokens\":10}}";
+
     /** AI 계약의 네 축. 순서까지 실제와 같게 둔다. */
     private static final String FINDINGS = "findings";
     private static final String TESTS = "tests";
@@ -63,7 +66,7 @@ public class StubAiMemoClient implements AiMemoClient {
             ALL.forEach(axis -> empty.put(axis, CardAxis.notAsked(axis)));
 
             return new MemoClassification(empty, sentences, unlabeled, List.copyOf(sentences),
-                    FollowUp.NONE, "client-labels", "client", SPLIT_VERSION);
+                    FollowUp.NONE, "client-labels", "client", SPLIT_VERSION, "none", STUB_AUDIT);
         }
 
         Map<String, String> resolved = request.hasLabels() ? request.labels() : guess(sentences);
@@ -93,7 +96,8 @@ public class StubAiMemoClient implements AiMemoClient {
         }
 
         return new MemoClassification(axes, sentences, resolved, notes, FollowUp.NONE,
-                promptVersion(request), modelId(request), SPLIT_VERSION);
+                promptVersion(request), modelId(request), SPLIT_VERSION,
+                request.hasLabels() ? "client" : "server", STUB_AUDIT);
     }
 
     /** 폰이 붙였다고 알려주면 그 값을 되돌려준다. 실제 AI 도 provenance 를 그렇게 적는다. */

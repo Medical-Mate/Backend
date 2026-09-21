@@ -32,6 +32,7 @@ import com.jinryomate.backend.profile.repository.HealthProfileRepository;
 import com.jinryomate.backend.visit.dto.VisitDtos.CreateVisitRequest;
 import com.jinryomate.backend.visit.dto.VisitDtos.LabelsMetaRequest;
 import com.jinryomate.backend.visit.dto.VisitDtos.VisitAxisRequest;
+import com.jinryomate.backend.visit.repository.VisitMemoAuditRepository;
 import com.jinryomate.backend.visit.repository.VisitRecordRepository;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
@@ -76,6 +77,7 @@ class WithdrawCascadeTest {
     @Autowired IntakeTurnAuditRepository auditRepository;
     @Autowired BriefingCardRepository cardRepository;
     @Autowired VisitRecordRepository visitRepository;
+    @Autowired VisitMemoAuditRepository memoAuditRepository;
     @Autowired AppointmentRepository appointmentRepository;
 
     @MockitoBean KakaoClient kakaoClient;
@@ -96,6 +98,10 @@ class WithdrawCascadeTest {
 
         long cardId = confirmedCard();
 
+        // 메모를 AI 로 정리해 본다. 저장을 누르기 전 단계라 기록은 안 생기지만
+        // 감사 기록은 여기서 쌓인다 — 얹힐 cascade 가 없는 유일한 자리다.
+        classifyMemo();
+
         createVisit(cardId);
 
         // 카드에 매달린 일정이어야 FK 순서가 드러난다. 카드를 먼저 지우면 여기서 걸린다.
@@ -112,6 +118,8 @@ class WithdrawCascadeTest {
         // 감사 기록은 세션의 자식이다. 여기서 0 이면 저장 자체가 안 된 것이고,
         // 탈퇴 뒤에 남으면 탈퇴한 사람의 발화가 DB 에 영영 남는다.
         assertThat(auditRepository.count()).as("턴마다 쌓여야 한다").isPositive();
+        // 회원 직속이라 AuthService 에 줄이 따로 있다. 그 줄을 빼면 여기서 깨진다.
+        assertThat(memoAuditRepository.count()).as("메모를 정리할 때마다 쌓여야 한다").isPositive();
 
         mockMvc.perform(delete("/api/me").header("Authorization", token))
                 .andExpect(status().isNoContent());
@@ -123,6 +131,7 @@ class WithdrawCascadeTest {
         assertThat(visitRepository.count()).isZero();
         assertThat(appointmentRepository.count()).isZero();
         assertThat(auditRepository.count()).as("발화가 남으면 안 된다").isZero();
+        assertThat(memoAuditRepository.count()).as("메모가 남으면 안 된다").isZero();
     }
 
     // ---------- helpers ----------
@@ -158,6 +167,14 @@ class WithdrawCascadeTest {
                                 "○○정형외과", "정형외과", "재진",
                                 LocalDate.now().plusDays(7), null,
                                 List.of(cardId), null, null))))
+                .andExpect(status().isOk());
+    }
+
+    private void classifyMemo() throws Exception {
+        mockMvc.perform(post("/api/visits/classify")
+                        .header("Authorization", token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"memo\":\"피검사 해보자고 하셨어요. 다음주에 다시 오래요\"}"))
                 .andExpect(status().isOk());
     }
 

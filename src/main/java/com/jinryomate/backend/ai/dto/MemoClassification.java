@@ -22,6 +22,11 @@ import java.util.Map;
  * @param followUp     재방문 시점. 날짜 하나가 아니라 원문·날짜·"전후" 여부를 함께 담는다
  * @param splitVersion 무엇이 이 문장들을 나눴는지({@code "split-v2"}). <b>{@code labels} 를
  *                     되보낼 때 같이 보낸다</b> — 그 사이 규칙이 바뀌었으면 409 가 온다
+ * @param source       누가 라벨을 붙였나. {@code server} 모델 · {@code client} 환자가 고친 것을
+ *                     되보냄 · {@code none} 문장만 나눔. <b>화면에 안 쓴다</b> — 감사 기록을
+ *                     나중에 거를 때만 본다
+ * @param audit        AI 가 무엇을 보고 무엇을 뱉었는지. <b>통째로 문자열이고 열어보지 않는다.</b>
+ *                     AI 회귀 eval 재료로 저장만 한다(Medical-Mate/AI#113). 계약이 안 주면 null
  */
 public record MemoClassification(
         Map<String, CardAxis> axes,
@@ -31,5 +36,7 @@ public record MemoClassification(
         FollowUp followUp,
         String promptVersion,
         String modelId,
-        String splitVersion
+        String splitVersion,
+        String source,
+        String audit
 ) {}

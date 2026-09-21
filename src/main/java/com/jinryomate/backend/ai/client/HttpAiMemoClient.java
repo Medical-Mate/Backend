@@ -107,7 +107,10 @@ public class HttpAiMemoClient implements AiMemoClient {
                 toFollowUp(card.path("follow_up_date")),
                 card.path("provenance").path("prompt_version").asText(null),
                 card.path("provenance").path("model_id").asText(null),
-                response.splitVersion());
+                response.splitVersion(),
+                response.source(),
+                // 통째로 문자열이다. 안을 읽지 않으므로 AI 쪽이 필드를 늘려도 우리가 안 깨진다.
+                response.audit() == null || response.audit().isNull() ? null : response.audit().toString());
     }
 
     /**
@@ -217,6 +220,20 @@ public class HttpAiMemoClient implements AiMemoClient {
              * {@code null} 이 전달돼 되보낼 것이 없어진다 — 검사가 꺼진 채로 지금까지처럼
              * 동작한다.
              */
-            @JsonProperty("split_version") String splitVersion
+            @JsonProperty("split_version") String splitVersion,
+
+            /**
+             * 누가 라벨을 붙였나. {@code server} 모델 · {@code client} 환자가 고친 것을
+             * 되보냄 · {@code none} 문장만 나눔. 감사 기록을 나중에 거를 때만 쓴다.
+             */
+            String source,
+
+            /**
+             * <b>{@code audit} 을 받는다.</b> 한동안 버렸는데, AI 트랙이 회귀 eval 케이스를
+             * 채우는 재료로 쓰기로 했다(Medical-Mate/AI#113). 메모 원문이 그대로 들어 있지만
+             * <b>앱 경로는 계정 경로</b>라 개인정보처리방침 범위 안이다. 웹 데모는 고지가
+             * 먼저라 안 받는다.
+             */
+            JsonNode audit
     ) {}
 }
