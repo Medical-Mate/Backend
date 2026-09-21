@@ -17,6 +17,7 @@ import com.jinryomate.backend.global.error.ErrorCode;
 import com.jinryomate.backend.intake.repository.IntakeSessionRepository;
 import com.jinryomate.backend.profile.entity.Sex;
 import com.jinryomate.backend.profile.service.HealthProfileService;
+import com.jinryomate.backend.visit.repository.VisitMemoAuditRepository;
 import com.jinryomate.backend.visit.repository.VisitRecordRepository;
 import java.time.Instant;
 import java.util.Optional;
@@ -39,6 +40,7 @@ public class AuthService {
     private final BriefingCardRepository briefingCardRepository;
     private final IntakeSessionRepository intakeSessionRepository;
     private final VisitRecordRepository visitRecordRepository;
+    private final VisitMemoAuditRepository visitMemoAuditRepository;
     private final AppointmentRepository appointmentRepository;
 
     /**
@@ -145,9 +147,15 @@ public class AuthService {
      * 순서를 바꾸면 외래키에 걸린다. 일정은 카드를 참조한다.
      *
      * <p>도메인이 늘면 여기에 줄을 더한다. {@code WithdrawCascadeTest} 가 먼저 깨진다.
+     *
+     * <p>메모 감사 기록은 <b>얹힐 cascade 가 없어서</b> 여기에 줄이 따로 있다. 문답
+     * 감사 기록은 세션의 자식이라 {@code intakeSessionRepository} 줄이 함께 지우는데,
+     * 메모 쪽은 회원 직속이다 — {@code POST /api/visits/classify} 가 미리보기라 그
+     * 시점에 붙일 기록 행이 없기 때문이다.
      */
     private void deleteAllData(User user) {
         appointmentRepository.deleteAllByUser(user);
+        visitMemoAuditRepository.deleteAllByUser(user);
         visitRecordRepository.deleteAllByUser(user);
         briefingCardRepository.deleteAllByUser(user);
         intakeSessionRepository.deleteAllByUser(user);

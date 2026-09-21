@@ -11,5 +11,9 @@
  * <p>녹음은 저장하지 않는다. 기억 재구성 방식이므로 오디오 컬럼 자체를 두지 않는다.
  *
  * <p>기록 탭의 목록({@code GET /api/me/visits})도 여기서 낸다.
+ *
+ * <p><b>{@link com.jinryomate.backend.visit.entity.VisitMemoAudit} 는 한시다.</b>
+ * AI 회귀 eval 재료라 심사가 끝나면 테이블째 지운다(Medical-Mate/AI#113). 이 도메인의
+ * 다른 것과 성질이 다르니 새 코드를 여기에 얹지 말 것 — 지울 때 같이 사라진다.
  */
 package com.jinryomate.backend.visit;
