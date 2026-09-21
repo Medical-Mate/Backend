@@ -1,6 +1,9 @@
 package com.jinryomate.backend.demo.web;
 
+import com.jinryomate.backend.demo.dto.DemoEventDtos.Accepted;
+import com.jinryomate.backend.demo.dto.DemoEventDtos.EventBatch;
 import com.jinryomate.backend.demo.service.DemoAiProxy;
+import com.jinryomate.backend.demo.service.DemoEventService;
 import com.jinryomate.backend.demo.service.DemoRateLimiter;
 import com.jinryomate.backend.global.error.ApiException;
 import com.jinryomate.backend.global.error.ErrorCode;
@@ -9,6 +12,7 @@ import com.jinryomate.backend.hospital.dto.HospitalDtos.HospitalSearchResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
@@ -32,8 +36,11 @@ import org.springframework.web.bind.annotation.RestController;
 
         **인증이 없습니다.** 대신 호출 빈도를 제한합니다.
 
-        **아무것도 저장하지 않습니다.** `state` 는 브라우저가 들고 다니세요 —
+        **증상 내용을 저장하지 않습니다.** `state` 는 브라우저가 들고 다니세요 —
         AI 가 무상태라 가능한 구조입니다. 새로고침하면 문답이 사라집니다.
+
+        서버에 남는 것은 `POST /events` 로 보낸 **익명 사용 기록**뿐입니다 —
+        화면 이동과 응답 시간 같은 숫자이고, 발화 원문은 받지 않습니다.
 
         **AI 가 하는 일과 병원 찾기가 됩니다.** 브리핑 카드는 매 턴 응답에 들어 있어
         브라우저가 들고 그리면 됩니다 — 저장만 안 될 뿐입니다.
@@ -56,6 +63,8 @@ public class DemoController {
 
     /** 앱이 쓰는 것과 같은 구현이다. 여기서는 문만 하나 더 낸다. */
     private final HospitalSearchClient hospitalSearchClient;
+
+    private final DemoEventService eventService;
 
     @Operation(
             summary = "부위 마스터",
@@ -192,6 +201,33 @@ public class DemoController {
         // AI 쪽과 달리 서명이 없고 우리 도메인 코드라, 바이트를 그대로 흘려보내는 것이
         // 아니라 평범한 위임이다. 캐시(결과 6시간·0건 5분)가 그 안에 이미 붙어 있다.
         return hospitalSearchClient.search(query, page, size);
+    }
+
+    @Operation(
+            summary = "사용 이벤트 수집",
+            description = """
+                    화면 이동·이탈·응답 시간을 모읍니다. **환자 데이터가 아닙니다** —
+                    증상·메모 원문, 검색어, 복용약 값은 받지 않습니다.
+
+                    **배치로 보내세요.** 이벤트 하나에 요청 하나면 IP 당 30회/분에 바로
+                    걸립니다. 문답 한 세션이 이미 호출 13회를 씁니다. 한 번에 50개까지입니다.
+
+                    **카탈로그 밖은 400 입니다.** 이벤트 이름도, 속성 키도, 값의 모양도
+                    서버가 정합니다. 하나라도 규격 밖이면 **묶음 전체를 거부합니다** —
+                    좋은 것만 골라 넣으면 프론트 버그가 계속 숨습니다.
+
+                    `sessionId` 는 **문답 세션 id 가 아닙니다.** 브라우저 세션마다 만드는
+                    별도 난수를 쓰세요. 같은 값을 쓰면 이벤트가 카드와 이어져, 원문을 한
+                    글자도 안 담아도 누가 무엇을 말했는지가 복원됩니다.
+
+                    `occurredAt` 에는 **오프셋을 붙이세요**(`+09:00`). 없으면 400 입니다 —
+                    조용히 UTC 로 해석해서 시간대 분석이 아홉 시간 틀리는 것보다 낫습니다.
+                    """)
+    @PostMapping(value = "/events", produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<Accepted> events(HttpServletRequest request,
+                                           @Valid @RequestBody EventBatch batch) {
+        rateLimiter.check(request);
+        return ResponseEntity.accepted().body(new Accepted(eventService.accept(batch)));
     }
 
     private DemoAiProxy aiProxy() {
