@@ -1,6 +1,8 @@
 package com.jinryomate.backend.demo.web;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.jinryomate.backend.demo.service.DemoEventCatalog;
+import com.jinryomate.backend.demo.service.DemoEventRecorder;
 import com.jinryomate.backend.global.error.ApiException;
 import com.jinryomate.backend.global.error.ErrorCode;
 import com.jinryomate.backend.global.error.ErrorResponse;
@@ -13,6 +15,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletRequestWrapper;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
+import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
@@ -47,6 +50,9 @@ public class DemoBodySizeFilter extends OncePerRequestFilter {
 
     private final ObjectMapper objectMapper;
 
+    /** 막힌 횟수를 남긴다. 브라우저는 자기가 막힌 것만 안다. */
+    private final DemoEventRecorder recorder;
+
     /**
      * 1MB.
      *
@@ -76,11 +82,25 @@ public class DemoBodySizeFilter extends OncePerRequestFilter {
             // **여기서는 던지지 않고 직접 쓴다.** 필터는 DispatcherServlet 앞이라
             // @RestControllerAdvice 가 잡지 못한다 — 던지면 413 이 아니라 500 이 나간다.
             log.warn("데모 본문 크기 초과 declared={}", declared);
+            record(request);
             writeTooLarge(response);
             return;
         }
         // 길이를 안 밝힌 요청(chunked)은 읽으면서 센다.
         chain.doFilter(new LimitedRequest(request), response);
+    }
+
+    /**
+     * 막힌 것을 남긴다.
+     *
+     * <p>경로는 카탈로그의 닫힌 목록으로 좁힌다 — 요청 URI 를 그대로 넣으면 목록 밖
+     * 값이라 기록이 통째로 떨어진다.
+     */
+    private void record(HttpServletRequest request) {
+        String rest = request.getRequestURI().substring(
+                request.getRequestURI().indexOf(PREFIX) + PREFIX.length());
+        recorder.record("guard.payload_too_large",
+                DemoEventCatalog.knowsDemoPath(rest) ? Map.of("path", rest) : Map.of());
     }
 
     private void writeTooLarge(HttpServletResponse response) throws IOException {

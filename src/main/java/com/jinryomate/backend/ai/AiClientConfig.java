@@ -9,6 +9,8 @@ import com.jinryomate.backend.ai.client.HttpAiTurnClient;
 import com.jinryomate.backend.ai.client.StubAiMemoClient;
 import com.jinryomate.backend.ai.client.StubAiTurnClient;
 import com.jinryomate.backend.demo.service.DemoAiProxy;
+import com.jinryomate.backend.demo.service.DemoEventRecorder;
+import com.jinryomate.backend.demo.service.DemoEventRecorder;
 import java.time.Duration;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
@@ -57,9 +59,9 @@ public class AiClientConfig {
     @Bean
     @ConditionalOnExpression("!'${ai.hmac-secret:}'.isBlank()")
     public DemoAiProxy demoAiProxy(RestClient aiRestClient, ObjectMapper objectMapper,
-                                   AiProperties properties) {
+                                   AiProperties properties, DemoEventRecorder recorder) {
         log.info("웹 데모 AI 통로를 엽니다. 심사 뒤 제거 대상입니다");
-        return new DemoAiProxy(aiRestClient, objectMapper, properties);
+        return new DemoAiProxy(aiRestClient, objectMapper, properties, recorder);
     }
 
     @Bean
