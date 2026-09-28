@@ -1,0 +1,212 @@
+{
+  "uid": "medimate-demo",
+  "title": "진료메이트 · 웹 데모",
+  "tags": ["medimate"],
+  "timezone": "Asia/Seoul",
+  "editable": true,
+  "time": { "from": "now-24h", "to": "now" },
+  "refresh": "1m",
+  "panels": [
+    {
+      "type": "text",
+      "gridPos": { "h": 3, "w": 24, "x": 0, "y": 0 },
+      "options": {
+        "mode": "markdown",
+        "content": "**서버가 아는 값만 있습니다.** 화면 흐름·이탈·퍼널은 PostHog 에 있고, 일부러 안 겹치게 두었습니다.\n\n`우리 구간 = 총 소요 − AI 소요` — 느린 게 우리인지 Bedrock 인지가 여기서 갈립니다. `session` 은 LLM 을 안 부르므로 `turn` 과 같은 축에 놓고 평균을 내면 거짓말이 됩니다."
+      }
+    },
+
+    {
+      "type": "timeseries",
+      "title": "트래픽 — 요청 수",
+      "datasource": { "type": "postgres", "uid": "analytics" },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 3 },
+      "fieldConfig": {
+        "defaults": { "custom": { "drawStyle": "bars", "fillOpacity": 70, "lineWidth": 0 } },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT $__timeGroupAlias(occurred_at, $__interval), count(*) AS 요청 FROM analytics.demo_event WHERE event = 'web.request' AND $__timeFilter(occurred_at) GROUP BY 1 ORDER BY 1"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "응답속도 p95 — 경로별",
+      "description": "429 는 빠져 있다. guard.rate_limited 가 따로 센다",
+      "datasource": { "type": "postgres", "uid": "analytics" },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 3 },
+      "fieldConfig": {
+        "defaults": { "unit": "ms", "custom": { "lineWidth": 2, "fillOpacity": 8 } },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT $__timeGroupAlias(occurred_at, $__interval), coalesce(props->>'path', '(기타)') AS metric, percentile_cont(0.95) WITHIN GROUP (ORDER BY (props->>'duration_ms')::int) AS p95 FROM analytics.demo_event WHERE event = 'web.request' AND $__timeFilter(occurred_at) GROUP BY 1, 2 ORDER BY 1"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "에러율 — 상태 그룹",
+      "datasource": { "type": "postgres", "uid": "analytics" },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 3 },
+      "fieldConfig": {
+        "defaults": { "custom": { "drawStyle": "bars", "fillOpacity": 80, "lineWidth": 0, "stacking": { "mode": "normal" } } },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "5xx" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } }] },
+          { "matcher": { "id": "byName", "options": "4xx" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "orange" } }] },
+          { "matcher": { "id": "byName", "options": "2xx" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "green" } }] }
+        ]
+      },
+      "targets": [
+        {
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT $__timeGroupAlias(occurred_at, $__interval), CASE WHEN (props->>'status')::int >= 500 THEN '5xx' WHEN (props->>'status')::int >= 400 THEN '4xx' ELSE '2xx' END AS metric, count(*) AS 건수 FROM analytics.demo_event WHERE event = 'web.request' AND $__timeFilter(occurred_at) GROUP BY 1, 2 ORDER BY 1"
+        }
+      ]
+    },
+
+    {
+      "type": "timeseries",
+      "title": "우리 구간 vs AI 구간",
+      "description": "총 소요 − AI 소요. 느린 게 우리인지 Bedrock 인지가 여기서 갈린다",
+      "datasource": { "type": "postgres", "uid": "analytics" },
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 11 },
+      "fieldConfig": {
+        "defaults": { "unit": "ms", "custom": { "drawStyle": "bars", "fillOpacity": 75, "lineWidth": 0, "stacking": { "mode": "normal" } } },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "우리 구간" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "blue" } }] },
+          { "matcher": { "id": "byName", "options": "AI 구간" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "purple" } }] }
+        ]
+      },
+      "targets": [
+        {
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT $__timeGroupAlias(w.occurred_at, $__interval), round(avg((w.props->>'duration_ms')::int - (a.props->>'latency_ms')::int)) AS \"우리 구간\", round(avg((a.props->>'latency_ms')::int)) AS \"AI 구간\" FROM analytics.demo_event w JOIN analytics.demo_event a ON a.session_id = w.session_id AND a.event = 'ai.responded' WHERE w.event = 'web.request' AND $__timeFilter(w.occurred_at) GROUP BY 1 ORDER BY 1"
+        }
+      ]
+    },
+    {
+      "type": "table",
+      "title": "경로별 — 호출 · p50 · p95 · 에러",
+      "datasource": { "type": "postgres", "uid": "analytics" },
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 11 },
+      "targets": [
+        {
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT coalesce(props->>'path', '(기타)') AS 경로, count(*) AS 호출, round(percentile_cont(0.5) WITHIN GROUP (ORDER BY (props->>'duration_ms')::int)) AS p50_ms, round(percentile_cont(0.95) WITHIN GROUP (ORDER BY (props->>'duration_ms')::int)) AS p95_ms, count(*) FILTER (WHERE (props->>'status')::int >= 400) AS 에러 FROM analytics.demo_event WHERE event = 'web.request' AND $__timeFilter(occurred_at) GROUP BY 1 ORDER BY 2 DESC"
+        }
+      ]
+    },
+
+    {
+      "type": "timeseries",
+      "title": "AI 응답 지연 p95 — 단계별",
+      "datasource": { "type": "postgres", "uid": "analytics" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 20 },
+      "fieldConfig": {
+        "defaults": { "unit": "ms", "custom": { "lineWidth": 2, "fillOpacity": 8 } },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT $__timeGroupAlias(occurred_at, $__interval), props->>'step' AS metric, percentile_cont(0.95) WITHIN GROUP (ORDER BY (props->>'latency_ms')::int) AS p95 FROM analytics.demo_event WHERE event = 'ai.responded' AND $__timeFilter(occurred_at) GROUP BY 1, 2 ORDER BY 1"
+        }
+      ]
+    },
+    {
+      "type": "table",
+      "title": "AI 단계별 — 호출 · p50 · p95 · 최대",
+      "datasource": { "type": "postgres", "uid": "analytics" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 20 },
+      "targets": [
+        {
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT props->>'step' AS 단계, count(*) AS 호출, round(percentile_cont(0.5) WITHIN GROUP (ORDER BY (props->>'latency_ms')::int)) AS p50_ms, round(percentile_cont(0.95) WITHIN GROUP (ORDER BY (props->>'latency_ms')::int)) AS p95_ms, max((props->>'latency_ms')::int) AS 최대_ms FROM analytics.demo_event WHERE event = 'ai.responded' AND $__timeFilter(occurred_at) GROUP BY 1 ORDER BY 2 DESC"
+        }
+      ]
+    },
+
+    {
+      "type": "stat",
+      "title": "빈도 제한에 막힘",
+      "description": "브라우저는 자기가 막힌 것만 안다. 전체 상한에 걸려 떨어진 사람은 여기서만 보인다",
+      "datasource": { "type": "postgres", "uid": "analytics" },
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 28 },
+      "fieldConfig": {
+        "defaults": { "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 1 }] } },
+        "overrides": []
+      },
+      "targets": [
+        { "format": "table", "rawQuery": true, "rawSql": "SELECT count(*) AS 건수 FROM analytics.demo_event WHERE event = 'guard.rate_limited' AND $__timeFilter(occurred_at)" }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "예산 소진 (503)",
+      "description": "닿으면 KST 자정까지 안 풀린다",
+      "datasource": { "type": "postgres", "uid": "analytics" },
+      "gridPos": { "h": 6, "w": 6, "x": 6, "y": 28 },
+      "fieldConfig": {
+        "defaults": { "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 1 }] } },
+        "overrides": []
+      },
+      "targets": [
+        { "format": "table", "rawQuery": true, "rawSql": "SELECT count(*) AS 건수 FROM analytics.demo_event WHERE event = 'budget.exhausted' AND $__timeFilter(occurred_at)" }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "AI 장애 (502 · network)",
+      "datasource": { "type": "postgres", "uid": "analytics" },
+      "gridPos": { "h": 6, "w": 6, "x": 12, "y": 28 },
+      "fieldConfig": {
+        "defaults": { "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 1 }] } },
+        "overrides": []
+      },
+      "targets": [
+        { "format": "table", "rawQuery": true, "rawSql": "SELECT count(*) AS 건수 FROM analytics.demo_event WHERE event = 'upstream.failed' AND $__timeFilter(occurred_at)" }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "본문 크기 초과 (413)",
+      "datasource": { "type": "postgres", "uid": "analytics" },
+      "gridPos": { "h": 6, "w": 6, "x": 18, "y": 28 },
+      "fieldConfig": {
+        "defaults": { "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 1 }] } },
+        "overrides": []
+      },
+      "targets": [
+        { "format": "table", "rawQuery": true, "rawSql": "SELECT count(*) AS 건수 FROM analytics.demo_event WHERE event = 'guard.payload_too_large' AND $__timeFilter(occurred_at)" }
+      ]
+    },
+
+    {
+      "type": "table",
+      "title": "들어온 이벤트 전부",
+      "description": "카탈로그 밖은 애초에 저장되지 않는다",
+      "datasource": { "type": "postgres", "uid": "analytics" },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 34 },
+      "targets": [
+        {
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT event AS 이벤트, surface AS 출처, count(*) AS 건수, max(occurred_at AT TIME ZONE 'Asia/Seoul') AS 마지막 FROM analytics.demo_event WHERE $__timeFilter(occurred_at) GROUP BY 1, 2 ORDER BY 3 DESC"
+        }
+      ]
+    }
+  ]
+}

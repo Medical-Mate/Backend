@@ -1,0 +1,15 @@
+apiVersion: 1
+datasources:
+  - name: analytics
+    uid: analytics
+    type: postgres
+    url: postgres:5432
+    database: jinryomate
+    user: grafana_ro
+    isDefault: true
+    jsonData:
+      sslmode: disable          # 같은 docker 네트워크 안이다
+      postgresVersion: 1600
+      timescaledb: false
+    secureJsonData:
+      password: ${ANALYTICS_DB_PASSWORD}
