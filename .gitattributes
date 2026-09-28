@@ -1,0 +1,5 @@
+# 서버(리눅스)로 가는 파일은 윈도우에서 받아도 LF 로 둔다.
+# core.autocrlf=true 인 PC 에서 CRLF 로 바뀐 compose 를 scp 해 서버에 CRLF 가 올라간 적이 있다(#152).
+deploy/** text eol=lf
+*.sh      text eol=lf
+gradlew   text eol=lf
