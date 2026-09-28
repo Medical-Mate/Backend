@@ -96,6 +96,13 @@ services:
       # 2026-09-23 배포)인 2026-09-28 에 켰다(AI#111 · #127). 안내문대로 2027-01-15 에
       # Langfuse 기록도 함께 지운다. 켜졌는지는 /health.tracing.content 로 본다.
       MEDIMATE_TRACE_CONTENT: ${MEDIMATE_TRACE_CONTENT:-}
+
+      # 트레이스 본문 식별자 가림(AI #131). 비우면 정규식만 — 이름이 그대로 Langfuse로 간다.
+      # 이름·주소·나이는 Bedrock Guardrails(서울)로 찾는다. 카드·모델 입력에는 쓰지 않고
+      # 트레이스로 나가는 본문에만 쓴다. 가드레일 id 는 비밀값이 아니다.
+      # 켜졌는지는 /health.tracing.pii 가 "guardrails" 인지로 본다("regex"면 이 두 줄이 빠진 것).
+      MEDIMATE_TRACE_PII_GUARDRAIL: ${MEDIMATE_TRACE_PII_GUARDRAIL:-}
+      MEDIMATE_TRACE_PII_GUARDRAIL_VERSION: ${MEDIMATE_TRACE_PII_GUARDRAIL_VERSION:-1}
       # 요청 서명 검증. 비우면 AI 가 검증을 통째로 생략한다.
       MEDIMATE_HMAC_SECRET: ${MEDIMATE_HMAC_SECRET:-}
 
