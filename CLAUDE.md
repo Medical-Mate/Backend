@@ -414,7 +414,7 @@ docker compose -f docker-compose.prod.yml up -d backend
 
 | | |
 |---|---|
-| `MEDIMATE_DAILY_BUDGET_USD` | 하루 LLM 지출 상한(USD). 지금 **2**. 넘으면 LLM 을 부르는 턴이 503, 선택지 턴·온톨로지·`/health` 는 계속 돕니다 |
+| `MEDIMATE_DAILY_BUDGET_USD` | 하루 LLM 지출 상한(USD). 지금 **12**. 넘으면 LLM 을 부르는 턴이 503, 선택지 턴·온톨로지·`/health` 는 계속 돕니다 |
 | `MEDIMATE_BUDGET_STATE_FILE` | 카운터를 파일에 둡니다. 없으면 **컨테이너를 올릴 때마다 0** 이 됩니다 — 배포가 잦은 동안에는 상한이 사실상 안 걸립니다 |
 
 **켜졌는지는 `/health` 로 봅니다.** AI 가 그러라고 내놓은 필드입니다.
@@ -429,11 +429,11 @@ docker compose -f docker-compose.prod.yml exec -T ai \
 | 필드 | 아니면 |
 |---|---|
 | `llm_budget.persisted: true` | `null` 이면 상한이 안 켜진 것 |
-| `extractor.prompt_version: extract-v4-nova` | `extract-v3` 면 `MEDIMATE_MODEL` 이 어긋난 것입니다. **인젝션 방어가 꺼집니다**(0/3) |
+| `extractor.prompt_version: extract-v5-nova` | `extract-v3` 면 `MEDIMATE_MODEL` 이 어긋난 것입니다. **인젝션 방어가 꺼집니다**(0/3) |
 | `extractor.pricing_known: true` | `false` 면 가격표에 없는 모델이라 **상한이 그 모델을 못 셉니다** |
 | `hmac_required: true` | 서명 검증이 꺼진 것 |
 
-> `docker-compose.prod.yml` 은 **저장소에 없고 서버에만 있습니다.** 고칠 일이 생기면 서버에서 직접 고치고, 왜 그랬는지를 그 파일 주석에 남깁니다.
+> **운영 구성은 `deploy/` 가 서버(`/opt/jinryomate/`)와 같은 판입니다** — `docker-compose.prod.yml` · `Caddyfile` · `grafana/provisioning/`. 한동안 서버에서만 고쳐 저장소 판이 낡았는데(grafana·Langfuse·상한이 빠짐), 2026-09-28 서버 판으로 맞췄습니다. **서버에서 고치면 같은 날 저장소에도 올립니다.** 서버가 날아가면 되살릴 기준이 여기뿐입니다. 비밀값은 `${VAR}` 참조만 있어야 하고, 값은 서버 `.env` 에만 둡니다.
 
 ---
 
