@@ -85,12 +85,17 @@ services:
     restart: unless-stopped
     environment:
       # Langfuse 트레이싱(AI#127). 명시 목록이라 .env 에만 넣으면 컨테이너에 안 들어간다.
-      # 키가 비면 SDK 가 무동작이다. 본문(MEDIMATE_TRACE_CONTENT)은 일부러 여기 없다 —
-      # 증상 본문이 미국으로 나가는 스위치라, 웹·앱 고지가 올라간 날 한 줄 더한다.
+      # 키가 비면 SDK 가 무동작이다.
       LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-}
       LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-}
       LANGFUSE_BASE_URL: ${LANGFUSE_BASE_URL:-}
       MEDIMATE_ENV: ${MEDIMATE_ENV:-}
+
+      # 본문 수집. on 이면 증상 본문이 Langfuse(미국, ClickHouse, Inc.)로 나간다 — 비우면
+      # 길이만 남긴다. 웹 국외 이전 안내에 미국·ClickHouse 가 올라간 뒤(Web-App c2d4d68,
+      # 2026-09-23 배포)인 2026-09-28 에 켰다(AI#111 · #127). 안내문대로 2027-01-15 에
+      # Langfuse 기록도 함께 지운다. 켜졌는지는 /health.tracing.content 로 본다.
+      MEDIMATE_TRACE_CONTENT: ${MEDIMATE_TRACE_CONTENT:-}
       # 요청 서명 검증. 비우면 AI 가 검증을 통째로 생략한다.
       MEDIMATE_HMAC_SECRET: ${MEDIMATE_HMAC_SECRET:-}
 
