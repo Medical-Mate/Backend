@@ -429,7 +429,7 @@ docker compose -f docker-compose.prod.yml exec -T ai \
 | 필드 | 아니면 |
 |---|---|
 | `llm_budget.persisted: true` | `null` 이면 상한이 안 켜진 것 |
-| `extractor.prompt_version: extract-v5-nova` | `extract-v3` 면 `MEDIMATE_MODEL` 이 어긋난 것입니다. **인젝션 방어가 꺼집니다**(0/3) |
+| `extractor.prompt_version: extract-v6-nova` | `extract-v5-nova` 면 2026-10-12 이전 이미지입니다(롤백 대상 `sha-4014b8f…` 가 이 판). `extract-v3` 면 `MEDIMATE_MODEL` 이 어긋난 것입니다. **인젝션 방어가 꺼집니다**(0/3) |
 | `extractor.pricing_known: true` | `false` 면 가격표에 없는 모델이라 **상한이 그 모델을 못 셉니다** |
 | `hmac_required: true` | 서명 검증이 꺼진 것 |
 
