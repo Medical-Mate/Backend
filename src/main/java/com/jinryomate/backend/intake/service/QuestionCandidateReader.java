@@ -53,7 +53,7 @@ public class QuestionCandidateReader {
                         AiCard.QuestionCandidate::rank,
                         Comparator.nullsLast(Comparator.naturalOrder())))
                 .limit(MAX)
-                .map(c -> new QuestionCandidate(c.text(), c.source(), c.rank()))
+                .map(c -> new QuestionCandidate(c.text(), c.source(), c.rank(), c.origin()))
                 .toList();
     }
 }

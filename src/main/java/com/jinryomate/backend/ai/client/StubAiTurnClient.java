@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.jinryomate.backend.ai.dto.AiTurnResult;
 import com.jinryomate.backend.ai.dto.AskingAxis;
 import com.jinryomate.backend.ai.dto.PatientProfile;
+import com.jinryomate.backend.ai.dto.PhoneQuestionCandidates;
 import com.jinryomate.backend.intake.entity.IntakeMessage;
 import com.jinryomate.backend.intake.entity.IntakeSession;
 import java.util.List;
@@ -81,6 +82,32 @@ public class StubAiTurnClient implements AiTurnClient {
         return new AiTurnResult(CLOSING, true, "complete", STUB_STATE, card(session, null), null, null);
     }
 
+    /**
+     * 받은 폰 후보를 그대로 후보로 돌려준다({@code origin: model}). 검증은 흉내 내지 않는다 —
+     * 저장 경로(카드 덮어쓰기 → 후보 읽기)가 도는지 보려는 것이다. 빈 목록이면 템플릿 하나를
+     * 붙인다(실제 AI 도 빈 목록이면 템플릿으로 채운다).
+     */
+    @Override
+    public AiTurnResult submitPhoneQuestionCandidates(IntakeSession session, PatientProfile profile,
+                                                      PhoneQuestionCandidates phone) {
+        StringBuilder cands = new StringBuilder();
+        int rank = 1;
+        for (PhoneQuestionCandidates.Item item : phone.items()) {
+            if (!cands.isEmpty()) {
+                cands.append(',');
+            }
+            cands.append("{\"text\":").append(quote(item.text()))
+                    .append(",\"source\":").append(quote(item.source()))
+                    .append(",\"rank\":").append(rank++)
+                    .append(",\"origin\":\"model\"}");
+        }
+        if (cands.isEmpty()) {
+            cands.append("{\"text\":\"어떤 검사를 받아야 하나요?\",\"source\":null,\"rank\":1,\"origin\":\"template\"}");
+        }
+        return new AiTurnResult(CLOSING, true, "complete", STUB_STATE,
+                card(session, null, "[" + cands + "]"), null, null);
+    }
+
     @Override
     public AiTurnResult turn(IntakeSession session, String utterance,
                              JsonNode extraction, JsonNode extractionMeta) {
@@ -105,6 +132,11 @@ public class StubAiTurnClient implements AiTurnClient {
      * 흉내 내야, 3값으로 검증하다 터지는 것 같은 문제가 스텁에서도 드러난다.
      */
     private String card(IntakeSession session, String utterance) {
+        return card(session, utterance, null);
+    }
+
+    /** {@code candidatesJson} 은 {@code question_candidates} 자리에 그대로 들어간다. 없으면 {@code null}. */
+    private String card(IntakeSession session, String utterance, String candidatesJson) {
         // 첫 발화만 주 호소로 쓴다. 매 턴 덮어쓰면 마지막 답이 제목 자리에 올라온다 —
         // 강도를 "9점"이라고 답한 순간 카드 목록에 "9점"이 뜬다(안드로이드 #143).
         String complaint = firstUtterance(session);
@@ -128,6 +160,7 @@ public class StubAiTurnClient implements AiTurnClient {
         return "{\"card_type\":\"previsit\",\"chief_complaint\":" + quote(complaint)
                 + ",\"axes\":{" + axes + "}"
                 + ",\"red_flags\":[],\"patient_notes\":[]"
+                + (candidatesJson == null ? "" : ",\"question_candidates\":" + candidatesJson)
                 + ",\"minimally_complete\":false,\"completeness\":" + (complaint == null ? "0.0" : "0.125")
                 + ",\"department_guidance\":null"
                 + ",\"provenance\":{\"prompt_version\":\"stub\",\"model_id\":\"stub\",\"ontology_snapshot\":null}}";

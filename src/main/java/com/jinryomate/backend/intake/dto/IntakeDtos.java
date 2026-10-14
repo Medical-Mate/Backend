@@ -6,6 +6,7 @@ import com.jinryomate.backend.intake.entity.AiProfile;
 import com.jinryomate.backend.intake.entity.IntakeMessage;
 import com.jinryomate.backend.intake.entity.IntakeSession;
 import com.jinryomate.backend.intake.entity.Side;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
@@ -156,7 +157,62 @@ public final class IntakeDtos {
      *
      * @param rank 낮을수록 먼저. 이미 이 순서로 정렬해서 내려준다
      */
-    public record QuestionCandidate(String text, String source, Integer rank) {}
+    public record QuestionCandidate(
+            String text,
+            String source,
+            Integer rank,
+
+            /**
+             * 어디서 왔나. {@code model}(폰 후보가 AI 검증을 통과) · {@code template}(카드 값으로
+             * 만든 보충). <b>폰 후보를 보낸 세션에서만 온다.</b> 없으면 키가 빠진다.
+             */
+            String origin
+    ) {}
+
+    /**
+     * 폰이 만든 질문 후보. 화면 {@code 1i} 전에 보낸다(#164).
+     *
+     * <p><b>AI 가 검증하고 모자라면 채운다.</b> 카드에 없는 말·병명·반복은 버리고, 남은 것이
+     * 모자라면 카드 값으로 만든 템플릿을 뒤에 붙인다. 외부 LLM 은 부르지 않는다.
+     *
+     * <p><b>폰이 하나도 못 만들었으면 빈 배열을 보내세요.</b> 템플릿으로만 채웁니다.
+     *
+     * <p>문답이 끝난 뒤에만 보낼 수 있다. 다시 보내면 후보를 갈아끼운다.
+     */
+    public record PhoneQuestionCandidatesRequest(
+            @NotNull(message = "후보 목록이 필요합니다. 없으면 빈 배열을 보내주세요.")
+            @Size(max = 10, message = "후보는 10개까지 보낼 수 있습니다.")
+            List<@NotNull @Valid PhoneQuestionCandidate> candidates,
+
+            /**
+             * 어떤 폰 모델·프롬프트가 만들었나({@code model_id} · {@code prompt_version}).
+             * <b>열어보지 않고 AI 에 그대로 넘긴다.</b>
+             */
+            JsonNode candidatesMeta
+    ) {}
+
+    /**
+     * @param source 어느 칸에서 나온 질문인가(폰 모델이 단 것). 틀려도 AI 가 다시 본다
+     */
+    public record PhoneQuestionCandidate(
+            @NotBlank(message = "빈 후보는 보낼 수 없습니다.")
+            @Size(max = 200, message = "후보는 200자 이내입니다.")
+            String text,
+
+            @Size(max = 40, message = "source 는 40자 이내입니다.")
+            String source
+    ) {}
+
+    /**
+     * 카드의 축 하나. 폰이 질문 후보를 만드는 재료다(#164).
+     *
+     * <p>AI 가 준 순서·값 그대로다. {@code status} 는 카드 축 5값
+     * ({@code not_asked} · {@code filled} · {@code unknown} · {@code skipped} · {@code ambiguous}).
+     *
+     * @param key   축 키. {@code site} · {@code onset} …
+     * @param value 값. {@code filled} 가 아니면 대개 없다(키가 빠진다)
+     */
+    public record CardAxis(String key, String status, String value) {}
 
     /**
      * 마지막 AI 문장이 묻는 칸. <b>폰 추출 프롬프트의 첫 줄 재료다</b>(#157).
@@ -243,6 +299,12 @@ public final class IntakeDtos {
             List<QuestionCandidate> questionCandidates,
 
             /**
+             * 카드의 축 값·상태. <b>폰이 질문 후보를 만드는 재료다.</b> 문답 중에도 그때까지의
+             * 값이 나간다. 강도(3단계)는 여기가 아니라 {@code severity} 에 있다.
+             */
+            List<CardAxis> cardAxes,
+
+            /**
              * 마지막 AI 문장이 묻는 칸. <b>세션에 저장해 두므로 재조회에도 같은 값이 온다</b> —
              * 앱을 다시 켜도 폰 추출을 이어 갈 수 있다. 끝났으면 {@code null}.
              */
@@ -253,10 +315,11 @@ public final class IntakeDtos {
         public record Severity(int level, String label) {}
 
         public static SessionResponse from(IntakeSession s) {
-            return from(s, List.of());
+            return from(s, List.of(), List.of());
         }
 
-        public static SessionResponse from(IntakeSession s, List<QuestionCandidate> candidates) {
+        public static SessionResponse from(IntakeSession s, List<QuestionCandidate> candidates,
+                                           List<CardAxis> cardAxes) {
             return new SessionResponse(
                     s.getId(),
                     s.getStatus(),
@@ -270,6 +333,7 @@ public final class IntakeDtos {
                             : new Severity(s.getSeverityLevel(), s.getSeverityLabel()),
                     List.copyOf(s.getQuestions()),
                     List.copyOf(candidates),
+                    List.copyOf(cardAxes),
                     AskingAxis.of(s));
         }
     }
