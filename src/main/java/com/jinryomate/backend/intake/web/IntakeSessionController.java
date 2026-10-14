@@ -1,5 +1,6 @@
 package com.jinryomate.backend.intake.web;
 
+import com.jinryomate.backend.intake.dto.IntakeDtos.PhoneQuestionCandidatesRequest;
 import com.jinryomate.backend.intake.dto.IntakeDtos.QuestionsRequest;
 import com.jinryomate.backend.intake.dto.IntakeDtos.SendMessageRequest;
 import com.jinryomate.backend.intake.dto.IntakeDtos.SessionResponse;
@@ -139,5 +140,36 @@ public class IntakeSessionController {
                                             @PathVariable Long sessionId,
                                             @Valid @RequestBody QuestionsRequest request) {
         return intakeSessionService.replaceQuestions(userId, sessionId, request);
+    }
+
+    @Operation(
+            summary = "폰이 만든 질문 후보 보내기 (온디바이스)",
+            description = """
+                    폰 모델이 만든 "의사에게 물어볼 것" 후보를 보내면 **AI 가 검증하고 모자라면
+                    채워서** 돌려줍니다. 외부 LLM 은 부르지 않습니다.
+
+                    - 재료는 세션 응답의 `cardAxes`(카드 축 값·상태)와 `severity` 입니다
+                    - **폰이 하나도 못 만들었으면 빈 배열**을 보내세요. 카드 값으로 만든 템플릿으로 채웁니다
+                    - 응답 `questionCandidates[].origin` 이 `model`(폰 후보 통과) · `template`(보충) 입니다
+                    - **문답이 끝난 뒤에만** 보낼 수 있습니다. 아니면 400
+                    - 다시 보내면 후보를 갈아끼웁니다
+
+                    **온디바이스 세션은 문답이 끝나도 서버가 후보를 미리 만들지 않습니다.** 이 경로가
+                    후보를 받는 유일한 길입니다.
+
+                    ```json
+                    {
+                      "candidates": [
+                        {"text": "계단 내려갈 때 더 아픈 건 괜찮은 건가요?", "source": "exacerbating_relieving"}
+                      ],
+                      "candidatesMeta": {"model_id": "qwen3.5-2b-q4_0", "prompt_version": "q-small-v4"}
+                    }
+                    ```
+                    """)
+    @PostMapping("/{sessionId}/question-candidates")
+    public SessionResponse submitPhoneQuestionCandidates(@AuthenticationPrincipal Long userId,
+                                                         @PathVariable Long sessionId,
+                                                         @Valid @RequestBody PhoneQuestionCandidatesRequest request) {
+        return intakeSessionService.submitPhoneQuestionCandidates(userId, sessionId, request);
     }
 }

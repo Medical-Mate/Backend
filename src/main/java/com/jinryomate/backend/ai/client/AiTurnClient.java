@@ -3,6 +3,7 @@ package com.jinryomate.backend.ai.client;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.jinryomate.backend.ai.dto.AiTurnResult;
 import com.jinryomate.backend.ai.dto.PatientProfile;
+import com.jinryomate.backend.ai.dto.PhoneQuestionCandidates;
 import com.jinryomate.backend.intake.entity.IntakeSession;
 
 /**
@@ -51,4 +52,16 @@ public interface AiTurnClient {
      * @param profile 건강정보. 없으면 {@code null} — 그때는 카드 축만으로 질문을 만든다
      */
     AiTurnResult requestQuestionCandidates(IntakeSession session, PatientProfile profile);
+
+    /**
+     * 폰이 만든 질문 후보를 넘기고 <b>검증·보충된 후보</b>를 받는다(#164).
+     *
+     * <p>AI 는 LLM 을 부르지 않는다 — 검증기로 카드에 없는 말·병명·반복을 버리고, 모자라면
+     * 카드 값으로 만든 템플릿을 붙인다. 문답이 끝난 뒤에만 된다.
+     *
+     * <p>건강정보는 {@link #requestQuestionCandidates} 와 같은 이유로 여기서만 나간다. 카드에
+     * 없는 복용약 질문은 이걸 같이 보내야 검증을 통과한다.
+     */
+    AiTurnResult submitPhoneQuestionCandidates(IntakeSession session, PatientProfile profile,
+                                               PhoneQuestionCandidates phone);
 }

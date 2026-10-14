@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.jinryomate.backend.ai.dto.AiTurnResult;
 import com.jinryomate.backend.ai.dto.AskingAxis;
 import com.jinryomate.backend.ai.dto.PatientProfile;
+import com.jinryomate.backend.ai.dto.PhoneQuestionCandidates;
 import com.jinryomate.backend.global.error.ApiException;
 import com.jinryomate.backend.global.error.ErrorCode;
 import com.jinryomate.backend.intake.entity.IntakeSession;
@@ -177,6 +178,34 @@ public class HttpAiTurnClient implements AiTurnClient {
      */
     @Override
     public AiTurnResult requestQuestionCandidates(IntakeSession session, PatientProfile profile) {
+        return call(TURN_PATH, candidatesBody(session, profile), "질문 후보");
+    }
+
+    /**
+     * 폰 후보를 넘긴다. 서버 후보 요청과 본문이 같고 {@code phone_question_candidates} 만 더해진다.
+     *
+     * <p><b>빈 목록도 키째 보낸다.</b> 키가 없으면 AI 는 서버 LLM 경로로 간다 — 폰 경로만 쓰기로
+     * 한 세션에서 카드가 Bedrock 으로 나간다. 빈 배열은 "폰이 못 만들었으니 템플릿으로" 다.
+     */
+    @Override
+    public AiTurnResult submitPhoneQuestionCandidates(IntakeSession session, PatientProfile profile,
+                                                      PhoneQuestionCandidates phone) {
+        ObjectNode body = candidatesBody(session, profile);
+        ArrayNode items = body.putArray("phone_question_candidates");
+        for (PhoneQuestionCandidates.Item item : phone.items()) {
+            ObjectNode node = items.addObject();
+            node.put("text", item.text());
+            if (item.source() != null) {
+                node.put("source", item.source());
+            }
+        }
+        if (phone.meta() != null && !phone.meta().isNull()) {
+            body.set("candidates_meta", phone.meta());
+        }
+        return call(TURN_PATH, body, "폰 질문 후보");
+    }
+
+    private ObjectNode candidatesBody(IntakeSession session, PatientProfile profile) {
         ObjectNode body = objectMapper.createObjectNode();
         body.set("state", readState(session));
         body.put("question_candidates", true);
@@ -189,8 +218,7 @@ public class HttpAiTurnClient implements AiTurnClient {
             putIfPresent(patient, "conditions", profile.conditions());
             putIfPresent(patient, "allergies", profile.allergies());
         }
-
-        return call(TURN_PATH, body, "질문 후보");
+        return body;
     }
 
     private void putIfPresent(ObjectNode node, String name, List<String> values) {

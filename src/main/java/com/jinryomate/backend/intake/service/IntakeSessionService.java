@@ -4,16 +4,19 @@ import com.jinryomate.backend.ai.client.AiTurnClient;
 import com.jinryomate.backend.ai.dto.AiTurnResult;
 import com.jinryomate.backend.ai.dto.AskingAxis;
 import com.jinryomate.backend.ai.dto.PatientProfile;
+import com.jinryomate.backend.ai.dto.PhoneQuestionCandidates;
 import com.jinryomate.backend.auth.entity.User;
 import com.jinryomate.backend.auth.repository.UserRepository;
 import com.jinryomate.backend.global.error.ApiException;
 import com.jinryomate.backend.global.error.ErrorCode;
+import com.jinryomate.backend.intake.dto.IntakeDtos.PhoneQuestionCandidatesRequest;
 import com.jinryomate.backend.intake.dto.IntakeDtos.QuestionsRequest;
 import com.jinryomate.backend.intake.dto.IntakeDtos.SendMessageRequest;
 import com.jinryomate.backend.intake.dto.IntakeDtos.SessionResponse;
 import com.jinryomate.backend.intake.dto.IntakeDtos.SeverityRequest;
 import com.jinryomate.backend.intake.dto.IntakeDtos.StartSessionRequest;
 import com.jinryomate.backend.intake.dto.IntakeDtos.TurnResponse;
+import com.jinryomate.backend.intake.entity.AiProfile;
 import com.jinryomate.backend.intake.entity.IntakeMessage;
 import com.jinryomate.backend.intake.entity.IntakeSession;
 import com.jinryomate.backend.intake.entity.Side;
@@ -40,6 +43,7 @@ public class IntakeSessionService {
     private final AiTurnClient aiTurnClient;
     private final BodyMap bodyMap;
     private final QuestionCandidateReader candidateReader;
+    private final CardAxisReader cardAxisReader;
 
     /**
      * 문답 세션을 시작한다.
@@ -93,7 +97,7 @@ public class IntakeSessionService {
                     + " 좌우(side)는 노드 id 와 함께만 실을 수 있어 카드에 안 들어갑니다",
                     session.getId());
         }
-        return SessionResponse.from(session, candidateReader.read(session.getAiCard()));
+        return respond(session);
     }
 
     /**
@@ -127,7 +131,11 @@ public class IntakeSessionService {
 
         if (result.ended()) {
             session.complete(result.endReason());
-            fetchQuestionCandidates(session, userId);
+            // 온디바이스 세션은 폰이 후보를 만든다(#164). 여기서 서버 후보를 만들면 카드가
+            // Bedrock 으로 나가 "외부 LLM 으로 안 나간다"는 전제가 깨지고 비용도 든다.
+            if (session.getAiProfile() != AiProfile.ONDEVICE) {
+                fetchQuestionCandidates(session, userId);
+            }
         }
 
         // 발화 내용은 증상 텍스트라 로그에 남기지 않는다. 길이만 남긴다.
@@ -224,7 +232,7 @@ public class IntakeSessionService {
 
         // 강도 값 자체는 증상 정보라 라벨을 로그에 남기지 않는다. 숫자만 남긴다.
         log.info("통증 강도 기록 sessionId={} level={}", sessionId, request.level());
-        return SessionResponse.from(session, candidateReader.read(session.getAiCard()));
+        return respond(session);
     }
 
     /**
@@ -239,13 +247,57 @@ public class IntakeSessionService {
 
         // 질문 내용은 증상을 유추할 수 있어 로그에 남기지 않는다. 개수만 남긴다.
         log.info("물어볼 것 저장 sessionId={} count={}", sessionId, request.questions().size());
-        return SessionResponse.from(session, candidateReader.read(session.getAiCard()));
+        return respond(session);
     }
 
     @Transactional(readOnly = true)
     public SessionResponse get(Long userId, Long sessionId) {
         IntakeSession session = findOwned(userId, sessionId);
-        return SessionResponse.from(session, candidateReader.read(session.getAiCard()));
+        return respond(session);
+    }
+
+    /**
+     * 폰이 만든 질문 후보를 AI 검증에 넘기고, 돌아온 후보로 갈아끼운다(#164).
+     *
+     * <p><b>문답이 끝난 뒤에만 된다.</b> AI 가 종료된 상태에서만 후보를 만든다 — 그 전에 넘기면
+     * 후보 없이 돌아와 앱은 왜 비었는지 모른다. 여기서 먼저 막는다.
+     *
+     * <p><b>AI 실패를 삼키지 않는다.</b> 종료 턴의 서버 후보는 덤이라 실패해도 문답을 끝냈지만,
+     * 이 호출은 앱이 후보를 받으려고 부른 것이다. 빈 후보로 200 을 주면 앱은 "후보가 없다"로
+     * 읽고 재시도하지 않는다.
+     *
+     * <p>{@code state} 는 덮어쓰지 않는다. 끝난 문답이라 바뀔 것이 없고, 카드만 후보가 채워져 온다.
+     */
+    @Transactional
+    public SessionResponse submitPhoneQuestionCandidates(Long userId, Long sessionId,
+                                                         PhoneQuestionCandidatesRequest request) {
+        IntakeSession session = findOwned(userId, sessionId);
+        if (!session.isCompleted()) {
+            throw new ApiException(ErrorCode.INVALID_REQUEST, "문답이 끝난 뒤에 보낼 수 있습니다.");
+        }
+
+        PatientProfile profile = PatientProfile.from(
+                profileRepository.findByUserId(userId).orElse(null));
+        PhoneQuestionCandidates phone = new PhoneQuestionCandidates(
+                request.candidates().stream()
+                        .map(c -> new PhoneQuestionCandidates.Item(c.text(), c.source()))
+                        .toList(),
+                request.candidatesMeta());
+
+        AiTurnResult result = aiTurnClient.submitPhoneQuestionCandidates(session, profile, phone);
+        session.rememberCard(result.card());
+
+        // 후보 문구는 증상을 유추할 수 있어 남기지 않는다. 개수만 남긴다.
+        log.info("폰 질문 후보 sessionId={} 보냄={} profile={}",
+                sessionId, request.candidates().size(), profile != null);
+        return respond(session);
+    }
+
+    /** 세션 응답. 후보와 카드 축은 보관한 AI 카드에서 그때그때 읽는다. */
+    private SessionResponse respond(IntakeSession session) {
+        return SessionResponse.from(session,
+                candidateReader.read(session.getAiCard()),
+                cardAxisReader.read(session.getAiCard()));
     }
 
     /** 남의 세션은 존재 자체를 알려주지 않는다. 없는 것과 같은 응답을 준다. */

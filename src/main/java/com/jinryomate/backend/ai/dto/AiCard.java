@@ -68,7 +68,17 @@ public record AiCard(
      *             꺼내야 처방에 반영되는 것은 올린다는 것이 AI 쪽 정렬 원칙이다
      */
     @JsonIgnoreProperties(ignoreUnknown = true)
-    public record QuestionCandidate(String text, String source, Integer rank) {}
+    public record QuestionCandidate(
+            String text,
+            String source,
+            Integer rank,
+
+            /**
+             * {@code model}(폰 후보가 검증을 통과) · {@code template}(카드 값으로 만든 보충).
+             * <b>폰 경로에서만 온다.</b> 서버 경로는 {@code null}.
+             */
+            String origin
+    ) {}
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record Axis(
