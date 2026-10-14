@@ -2,6 +2,7 @@ package com.jinryomate.backend.ai.client;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.jinryomate.backend.ai.dto.AiTurnResult;
+import com.jinryomate.backend.ai.dto.AskingAxis;
 import com.jinryomate.backend.ai.dto.PatientProfile;
 import com.jinryomate.backend.intake.entity.IntakeMessage;
 import com.jinryomate.backend.intake.entity.IntakeSession;
@@ -45,6 +46,16 @@ public class StubAiTurnClient implements AiTurnClient {
             "어떻게 아픈지 말씀해 주시겠어요? 쑤시는지, 뻐근한지처럼요.",
             "가장 심할 때를 10점이라고 하면 지금은 몇 점 정도인가요?");
 
+    /**
+     * 위 질문이 각각 묻는 칸. 라벨은 AI 의 폰 프롬프트 표({@code prompt_small.AXIS_KO})와
+     * 같은 말을 쓴다 — 스텁으로 앱을 만들 때도 실제와 같은 문자열을 보게 하려는 것이다.
+     */
+    private static final List<AskingAxis> QUESTION_AXES = List.of(
+            new AskingAxis("onset", "언제부터·어떻게 시작"),
+            new AskingAxis("exacerbating_relieving", "심해지거나 나아지는 상황"),
+            new AskingAxis("character", "어떤 느낌"),
+            new AskingAxis("severity", "심한 정도"));
+
     private static final String CLOSING = "말씀해 주셔서 감사해요. 정리해서 카드로 만들어 드릴게요.";
 
     /**
@@ -59,13 +70,15 @@ public class StubAiTurnClient implements AiTurnClient {
     public AiTurnResult start(IntakeSession session) {
         return new AiTurnResult(
                 "어디가 어떻게 불편해서 오셨는지 편하게 말씀해 주세요.",
-                false, null, STUB_STATE, card(session, null), null);
+                false, null, STUB_STATE, card(session, null), null,
+                // 실제 AI 처럼 첫 문장은 자유 발화를 받는 것이라 묻는 칸이 없다.
+                null);
     }
 
     @Override
     public AiTurnResult requestQuestionCandidates(IntakeSession session, PatientProfile profile) {
         // 스텁은 후보를 만들지 않는다. 카드를 그대로 두고 아무것도 바꾸지 않는다.
-        return new AiTurnResult(CLOSING, true, "complete", STUB_STATE, card(session, null), null);
+        return new AiTurnResult(CLOSING, true, "complete", STUB_STATE, card(session, null), null, null);
     }
 
     @Override
@@ -78,9 +91,10 @@ public class StubAiTurnClient implements AiTurnClient {
 
         String card = card(session, utterance);
         if (answered >= QUESTIONS.size()) {
-            return new AiTurnResult(CLOSING, true, "complete", STUB_STATE, card, null);
+            return new AiTurnResult(CLOSING, true, "complete", STUB_STATE, card, null, null);
         }
-        return new AiTurnResult(QUESTIONS.get((int) answered), false, null, STUB_STATE, card, STUB_AUDIT);
+        return new AiTurnResult(QUESTIONS.get((int) answered), false, null, STUB_STATE, card, STUB_AUDIT,
+                QUESTION_AXES.get((int) answered));
     }
 
     /**
