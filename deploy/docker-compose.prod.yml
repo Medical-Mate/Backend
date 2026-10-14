@@ -172,9 +172,14 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
 
-    # AI 쪽 실측 RSS 70MB (boto3 +10, Bedrock 클라이언트 +15 가 더해졌다).
-    # 2.7배 여유다. 더 조이지 말라는 요청이 있었다.
-    mem_limit: 192m
+    # 평소 RSS 60~120MB. 그런데 폰 경로(온디바이스 추출 턴 · 폰 질문 후보)가 들어오면
+    # 값 검증에 Kiwi 를 **처음 쓸 때** 불러와 +300MB, 한 번 쓰고 나면 480~540MB 가 된다
+    # (AI docs/deploy-requirements.md, AI#137·#156). 192m 이던 때는 그 순간 OOM 으로 죽고,
+    # restart 로 살아나도 다음 폰 요청에 또 죽어 웹 데모까지 끊긴다.
+    #
+    # 앱이 폰 경로를 켜기 **전에** 올려야 한다(Backend #157). 상한을 다 더하면 1,936MB 로
+    # 2GB 인스턴스에 꽉 차지만, 동시에 상한까지 쓰는 일은 없고 스왑 2GB 가 받친다.
+    mem_limit: 640m
     volumes:
       # 예산 카운터가 배포를 넘어 살아남는 자리. 이것 말고 쓰는 것이 없다.
       - ai-state:/var/lib/medimate
