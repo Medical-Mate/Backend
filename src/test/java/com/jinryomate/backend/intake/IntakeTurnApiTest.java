@@ -304,8 +304,9 @@ class IntakeTurnApiTest {
     @DisplayName("묻는 칸(askingAxis)은 재조회에도 같은 값이 오고, 끝나면 null 이다")
     void 묻는_칸() throws Exception {
         // 첫 문장은 자유 발화를 받는 것이라 묻는 칸이 없다(실제 AI 서버 프로필과 같다).
+        // null 필드는 응답에서 빠진다(default-property-inclusion: non_null) — 키 자체가 없다.
         mockMvc.perform(startSession())
-                .andExpect(jsonPath("$.askingAxis").value(org.hamcrest.Matchers.nullValue()));
+                .andExpect(jsonPath("$.askingAxis").doesNotExist());
         long sessionId = startAndGetId();
 
         String turn = mockMvc.perform(send(sessionId, "어제부터요", null))
@@ -327,7 +328,7 @@ class IntakeTurnApiTest {
         }
         mockMvc.perform(get("/api/sessions/" + sessionId).header("Authorization", token))
                 .andExpect(jsonPath("$.status").value("COMPLETED"))
-                .andExpect(jsonPath("$.askingAxis").value(org.hamcrest.Matchers.nullValue()));
+                .andExpect(jsonPath("$.askingAxis").doesNotExist());
     }
 
     // ---------- helpers ----------
