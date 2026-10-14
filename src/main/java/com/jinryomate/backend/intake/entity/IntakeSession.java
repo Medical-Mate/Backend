@@ -113,6 +113,22 @@ public class IntakeSession {
     @Column(columnDefinition = "TEXT")
     private String aiCard;
 
+    /**
+     * 마지막 AI 문장이 묻는 칸. AI 의 {@code asking_axis} 를 <b>가공하지 않고</b> 둔다.
+     *
+     * <p><b>왜 저장하나</b> — 앱은 이 값으로 폰 추출 프롬프트를 만들고, {@code null} 이면
+     * 그 턴을 서버 추출로 보낸다. 응답에만 싣고 저장하지 않으면 앱을 다시 켜 세션을
+     * 재조회할 때 {@code null} 이 나가고, 폰 경로만 쓰기로 한 앱에서 발화가 말없이
+     * 서버로 샌다(#157).
+     *
+     * <p>TEXT 다. 길이를 걸면 AI 라벨이 길어지는 날 저장에서 터져 턴이 500 이 된다.
+     */
+    @Column(columnDefinition = "TEXT")
+    private String askingAxisKey;
+
+    @Column(columnDefinition = "TEXT")
+    private String askingAxisLabel;
+
     /** 왜 끝났는지. {@code stop} · {@code complete} · {@code max_turns} · {@code budget}. */
     @Column(length = 16)
     private String endReason;
@@ -212,6 +228,17 @@ public class IntakeSession {
     /** AI 가 준 state 를 통째로 덮어쓴다. 턴마다 호출된다. */
     public void rememberState(String aiState) {
         this.aiState = aiState;
+    }
+
+    /**
+     * 묻는 칸을 덮어쓴다. 시작과 턴마다 호출된다.
+     *
+     * <p><b>{@code null} 도 그대로 덮어쓴다.</b> 카드와 반대다 — 문답이 끝나면 AI 가
+     * {@code null} 을 주는데, 그때 직전 칸을 남겨 두면 앱이 끝난 문답에 폰 추출을 붙인다.
+     */
+    public void rememberAskingAxis(String key, String label) {
+        this.askingAxisKey = key;
+        this.askingAxisLabel = key == null ? null : label;
     }
 
     /**

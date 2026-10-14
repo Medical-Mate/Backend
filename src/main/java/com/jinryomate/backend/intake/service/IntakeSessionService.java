@@ -2,6 +2,7 @@ package com.jinryomate.backend.intake.service;
 
 import com.jinryomate.backend.ai.client.AiTurnClient;
 import com.jinryomate.backend.ai.dto.AiTurnResult;
+import com.jinryomate.backend.ai.dto.AskingAxis;
 import com.jinryomate.backend.ai.dto.PatientProfile;
 import com.jinryomate.backend.auth.entity.User;
 import com.jinryomate.backend.auth.repository.UserRepository;
@@ -67,6 +68,7 @@ public class IntakeSessionService {
         AiTurnResult opening = aiTurnClient.start(session);
         session.rememberState(opening.state());
         session.rememberCard(opening.card());
+        rememberAskingAxis(session, opening);
         session.addMessage(IntakeMessage.fromAi(session, opening.reply()));
 
         // 부위·증상은 민감정보라 값을 로그에 남기지 않는다. 무엇이 붙었는지만 남긴다.
@@ -119,6 +121,7 @@ public class IntakeSessionService {
                 session, request.text(), request.extraction(), request.extractionMeta());
         session.rememberState(result.state());
         session.rememberCard(result.card());
+        rememberAskingAxis(session, result);
         session.addAudit(result.audit());
         session.addMessage(IntakeMessage.fromAi(session, result.reply()));
 
@@ -159,6 +162,16 @@ public class IntakeSessionService {
             log.warn("질문 후보를 받지 못했습니다 sessionId={} cause={}",
                     session.getId(), e.getClass().getSimpleName());
         }
+    }
+
+    /**
+     * 마지막 AI 문장이 묻는 칸을 세션에 남긴다. {@code null} 이면 비운다.
+     *
+     * <p>질문 후보 호출(종료 뒤)에서는 부르지 않는다 — 그 응답은 다음 질문이 아니다.
+     */
+    private void rememberAskingAxis(IntakeSession session, AiTurnResult result) {
+        AskingAxis axis = result.askingAxis();
+        session.rememberAskingAxis(axis == null ? null : axis.key(), axis == null ? null : axis.label());
     }
 
     /**

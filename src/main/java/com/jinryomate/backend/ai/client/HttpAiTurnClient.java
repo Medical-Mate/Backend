@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.jinryomate.backend.ai.dto.AiTurnResult;
+import com.jinryomate.backend.ai.dto.AskingAxis;
 import com.jinryomate.backend.ai.dto.PatientProfile;
 import com.jinryomate.backend.global.error.ApiException;
 import com.jinryomate.backend.global.error.ErrorCode;
@@ -138,7 +139,31 @@ public class HttpAiTurnClient implements AiTurnClient {
         String audit = response.audit() == null || response.audit().isNull()
                 ? null : response.audit().toString();
         return new AiTurnResult(response.reply(), response.ended(), response.endReason(),
-                state, card, audit);
+                state, card, audit, readAskingAxis(response.askingAxis()));
+    }
+
+    /**
+     * {@code asking_axis} 를 푼다. 값은 <b>가공하지 않는다.</b>
+     *
+     * <p><b>모양이 어긋나도 턴을 막지 않는다.</b> 이 값이 없으면 앱이 그 턴을 서버 추출로
+     * 보낼 뿐이고 문답은 이어진다. 대신 경고를 남긴다 — 폰 경로만 쓰는 앱에서는 발화가
+     * 서버로 새는 것이라 조용히 넘기면 못 찾는다.
+     */
+    private AskingAxis readAskingAxis(JsonNode node) {
+        if (node == null || node.isNull() || node.isMissingNode()) {
+            return null;
+        }
+        String key = node.path("key").asText(null);
+        if (!node.isObject() || key == null || key.isBlank()) {
+            log.warn("asking_axis 모양이 계약과 다릅니다 type={}", node.getNodeType());
+            return null;
+        }
+        String label = node.path("label").asText(null);
+        if (label == null || label.isBlank()) {
+            // key 만으로도 앱이 축은 안다. 라벨이 비었다는 사실만 남긴다.
+            log.warn("asking_axis 에 label 이 없습니다 key={}", key);
+        }
+        return new AskingAxis(key, label);
     }
 
     /**
@@ -184,6 +209,9 @@ public class HttpAiTurnClient implements AiTurnClient {
      * 들어 있지만 <b>앱 경로는 이미 {@code intake_messages} 에 발화를 저장한다</b> — 새
      * 정보가 아니라 이미 있는 것의 다른 모양이다. 웹 데모는 고지가 먼저라 안 받는다.
      *
+     * <p><b>{@code asking_axis} 는 JSON 그대로 받는다.</b> 레코드로 바로 받으면 모양이
+     * 어긋났을 때 응답 전체가 역직렬화 오류로 떨어져 턴이 실패한다.
+     *
      * <p>모르는 필드는 무시된다.
      */
     private record TurnResponse(
@@ -193,6 +221,7 @@ public class HttpAiTurnClient implements AiTurnClient {
             @com.fasterxml.jackson.annotation.JsonProperty("request_id") String requestId,
             JsonNode state,
             JsonNode card,
-            JsonNode audit
+            JsonNode audit,
+            @com.fasterxml.jackson.annotation.JsonProperty("asking_axis") JsonNode askingAxis
     ) {}
 }

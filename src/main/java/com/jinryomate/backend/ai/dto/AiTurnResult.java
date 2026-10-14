@@ -30,5 +30,11 @@ public record AiTurnResult(
          * <p>AI 트랙이 회귀 eval 케이스를 채우는 재료다(Medical-Mate/AI#113).
          * 안 오면 {@code null} 이다 — 계약에 항상 온다고 적혀 있지 않다.
          */
-        String audit
+        String audit,
+
+        /**
+         * {@code reply} 가 묻는 칸. 문답이 끝났거나 축 질문이 아니면 {@code null}
+         * (서버 프로필의 첫 자유 발화가 그렇다).
+         */
+        AskingAxis askingAxis
 ) {}

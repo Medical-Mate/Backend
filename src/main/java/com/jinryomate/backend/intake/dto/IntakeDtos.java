@@ -158,6 +158,25 @@ public final class IntakeDtos {
      */
     public record QuestionCandidate(String text, String source, Integer rank) {}
 
+    /**
+     * 마지막 AI 문장이 묻는 칸. <b>폰 추출 프롬프트의 첫 줄 재료다</b>(#157).
+     *
+     * <p>{@code 질문한 항목: {label} (axis={key}). 이 항목만 답한다.} 에 <b>그대로</b>
+     * 넣는다. 값은 AI 가 폰 프롬프트와 같은 원천에서 내고 우리는 가공하지 않는다 —
+     * 앱이 따로 표를 들 필요가 없다.
+     *
+     * <p>응답의 {@code askingAxis} 가 {@code null} 이면 문답이 끝났거나(폰 추출 붙이지
+     * 않음) 서버 프로필의 첫 자유 발화다.
+     *
+     * @param key   축 키. {@code onset} · {@code character} …
+     * @param label 프롬프트에 넣을 말. {@code 언제부터·어떻게 시작}
+     */
+    public record AskingAxis(String key, String label) {
+        static AskingAxis of(IntakeSession s) {
+            return s.getAskingAxisKey() == null ? null : new AskingAxis(s.getAskingAxisKey(), s.getAskingAxisLabel());
+        }
+    }
+
     public record MessageResponse(int seq, IntakeMessage.Role role, String text) {
         public static MessageResponse from(IntakeMessage m) {
             return new MessageResponse(m.getSeq(), m.getRole(), m.getText());
@@ -178,7 +197,10 @@ public final class IntakeDtos {
             boolean ended,
             String endReason,
             SessionResponse.Progress progress,
-            List<MessageResponse> messages
+            List<MessageResponse> messages,
+
+            /** {@code reply} 가 묻는 칸. 폰 추출 프롬프트에 쓴다. 끝났으면 {@code null}. */
+            AskingAxis askingAxis
     ) {
         public static TurnResponse of(IntakeSession s, String reply, boolean ended) {
             return new TurnResponse(
@@ -188,7 +210,8 @@ public final class IntakeDtos {
                     ended,
                     s.getEndReason(),
                     new SessionResponse.Progress(s.getProgressCurrent(), s.getProgressTotal()),
-                    s.getMessages().stream().map(MessageResponse::from).toList());
+                    s.getMessages().stream().map(MessageResponse::from).toList(),
+                    AskingAxis.of(s));
         }
     }
 
@@ -217,7 +240,13 @@ public final class IntakeDtos {
              * <p>카드가 아니라 여기 실리는 이유 — 화면 순서가 문답 → 강도 → 물어볼 것 →
              * 카드라, 후보가 필요한 시점에는 카드가 아직 없다.
              */
-            List<QuestionCandidate> questionCandidates
+            List<QuestionCandidate> questionCandidates,
+
+            /**
+             * 마지막 AI 문장이 묻는 칸. <b>세션에 저장해 두므로 재조회에도 같은 값이 온다</b> —
+             * 앱을 다시 켜도 폰 추출을 이어 갈 수 있다. 끝났으면 {@code null}.
+             */
+            AskingAxis askingAxis
     ) {
         public record Progress(int current, int total) {}
 
@@ -240,7 +269,8 @@ public final class IntakeDtos {
                             ? null
                             : new Severity(s.getSeverityLevel(), s.getSeverityLabel()),
                     List.copyOf(s.getQuestions()),
-                    List.copyOf(candidates));
+                    List.copyOf(candidates),
+                    AskingAxis.of(s));
         }
     }
 }

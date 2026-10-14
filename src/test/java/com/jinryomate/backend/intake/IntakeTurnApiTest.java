@@ -300,6 +300,37 @@ class IntakeTurnApiTest {
         assertThat(afterTurn.getAiState()).isNotBlank();
     }
 
+    @Test
+    @DisplayName("묻는 칸(askingAxis)은 재조회에도 같은 값이 오고, 끝나면 null 이다")
+    void 묻는_칸() throws Exception {
+        // 첫 문장은 자유 발화를 받는 것이라 묻는 칸이 없다(실제 AI 서버 프로필과 같다).
+        // null 필드는 응답에서 빠진다(default-property-inclusion: non_null) — 키 자체가 없다.
+        mockMvc.perform(startSession())
+                .andExpect(jsonPath("$.askingAxis").doesNotExist());
+        long sessionId = startAndGetId();
+
+        String turn = mockMvc.perform(send(sessionId, "어제부터요", null))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.askingAxis.key").isNotEmpty())
+                .andExpect(jsonPath("$.askingAxis.label").isNotEmpty())
+                .andReturn().getResponse().getContentAsString();
+        var asked = objectMapper.readTree(turn).path("askingAxis");
+
+        // 앱을 다시 켜고 세션을 재조회해도 같은 칸이어야 한다. null 이 나가면 앱은 그 턴을
+        // 서버 추출로 보내고, 폰 경로만 쓰는 앱에서 발화가 말없이 서버로 샌다(#157).
+        mockMvc.perform(get("/api/sessions/" + sessionId).header("Authorization", token))
+                .andExpect(jsonPath("$.askingAxis.key").value(asked.path("key").asText()))
+                .andExpect(jsonPath("$.askingAxis.label").value(asked.path("label").asText()));
+
+        // 스텁은 4번째 답변에서 끝낸다. 끝난 문답에 직전 칸이 남아 있으면 앱이 폰 추출을 붙인다.
+        for (int i = 0; i < 3; i++) {
+            mockMvc.perform(send(sessionId, "답변 " + i, null)).andExpect(status().isOk());
+        }
+        mockMvc.perform(get("/api/sessions/" + sessionId).header("Authorization", token))
+                .andExpect(jsonPath("$.status").value("COMPLETED"))
+                .andExpect(jsonPath("$.askingAxis").doesNotExist());
+    }
+
     // ---------- helpers ----------
 
     private org.springframework.test.web.servlet.RequestBuilder startSession() throws Exception {
