@@ -441,7 +441,9 @@ docker compose -f docker-compose.prod.yml exec -T ai \
 
 **노션에서 관리합니다.** 저장소에 표를 두면 두 곳이 갈라져서 한쪽이 낡습니다.
 
-[설계 결정 로그 (Notion)](https://app.notion.com/p/1cea038a97e74046b5158c4bab472538) · [진료메이트 프로젝트 페이지](https://app.notion.com/p/3d0eaf19306981efacd6cd60ffbfd25f)
+[설계 결정 로그 (Notion)](https://app.notion.com/p/5dd0ba38bef640218996508ec08f0e31) · [진료메이트 Project Dashboard](https://app.notion.com/p/3cf6075dd852817f8821dde3a196ff58)
+
+> 2026-10-14 원래 담당 작업 공간에서 옮겼습니다. 그 이전 기록은 새 로그에 없고, 필요하면 원래 로그에서 내보내 옮깁니다.
 
 각 행은 `결정 · 날짜 · 영역 · 상태 · 검토한 대안 · 선택 근거 · 재검토 트리거 · 관련 링크`를 가집니다. 상태가 `재검토 필요`인 항목은 아래 미확정 항목과 같은 것들입니다.
 
