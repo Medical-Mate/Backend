@@ -36,7 +36,7 @@ class QuestionCandidateReaderTest {
     @Test
     @DisplayName("3개를 넘으면 rank 낮은 것부터 자른다")
     void 상한() {
-        // 화면 1i 가 최대 3개다. 뒤에서 자르면 중요한 것이 잘린다.
+        // 질문 고르기의 후보는 최대 3개다. 뒤에서 자르면 중요한 것이 잘린다.
         List<QuestionCandidate> result = reader.read(card("""
                 [{"text":"넷","rank":4},{"text":"하나","rank":1},
                  {"text":"둘","rank":2},{"text":"셋","rank":3}]"""));

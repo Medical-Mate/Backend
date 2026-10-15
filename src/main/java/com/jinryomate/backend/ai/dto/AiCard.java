@@ -34,7 +34,7 @@ public record AiCard(
         @JsonProperty("patient_notes") List<String> patientNotes,
 
         /**
-         * AI 가 만든 "의사에게 물어볼 것" 후보. 화면 {@code 1i} 가 이걸 보여준다.
+         * AI 가 만든 "의사에게 물어볼 것" 후보. 질문 고르기({@code 1c-D})가 이걸 보여준다.
          *
          * <p><b>종료 턴에만 온다.</b> 중간 턴에는 {@code null} 이다. 요청에
          * {@code question_candidates: true} 를 실어야 돌기도 한다 — Bedrock 호출이

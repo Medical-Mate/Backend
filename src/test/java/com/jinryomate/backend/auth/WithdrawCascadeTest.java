@@ -137,7 +137,7 @@ class WithdrawCascadeTest {
     // ---------- helpers ----------
 
     /**
-     * 증상 정리 3·4단계.
+     * 통증 강도와 의사에게 물어볼 것.
      *
      * <p>{@code intake_session_questions} 는 {@code @ElementCollection} 이라 세션과 함께
      * 지워져야 한다. 안 지워지면 세션 삭제가 외래키에 걸린다.
@@ -197,7 +197,7 @@ class WithdrawCascadeTest {
                         .header("Authorization", token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(
-                                new StartSessionRequest("SUR:072", null, Side.RIGHT, "손(오른쪽)"))))
+                                new StartSessionRequest("SUR:072", null, Side.RIGHT, "손(오른쪽)", null))))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
         long sessionId = objectMapper.readTree(session).path("sessionId").asLong();

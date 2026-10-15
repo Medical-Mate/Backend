@@ -67,6 +67,12 @@ public class IntakeSessionService {
         IntakeSession session = sessionRepository.save(IntakeSession.start(
                 user, request.siteNodeId(), request.side(), request.siteText(), request.profile()));
 
+        // 강도는 세션에만 둔다. AI 시작 요청에는 싣지 않는다 — 모르는 필드라 422 다.
+        // AI 에는 질문 후보를 받을 때 selections 로 넘어간다(#168).
+        if (request.severity() != null) {
+            session.recordSeverity(request.severity().level(), request.severity().label());
+        }
+
         // 첫 질문을 여기서 받아 대화에 넣는다. 앱이 세션을 만든 뒤 또 호출하지 않아도
         // 바로 화면을 그릴 수 있다. AI 계약상 이 호출은 LLM 을 쓰지 않는다.
         AiTurnResult opening = aiTurnClient.start(session);
@@ -79,8 +85,8 @@ public class IntakeSessionService {
         boolean hasNodeId = session.getSiteNodeId() != null;
         boolean hasLabel = session.getSiteText() != null && !session.getSiteText().isBlank();
 
-        log.info("문답 세션 시작 userId={} sessionId={} 노드id={} 이름={}",
-                userId, session.getId(), hasNodeId, hasLabel);
+        log.info("문답 세션 시작 userId={} sessionId={} 노드id={} 이름={} 강도={}",
+                userId, session.getId(), hasNodeId, hasLabel, session.getSeverityLevel() != null);
 
         // 부위를 건너뛰는 경로가 와이어프레임에 있어 오류는 아니다. 다만 앱이 보냈는데
         // 떨어진 경우와 구별이 안 되면 못 찾는다 — 실제로 그걸 한참 못 찾았다.
@@ -115,8 +121,10 @@ public class IntakeSessionService {
         IntakeSession session = findOwned(userId, sessionId);
 
         if (session.isCompleted()) {
-            // 상태를 바꾸지 않고 마지막 AI 문장만 돌려준다.
-            return TurnResponse.of(session, lastAiReply(session), true);
+            // 상태를 바꾸지 않고 마지막 AI 문장만 돌려준다. 후보도 함께 싣는다 — 마지막 턴
+            // 응답을 네트워크에서 잃고 다시 보낸 앱은 이 응답으로 후보를 처음 받는다.
+            return TurnResponse.of(session, lastAiReply(session), true,
+                    candidateReader.read(session.getAiCard()));
         }
 
         session.addMessage(IntakeMessage.fromUser(session, request.text(), request.inputMethod()));
@@ -142,11 +150,17 @@ public class IntakeSessionService {
         log.info("문답 턴 sessionId={} chars={} ended={} endReason={}",
                 sessionId, request.text().length(), result.ended(), result.endReason());
 
-        return TurnResponse.of(session, result.reply(), result.ended());
+        // 마지막 턴이면 위에서 받아 둔 후보가 카드에 들어 있다. 앱이 채팅에 바로 그린다(#168).
+        // 문답 중에는 AI 카드에 후보가 없어 빈 배열이다.
+        return TurnResponse.of(session, result.reply(), result.ended(),
+                candidateReader.read(session.getAiCard()));
     }
 
     /**
-     * 문답이 끝난 직후 질문 후보를 받아온다. 화면 {@code 1i} 가 쓴다.
+     * 문답이 끝난 직후 질문 후보를 받아온다. 문답 채팅 안의 질문 고르기({@code 1c-D})가 쓴다.
+     *
+     * <p>환자가 고른 통증 강도가 {@code selections} 로 함께 나간다 — 강도를 반영한 카드로
+     * 후보를 만들게 하려는 것이다({@link com.jinryomate.backend.ai.client.HttpAiTurnClient}).
      *
      * <p><b>왜 여기서 따로 부르나</b> — 계약은 "종료 턴 요청에 {@code question_candidates: true}
      * 를 얹으라"고 하지만, <b>어느 턴이 마지막인지는 응답의 {@code ended} 를 봐야 안다.</b>
@@ -220,10 +234,12 @@ public class IntakeSessionService {
     }
 
     /**
-     * 통증 강도를 기록한다. 화면 3단계.
+     * 통증 강도를 기록하거나 고친다. 화면 {@code 1d}.
      *
-     * <p><b>끝난 세션에도 쓸 수 있다.</b> 3단계는 문답이 끝난 뒤 화면이라
-     * {@code COMPLETED} 라고 막으면 정상 흐름이 막힌다.
+     * <p>보통은 세션 시작 요청에 함께 온다. 이 경로는 문답 중이나 끝난 뒤에 {@code 1d} 로
+     * 돌아가 고칠 때 쓴다. 그래서 상태를 가리지 않는다.
+     *
+     * <p>이미 받은 질문 후보는 다시 만들지 않는다. 카드에는 고친 값이 들어간다.
      */
     @Transactional
     public SessionResponse recordSeverity(Long userId, Long sessionId, SeverityRequest request) {
@@ -236,7 +252,7 @@ public class IntakeSessionService {
     }
 
     /**
-     * 의사에게 물어볼 것을 통째로 교체한다. 화면 4단계.
+     * 의사에게 물어볼 것을 통째로 교체한다. 질문 고르기({@code 1c-D})에서 체크한 줄이다.
      *
      * <p>추가·편집·삭제·순서변경이 전부 이 한 번으로 처리된다. 빈 배열이면 전부 지운다.
      */

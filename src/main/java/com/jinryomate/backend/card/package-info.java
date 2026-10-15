@@ -17,7 +17,7 @@
  * 감별진단이라, {@code department_guidance} 를 배열 그대로 쓴다.
  *
  * <p><b>질문은 AI 가 만든 것이 아니다.</b> 카드의 {@code questions} 는 환자가 화면
- * {@code 1i} 에서 적은 것이고 상한은 {@code IntakeDtos.MAX_QUESTIONS} 하나가 정한다.
+ * {@code 1c-D} 에서 고른 것이고 상한은 {@code IntakeDtos.MAX_QUESTIONS} 하나가 정한다.
  * AI 후보는 {@code questionCandidates} 로 따로 온다.
  * 
  * <p>응답의 meta.pipelineVersion을 카드와 함께 저장한다.

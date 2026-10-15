@@ -38,10 +38,11 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * 증상 정리 3·4단계 — 통증 강도와 의사에게 물어볼 것.
+ * 통증 강도({@code PUT /severity})와 의사에게 물어볼 것({@code PUT /questions}).
  *
- * <p>둘 다 <b>문답이 끝난 뒤</b> 화면이다. {@code COMPLETED} 라고 막으면 정상 흐름이
- * 막히므로 그게 되는지가 이 테스트의 핵심이다.
+ * <p>강도는 보통 시작 요청에 함께 오지만({@link ThreeStepFlowApiTest}), 문답 중이나 끝난 뒤에
+ * 돌아가 고칠 수 있다. 질문 고르기는 문답이 끝난 뒤에 나온다. 그래서 {@code COMPLETED} 라고
+ * 막으면 정상 흐름이 막히므로 그게 되는지가 이 테스트의 핵심이다.
  */
 @Import(TestcontainersConfig.class)
 @SpringBootTest
@@ -215,7 +216,7 @@ class IntakeStepApiTest {
     // ---------- 공통 ----------
 
     @Test
-    @DisplayName("문답이 끝난 뒤에도 3·4단계를 쓸 수 있다")
+    @DisplayName("문답이 끝난 뒤에도 강도를 고치고 질문을 고를 수 있다")
     void 종료_후에도_기록() throws Exception {
         long sessionId = startAndGetId();
 
@@ -229,7 +230,8 @@ class IntakeStepApiTest {
                     .andExpect(status().isOk());
         }
 
-        // 3·4단계는 문답이 끝난 뒤 화면이다. COMPLETED 라고 막으면 정상 흐름이 막힌다.
+        // 질문 고르기는 문답이 끝난 뒤에 나오고, 강도도 끝난 뒤에 고칠 수 있다.
+        // COMPLETED 라고 막으면 정상 흐름이 막힌다.
         mockMvc.perform(severity(sessionId, 3, "꽤 아파요"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("COMPLETED"))
@@ -286,7 +288,7 @@ class IntakeStepApiTest {
                         .header("Authorization", token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(
-                                new StartSessionRequest("SUR:032", null, null, "아랫배"))))
+                                new StartSessionRequest("SUR:032", null, null, "아랫배", null))))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
         return objectMapper.readTree(body).path("sessionId").asLong();

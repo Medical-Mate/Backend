@@ -33,8 +33,8 @@ public class IntakeSession {
     /**
      * 대화 턴 상한. AI 계약의 안전장치 값과 같다.
      *
-     * <p><b>와이어프레임의 "2 / 4"가 아니다.</b> 그 넷은 화면 단계
-     * (부위 짚기 → 문답 → 통증 강도 → 의사에게 물어볼 것)이고, 이 숫자는 <b>2단계 안에서</b>
+     * <p><b>와이어프레임의 "3 / 3"이 아니다.</b> 그 셋은 화면 단계
+     * (부위 짚기 → 통증 강도 → 문답·질문 고르기)이고, 이 숫자는 <b>문답 단계 안에서</b>
      * 주고받는 대화 턴이다. 층이 다르다.
      *
      * <p>화면 단계 진행도는 <b>앱이 안다</b> — 화면 전환을 앱이 하므로 서버가 내려줄 것이
@@ -134,7 +134,7 @@ public class IntakeSession {
     private String endReason;
 
     /**
-     * 통증 강도. 화면 3단계({@code 1d})에서 슬라이더로 받는다.
+     * 통증 강도. 화면 {@code 1d} 에서 슬라이더로 받는다. <b>문답 전</b> 화면이다(#168).
      *
      * <p><b>1~5 서열척도다. NRS 0~10 이 아니다.</b> 와이어프레임의 슬라이더가 다섯 칸이다.
      */
@@ -144,14 +144,13 @@ public class IntakeSession {
      * "꽤 아파요" 같은 표시 문구. <b>앱이 보낸다.</b>
      *
      * <p>서버가 들고 있으면 문구를 바꿀 때마다 배포해야 하고, 이건 디자인 카피라
-     * 우리 것이 아니다. AI 에 {@code selections} 로 넘길 때 {@code "3 (꽤 아파요)"} 를
-     * 조립하는 데 쓴다.
+     * 우리 것이 아니다. {@link #severityValue()} 가 {@code "3 (꽤 아파요)"} 를 조립하는 데 쓴다.
      */
     @Column(length = 40)
     private String severityLabel;
 
     /**
-     * 의사에게 물어볼 것. 화면 4단계({@code 1i}).
+     * 의사에게 물어볼 것. 문답 채팅 안의 질문 고르기({@code 1c-D}).
      *
      * <p><b>최종 목록은 우리 것이다.</b> AI 는 후보({@code question_candidates})만 내고,
      * 환자가 고른 것과 직접 쓴 것을 합치는 것은 앱·백엔드 몫이다(AI#7 확인).
@@ -280,11 +279,29 @@ public class IntakeSession {
     /**
      * 통증 강도를 기록한다. 다시 고르면 덮어쓴다.
      *
-     * <p>3단계는 문답이 <b>끝난 뒤</b> 화면이라 {@code COMPLETED} 세션에도 쓸 수 있어야 한다.
+     * <p><b>상태를 가리지 않는다.</b> 보통은 세션 시작과 함께 오지만, 문답 중이나 끝난 뒤에
+     * {@code 1d} 로 돌아가 고칠 수 있다.
      */
     public void recordSeverity(int level, String label) {
         this.severityLevel = level;
         this.severityLabel = label;
+    }
+
+    /**
+     * 강도를 {@code "3 (꽤 아파요)"} 모양으로 낸다. 라벨이 없으면 숫자만, 안 골랐으면 {@code null}.
+     *
+     * <p><b>AI 에 보내는 값과 카드에 넣는 값이 이 한 곳에서 나온다.</b> 둘이 따로 조립하면
+     * 의사가 보는 카드와 질문 후보가 본 카드의 강도 표기가 어긋난다.
+     *
+     * <p>라벨은 앱이 보낸 디자인 카피다. 없을 때 우리가 문구를 지어 넣지 않는다.
+     */
+    public String severityValue() {
+        if (severityLevel == null) {
+            return null;
+        }
+        return severityLabel == null || severityLabel.isBlank()
+                ? String.valueOf(severityLevel)
+                : severityLevel + " (" + severityLabel + ")";
     }
 
     /**

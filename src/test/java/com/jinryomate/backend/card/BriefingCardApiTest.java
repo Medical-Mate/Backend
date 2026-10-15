@@ -79,7 +79,7 @@ class BriefingCardApiTest {
                         .header("Authorization", token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(
-                                new StartSessionRequest("SUR:072", null, Side.RIGHT, "손(오른쪽)"))))
+                                new StartSessionRequest("SUR:072", null, Side.RIGHT, "손(오른쪽)", null))))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error.code").value("INVALID_REQUEST"));
     }
@@ -93,7 +93,7 @@ class BriefingCardApiTest {
                         .header("Authorization", token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(
-                                new StartSessionRequest("SUR:072", null, Side.RIGHT, "손(오른쪽)"))))
+                                new StartSessionRequest("SUR:072", null, Side.RIGHT, "손(오른쪽)", null))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("IN_PROGRESS"))
                 .andExpect(jsonPath("$.siteText").value("손(오른쪽)"))
@@ -472,7 +472,7 @@ class BriefingCardApiTest {
     @Test
     @DisplayName("카드 편집의 질문 상한이 저장 쪽과 같다")
     void 카드_편집도_같은_상한() throws Exception {
-        // 같은 목록을 두 화면(1i · 1e-1-E)에서 고치는데 상한이 다르면, 한쪽에서 저장한
+        // 같은 목록을 두 화면(1c-D · 1e-1-E)에서 고치는데 상한이 다르면, 한쪽에서 저장한
         // 것을 다른 쪽에서 열어 고치는 순간 400 이 난다.
         completeOnboarding();
         long cardId = generateCard(startSession()).path("cardId").asLong();
@@ -925,7 +925,7 @@ class BriefingCardApiTest {
                         .header("Authorization", token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(
-                                new StartSessionRequest("SUR:072", null, Side.RIGHT, "손(오른쪽)"))))
+                                new StartSessionRequest("SUR:072", null, Side.RIGHT, "손(오른쪽)", null))))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
         return objectMapper.readTree(body).path("sessionId").asLong();

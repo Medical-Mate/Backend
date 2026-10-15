@@ -205,10 +205,30 @@ public class HttpAiTurnClient implements AiTurnClient {
         return call(TURN_PATH, body, "폰 질문 후보");
     }
 
+    /**
+     * 질문 후보 요청 본문. 서버 후보와 폰 후보가 함께 쓴다.
+     *
+     * <p><b>통증 강도를 {@code selections} 로 싣는다(#168).</b> 강도는 슬라이더({@code 1d})로
+     * 받고 문답은 강도를 묻지 않아서, 싣지 않으면 AI 는 강도가 빈 카드로 후보를 만든다 —
+     * 프롬프트에 {@code 심각도: (안 답함)} 이 들어가고, 폰 검증기는 강도 숫자가 든 후보를
+     * 떨어뜨린다. 200 이 나가고 후보도 멀쩡해 보여서 밖에서는 안 보인다.
+     *
+     * <p>AI 는 같은 요청 안에서 선택값을 먼저 반영하고 후보를 만든다. 끝난 문답에도 반영되고,
+     * 이미 값이 있으면 덮어쓴다 — 그래서 매번 세션의 최신 값을 실으면 된다.
+     *
+     * <p><b>세션 시작 요청에는 싣지 않는다.</b> AI 가 모르는 필드를 422 로 거부한다.
+     */
     private ObjectNode candidatesBody(IntakeSession session, PatientProfile profile) {
         ObjectNode body = objectMapper.createObjectNode();
         body.set("state", readState(session));
         body.put("question_candidates", true);
+
+        String severity = session.severityValue();
+        if (severity != null) {
+            body.putArray("selections").addObject()
+                    .put("axis", "severity")
+                    .put("value", severity);
+        }
 
         if (profile != null) {
             ObjectNode patient = body.putObject("patient_profile");

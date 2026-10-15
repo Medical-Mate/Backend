@@ -20,7 +20,10 @@ public final class IntakeDtos {
     private IntakeDtos() {}
 
     /**
-     * 세션 시작. 화면 S1.5에서 짚은 부위를 함께 보낸다.
+     * 세션 시작. 짚은 부위와 통증 강도를 함께 보낸다.
+     *
+     * <p>화면 순서가 부위 짚기 → 통증 강도({@code 1d}) → 문답이라, 문답을 여는 시점에는 둘 다
+     * 정해져 있다(#168).
      *
      * <p>부위를 건너뛰어도 시작할 수 있다. 와이어프레임에 "부위 짚기"를 건너뛰는 경로가 있다.
      */
@@ -55,7 +58,18 @@ public final class IntakeDtos {
             Side side,
 
             @Size(max = 100, message = "부위 표현은 100자 이내입니다.")
-            String siteText
+            String siteText,
+
+            /**
+             * 통증 강도. <b>선택이다</b> — 비우면 강도 없이 열리고, 나중에
+             * {@code PUT /api/sessions/{id}/severity} 로 보내도 된다.
+             *
+             * <p><b>세션에만 저장하고 AI 시작 요청에는 넘기지 않는다.</b> AI 는 모르는 필드를
+             * 422 로 거부하고, 문답은 강도를 묻지도 쓰지도 않는다. AI 에는 질문 후보를 받을 때
+             * {@code selections} 로 실어 보낸다.
+             */
+            @Valid
+            SeverityRequest severity
     ) {}
 
     /**
@@ -92,7 +106,7 @@ public final class IntakeDtos {
     ) {}
 
     /**
-     * 통증 강도. 화면 3단계({@code 1d}) 슬라이더.
+     * 통증 강도. 화면 {@code 1d} 슬라이더. 문답 전 화면이다.
      *
      * <p><b>1~5 서열척도다. NRS 0~10 이 아니다.</b> 와이어프레임 슬라이더가 다섯 칸이다.
      *
@@ -110,7 +124,7 @@ public final class IntakeDtos {
     ) {}
 
     /**
-     * 의사에게 물어볼 것. 화면 4단계({@code 1i}).
+     * 의사에게 물어볼 것. 문답 채팅 안의 질문 고르기({@code 1c-D}). 환자가 체크한 줄만 보낸다.
      *
      * <p><b>목록을 통째로 보낸다.</b> 추가·편집·삭제·순서변경이 전부 이 한 번으로 처리된다.
      * 빈 배열을 보내면 전부 지운다.
@@ -124,7 +138,7 @@ public final class IntakeDtos {
     ) {}
 
     /**
-     * 화면 {@code 1i} 의 "적어둔 질문". <b>이 상한이 유일한 원천이다</b> — 카드 편집
+     * 질문 고르기({@code 1c-D})의 최종 목록. <b>이 상한이 유일한 원천이다</b> — 카드 편집
      * ({@code CardDtos})과 카드 생성 검증({@code CardContentValidator})이 이 값을 본다.
      *
      * <p><b>셋이 따로 3 을 들고 있다가 겪었다.</b> 저장은 통과하는데 카드를 만들 때 앞에서
@@ -148,7 +162,7 @@ public final class IntakeDtos {
     public static final int MAX_QUESTION_LENGTH = 200;
 
     /**
-     * AI 가 만든 질문 후보. 화면 {@code 1i} 에서 환자가 골라 담는다.
+     * AI 가 만든 질문 후보. 문답 채팅 안({@code 1c-D})에서 환자가 체크해 고른다.
      *
      * <p><b>최종 목록이 아니다.</b> 고른 것과 직접 쓴 것을 합친 결과는
      * {@code PUT /api/sessions/{id}/questions} 로 따로 보낸다.
@@ -170,7 +184,7 @@ public final class IntakeDtos {
     ) {}
 
     /**
-     * 폰이 만든 질문 후보. 화면 {@code 1i} 전에 보낸다(#164).
+     * 폰이 만든 질문 후보. 질문 고르기({@code 1c-D}) 전에 보낸다(#164).
      *
      * <p><b>AI 가 검증하고 모자라면 채운다.</b> 카드에 없는 말·병명·반복은 버리고, 남은 것이
      * 모자라면 카드 값으로 만든 템플릿을 뒤에 붙인다. 외부 LLM 은 부르지 않는다.
@@ -256,9 +270,19 @@ public final class IntakeDtos {
             List<MessageResponse> messages,
 
             /** {@code reply} 가 묻는 칸. 폰 추출 프롬프트에 쓴다. 끝났으면 {@code null}. */
-            AskingAxis askingAxis
+            AskingAxis askingAxis,
+
+            /**
+             * 질문 후보. <b>서버 프로필의 마지막 턴에 채워진다</b>(#168) — 그 턴 안에서 이미
+             * 받아 두므로, 앱이 마지막 답 바로 아래에 후보를 그릴 수 있다.
+             *
+             * <p>그 밖에는 빈 배열이다. 문답 중, 온디바이스(폰이 만들어
+             * {@code POST /question-candidates} 로 보낸다), 후보 생성 실패.
+             */
+            List<QuestionCandidate> questionCandidates
     ) {
-        public static TurnResponse of(IntakeSession s, String reply, boolean ended) {
+        public static TurnResponse of(IntakeSession s, String reply, boolean ended,
+                                      List<QuestionCandidate> candidates) {
             return new TurnResponse(
                     s.getId(),
                     s.getStatus(),
@@ -267,15 +291,16 @@ public final class IntakeDtos {
                     s.getEndReason(),
                     new SessionResponse.Progress(s.getProgressCurrent(), s.getProgressTotal()),
                     s.getMessages().stream().map(MessageResponse::from).toList(),
-                    AskingAxis.of(s));
+                    AskingAxis.of(s),
+                    List.copyOf(candidates));
         }
     }
 
     /**
      * 세션 전체.
      *
-     * <p>3·4단계 값도 함께 담는다. 사용자가 뒤로 갔을 때 <b>고른 값이 그대로 복원</b>돼야
-     * 하는데, 세션 조회 하나로 화면 넷을 다 그릴 수 있어야 그게 된다.
+     * <p>강도와 고른 질문도 함께 담는다. 사용자가 뒤로 갔을 때 <b>고른 값이 그대로 복원</b>돼야
+     * 하는데, 세션 조회 하나로 화면 셋을 다 그릴 수 있어야 그게 된다.
      */
     public record SessionResponse(
             Long sessionId,
@@ -285,22 +310,23 @@ public final class IntakeDtos {
             String siteText,
             Progress progress,
             List<MessageResponse> messages,
-            /** 3단계. 아직 안 골랐으면 {@code null}. */
+            /** 통증 강도({@code 1d}). 아직 안 골랐으면 {@code null}. */
             Severity severity,
-            /** 4단계. 아직 안 적었으면 빈 배열. */
+            /** 고른 질문({@code 1c-D}). 아직 안 골랐으면 빈 배열. */
             List<String> questions,
 
             /**
              * AI 가 만든 질문 후보. <b>문답이 끝나야 채워진다.</b>
              *
-             * <p>카드가 아니라 여기 실리는 이유 — 화면 순서가 문답 → 강도 → 물어볼 것 →
-             * 카드라, 후보가 필요한 시점에는 카드가 아직 없다.
+             * <p>카드가 아니라 여기 실리는 이유 — 후보는 문답 채팅 안에서 고르고 카드는 그 뒤에
+             * 만든다. 후보가 필요한 시점에는 카드가 아직 없다.
              */
             List<QuestionCandidate> questionCandidates,
 
             /**
              * 카드의 축 값·상태. <b>폰이 질문 후보를 만드는 재료다.</b> 문답 중에도 그때까지의
-             * 값이 나간다. 강도(3단계)는 여기가 아니라 {@code severity} 에 있다.
+             * 값이 나간다. 강도는 여기가 아니라 {@code severity} 에 있다 — AI 에는 후보 요청 때만
+             * 실어 보내므로, 문답 중에는 여기서 {@code not_asked} 로 보인다.
              */
             List<CardAxis> cardAxes,
 

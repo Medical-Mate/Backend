@@ -37,7 +37,7 @@ public interface AiTurnClient {
     AiTurnResult turn(IntakeSession session, String utterance, JsonNode extraction, JsonNode extractionMeta);
 
     /**
-     * 문답이 끝난 뒤 질문 후보를 받아온다. 화면 {@code 1i} 가 쓴다.
+     * 문답이 끝난 뒤 질문 후보를 받아온다. 문답 채팅 안의 질문 고르기({@code 1c-D})가 쓴다.
      *
      * <p><b>종료 뒤에 따로 부른다.</b> 계약은 종료 턴 요청에 얹으라고 하지만, 어느 턴이
      * 마지막인지는 <b>응답의 {@code ended} 를 봐야 알 수 있다</b> — 보내는 시점에는 모른다.
