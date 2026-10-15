@@ -7,6 +7,7 @@ import com.jinryomate.backend.global.error.ErrorCode;
 import com.jinryomate.backend.hospital.HospitalProperties;
 import com.jinryomate.backend.hospital.dto.HospitalDtos.Hospital;
 import com.jinryomate.backend.hospital.dto.HospitalDtos.HospitalSearchResponse;
+import com.jinryomate.backend.hospital.query.HospitalQuery;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
@@ -50,14 +51,25 @@ public class HttpHospitalSearchClient implements HospitalSearchClient {
     }
 
     @Override
-    public HospitalSearchResponse search(String query, int page, int size) {
-        URI uri = URI.create(properties.baseUrl() + PATH
+    public HospitalSearchResponse search(HospitalQuery query, int page, int size) {
+        StringBuilder url = new StringBuilder(properties.baseUrl() + PATH)
                 // 키는 이미 인코딩된 문자열이다. 건드리지 않는다.
-                + "?serviceKey=" + properties.serviceKey()
-                + "&_type=json"
-                + "&pageNo=" + page
-                + "&numOfRows=" + size
-                + "&yadmNm=" + URLEncoder.encode(query, StandardCharsets.UTF_8));
+                .append("?serviceKey=").append(properties.serviceKey())
+                .append("&_type=json")
+                .append("&pageNo=").append(page)
+                .append("&numOfRows=").append(size);
+        // 지역 코드는 숫자라 인코딩할 것이 없다.
+        if (query.sidoCd() != null) {
+            url.append("&sidoCd=").append(query.sidoCd());
+        }
+        if (query.sgguCd() != null) {
+            url.append("&sgguCd=").append(query.sgguCd());
+        }
+        // 지역만 친 검색어(노원)면 이름 조건 없이 지역 필터만 건다.
+        if (query.name() != null) {
+            url.append("&yadmNm=").append(URLEncoder.encode(query.name(), StandardCharsets.UTF_8));
+        }
+        URI uri = URI.create(url.toString());
 
         long started = System.currentTimeMillis();
         String body;
