@@ -2,6 +2,7 @@ package com.jinryomate.backend.auth.service;
 
 import com.jinryomate.backend.auth.client.KakaoClient;
 import com.jinryomate.backend.auth.client.KakaoProfile;
+import com.jinryomate.backend.auth.dto.AuthDtos.SettingsRequest;
 import com.jinryomate.backend.auth.dto.AuthDtos.SettingsResponse;
 import com.jinryomate.backend.auth.dto.AuthDtos.TokenResponse;
 import com.jinryomate.backend.auth.entity.Device;
@@ -176,15 +177,22 @@ public class AuthService {
 
     @Transactional(readOnly = true)
     public SettingsResponse getSettings(Long userId) {
-        return new SettingsResponse(findUser(userId).isVisitReminderEnabled());
+        return SettingsResponse.from(findUser(userId));
     }
 
+    /** 보낸 필드만 바꾼다. 빠진 필드({@code null})는 그대로 둔다. */
     @Transactional
-    public SettingsResponse updateSettings(Long userId, boolean visitReminderEnabled) {
+    public SettingsResponse updateSettings(Long userId, SettingsRequest request) {
         User user = findUser(userId);
-        user.changeVisitReminder(visitReminderEnabled);
-        log.info("설정 변경 userId={} 진료전알림={}", userId, visitReminderEnabled);
-        return new SettingsResponse(user.isVisitReminderEnabled());
+        user.applyReminderSettings(
+                request.visitReminderEnabled(),
+                request.recordReminderEnabled(),
+                SettingsRequest.parseTime(request.visitReminderTime()),
+                SettingsRequest.parseTime(request.recordReminderTime()));
+        log.info("설정 변경 userId={} 진료전알림={} {} 기록알림={} {}", userId,
+                user.isVisitReminderEnabled(), user.getVisitReminderTime(),
+                user.isRecordReminderEnabled(), user.getRecordReminderTime());
+        return SettingsResponse.from(user);
     }
 
     private TokenResponse issueTokens(User user, boolean onboardingRequired) {

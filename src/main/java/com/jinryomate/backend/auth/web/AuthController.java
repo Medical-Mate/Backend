@@ -76,7 +76,7 @@ public class AuthController {
     @Operation(
             summary = "푸시 토큰 등록 (현재 미사용)",
             description = """
-                    > **지금은 부를 필요가 없습니다.** 진료 하루 전 알림은 **앱이 로컬로 예약**하기로
+                    > **지금은 부를 필요가 없습니다.** 진료 전·후 알림은 **앱이 로컬로 예약**하기로
                     > 정했습니다. 서버가 푸시를 보내지 않으므로 이 토큰을 쓰는 곳이 없습니다.
 
                     Render 무료 플랜은 15분 유휴 후 잠들어, 알림이 나가야 하는 시간에
@@ -103,32 +103,66 @@ public class AuthController {
     @Operation(
             summary = "계정 설정 조회",
             description = """
-                    화면 `1s-1` 의 토글. **셋 중 하나만 여기 있습니다.**
+                    화면 `1s-1` 의 **알림 설정만** 여기 있습니다.
 
-                    "브리핑 카드 자동 저장"과 "진료실 화면 밝기 최대"는 서버가 읽지도 않는
-                    기기 취향이라 앱의 `DataStore` 에 두세요. 서버가 안 쓰는 값을
-                    민감정보 서버에 보관할 이유가 없습니다.
+                    "브리핑 카드 자동 저장"·"진료실 화면 밝기 최대"·"헤이 메이트로 부르기"는
+                    이 기기에서 어떻게 보일지, 이 기기에 무엇을 받을지의 문제라 앱의
+                    `DataStore` 에 두세요. 서버가 안 쓰는 값을 민감정보 서버에 보관할
+                    이유가 없습니다.
 
-                    `visitReminderEnabled`(진료 하루 전 알림)만 계정에 따라다닙니다.
+                    | 필드 | 기본값 | 뜻 |
+                    |---|---|---|
+                    | `visitReminderEnabled` | `true` | 진료 전 알림 |
+                    | `recordReminderEnabled` | `true` | 진료 후 기록 알림 |
+                    | `visitReminderTime` | `"19:00"` | 시간 미정 일정의 **전날** 알림 시각 |
+                    | `recordReminderTime` | `"19:00"` | 시간 미정 일정의 **당일** 기록 알림 시각 |
+
+                    **알림 규칙** — 예약은 앱이 로컬로 합니다. 서버가 보내는 것은 없습니다.
+
+                    | 알림 | 진료 시각을 적은 일정 | 시간 미정 일정 |
+                    |---|---|---|
+                    | 진료 전 알림 | 진료 24시간 전 | 전날 `visitReminderTime` |
+                    | 진료 후 기록 알림 | 진료 2시간 뒤 | 당일 `recordReminderTime` |
+
+                    시각을 적은 일정은 규칙이 고정이라 시각 필드를 쓰지 않습니다.
+                    시각은 시간대 없는 `HH:mm` 이고 **한국 시각으로 읽습니다**.
 
                     **지금 알림을 예약하는 것은 앱입니다**(`POST /me/devices` 설명 참고).
-                    그래도 이 값만 서버에 두는 이유는, 알림을 받을지 말지는 기기 취향이
+                    그래도 서버에 두는 이유는, 알림을 받을지와 언제 받을지는 기기 취향이
                     아니라 **그 사람의 선택**이기 때문입니다. 기기를 바꾸거나 앱을 다시
                     깔면 "안 받겠다"고 한 사람에게 알림이 다시 가기 시작합니다.
-                    로그인 직후 이 값을 읽어 예약 여부를 정하시면 됩니다.
+                    로그인 직후 이 값을 읽어 예약을 정하시면 됩니다.
 
-                    서버 푸시로 옮길 때도 같은 값을 그대로 씁니다. 기본값은 켜짐입니다.
+                    서버 푸시로 옮길 때도 같은 값을 그대로 씁니다.
                     """)
     @GetMapping("/me/settings")
     public SettingsResponse getSettings(@AuthenticationPrincipal Long userId) {
         return authService.getSettings(userId);
     }
 
-    @Operation(summary = "계정 설정 변경", description = "진료 하루 전 알림을 켜고 끕니다.")
+    @Operation(
+            summary = "계정 설정 변경",
+            description = """
+                    **보낸 필드만 바뀝니다.** 빠지거나 `null` 인 필드는 그대로 둡니다.
+                    시각 하나만 고칠 때 토글을 같이 보낼 필요가 없습니다.
+
+                    ```json
+                    { "recordReminderTime": "20:30" }
+                    ```
+
+                    `{}` 를 보내면 아무것도 바꾸지 않고 지금 설정을 돌려줍니다.
+                    응답은 늘 네 필드 전부입니다.
+
+                    **시각은 `HH:mm` 만 받습니다.** `"07:00"` 은 되고 `"7:00"`·`"24:00"`·
+                    `"19:00:00"` 은 400(`INVALID_REQUEST`)입니다. 초를 받아 조용히 버리면
+                    화면에 보이는 값과 울리는 시각이 어긋납니다.
+
+                    `visitReminderEnabled` 하나만 보내던 기존 요청도 그대로 동작합니다.
+                    """)
     @PatchMapping("/me/settings")
     public SettingsResponse updateSettings(@AuthenticationPrincipal Long userId,
                                            @Valid @RequestBody SettingsRequest request) {
-        return authService.updateSettings(userId, request.visitReminderEnabled());
+        return authService.updateSettings(userId, request);
     }
 
     @Operation(
