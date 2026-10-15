@@ -26,7 +26,12 @@ public class IntakeSession {
         IN_PROGRESS,
         /** 문답이 끝나 카드를 만들 수 있다. */
         COMPLETED,
-        /** 환자가 중간에 그만뒀다. */
+        /**
+         * 놓은 문답. 카드까지 가지 않았는데 새 문답을 시작했다(#174).
+         *
+         * <p>홈의 이어서 하기에 다시 뜨지 않고, 쓰기 요청은 409 로 막힌다. 대화는 지우지 않는다 —
+         * 탈퇴하면 다른 데이터와 함께 지워진다.
+         */
         ABANDONED
     }
 
@@ -274,6 +279,20 @@ public class IntakeSession {
 
     public boolean isCompleted() {
         return status == Status.COMPLETED;
+    }
+
+    public boolean isAbandoned() {
+        return status == Status.ABANDONED;
+    }
+
+    /**
+     * 문답을 놓은 것으로 둔다. 새 문답을 시작할 때 카드 없는 이전 문답에 부른다(#174).
+     *
+     * <p><b>완료 시각은 건드리지 않는다.</b> 문답이 끝난 뒤 놓은 것이면 "언제 끝났나"는
+     * 그대로 사실이다.
+     */
+    public void abandon() {
+        this.status = Status.ABANDONED;
     }
 
     /**
