@@ -81,12 +81,23 @@ public class IntakeSessionService {
         rememberAskingAxis(session, opening);
         session.addMessage(IntakeMessage.fromAi(session, opening.reply()));
 
+        // 새 문답이 열렸으니 카드까지 못 간 이전 문답은 놓은 것이다(#174). 그대로 두면 카드를
+        // 지웠을 때(세션도 함께 지워진다) 그 옛 문답이 "가장 최근"이 되어 홈에 되살아난다.
+        //
+        // AI 시작이 성공한 뒤에 한다. 새 문답이 안 열렸는데 이전 것만 놓이면 환자는
+        // 이어서 할 문답을 통째로 잃는다. 방금 연 세션도 카드가 없으니 id 로 뺀다.
+        List<IntakeSession> left = sessionRepository.findOpenWithoutCard(userId).stream()
+                .filter(s -> !s.getId().equals(session.getId()))
+                .toList();
+        left.forEach(IntakeSession::abandon);
+
         // 부위·증상은 민감정보라 값을 로그에 남기지 않는다. 무엇이 붙었는지만 남긴다.
         boolean hasNodeId = session.getSiteNodeId() != null;
         boolean hasLabel = session.getSiteText() != null && !session.getSiteText().isBlank();
 
-        log.info("문답 세션 시작 userId={} sessionId={} 노드id={} 이름={} 강도={}",
-                userId, session.getId(), hasNodeId, hasLabel, session.getSeverityLevel() != null);
+        log.info("문답 세션 시작 userId={} sessionId={} 노드id={} 이름={} 강도={} 놓은문답={}",
+                userId, session.getId(), hasNodeId, hasLabel, session.getSeverityLevel() != null,
+                left.size());
 
         // 부위를 건너뛰는 경로가 와이어프레임에 있어 오류는 아니다. 다만 앱이 보냈는데
         // 떨어진 경우와 구별이 안 되면 못 찾는다 — 실제로 그걸 한참 못 찾았다.
@@ -118,7 +129,7 @@ public class IntakeSessionService {
      */
     @Transactional
     public TurnResponse sendMessage(Long userId, Long sessionId, SendMessageRequest request) {
-        IntakeSession session = findOwned(userId, sessionId);
+        IntakeSession session = findOwnedActive(userId, sessionId);
 
         if (session.isCompleted()) {
             // 상태를 바꾸지 않고 마지막 AI 문장만 돌려준다. 후보도 함께 싣는다 — 마지막 턴
@@ -243,7 +254,7 @@ public class IntakeSessionService {
      */
     @Transactional
     public SessionResponse recordSeverity(Long userId, Long sessionId, SeverityRequest request) {
-        IntakeSession session = findOwned(userId, sessionId);
+        IntakeSession session = findOwnedActive(userId, sessionId);
         session.recordSeverity(request.level(), request.label());
 
         // 강도 값 자체는 증상 정보라 라벨을 로그에 남기지 않는다. 숫자만 남긴다.
@@ -258,7 +269,7 @@ public class IntakeSessionService {
      */
     @Transactional
     public SessionResponse replaceQuestions(Long userId, Long sessionId, QuestionsRequest request) {
-        IntakeSession session = findOwned(userId, sessionId);
+        IntakeSession session = findOwnedActive(userId, sessionId);
         session.replaceQuestions(request.questions());
 
         // 질문 내용은 증상을 유추할 수 있어 로그에 남기지 않는다. 개수만 남긴다.
@@ -287,7 +298,7 @@ public class IntakeSessionService {
     @Transactional
     public SessionResponse submitPhoneQuestionCandidates(Long userId, Long sessionId,
                                                          PhoneQuestionCandidatesRequest request) {
-        IntakeSession session = findOwned(userId, sessionId);
+        IntakeSession session = findOwnedActive(userId, sessionId);
         if (!session.isCompleted()) {
             throw new ApiException(ErrorCode.INVALID_REQUEST, "문답이 끝난 뒤에 보낼 수 있습니다.");
         }
@@ -314,6 +325,20 @@ public class IntakeSessionService {
         return SessionResponse.from(session,
                 candidateReader.read(session.getAiCard()),
                 cardAxisReader.read(session.getAiCard()));
+    }
+
+    /**
+     * 쓰기 요청용. 놓은 문답이면 409 다(#174).
+     *
+     * <p>받아 주면 홈에도 안 보이는 세션에 대화가 쌓인다. 조회({@link #findOwned})는 막지 않는다.
+     */
+    @Transactional(readOnly = true)
+    public IntakeSession findOwnedActive(Long userId, Long sessionId) {
+        IntakeSession session = findOwned(userId, sessionId);
+        if (session.isAbandoned()) {
+            throw new ApiException(ErrorCode.SESSION_ABANDONED);
+        }
+        return session;
     }
 
     /** 남의 세션은 존재 자체를 알려주지 않는다. 없는 것과 같은 응답을 준다. */

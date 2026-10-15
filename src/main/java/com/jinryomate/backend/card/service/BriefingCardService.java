@@ -87,7 +87,8 @@ public class BriefingCardService {
      */
     @Transactional
     public CardResponse generate(Long userId, Long sessionId, GenerateCardRequest request) {
-        IntakeSession session = intakeSessionService.findOwned(userId, sessionId);
+        // 놓은 문답으로는 카드를 만들지 않는다(#174). 놓은 문답은 정의상 카드가 없다.
+        IntakeSession session = intakeSessionService.findOwnedActive(userId, sessionId);
 
         BriefingCard existing = cardRepository.findFirstBySessionIdOrderByVersionDesc(sessionId).orElse(null);
         if (existing != null) {
