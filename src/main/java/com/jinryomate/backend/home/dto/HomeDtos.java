@@ -23,7 +23,7 @@ public final class HomeDtos {
      *
      * @param lastVisitedOn     마지막 진료일. "지난 진료 후 n일"의 재료
      * @param nextAppointment   다음 예정 일정. D-day 는 앱이 센다
-     * @param inProgressSession 작성 중이던 증상 정리. "이어서 하기"
+     * @param inProgressSession 이어서 할 증상 정리. 문답이 끝났어도 카드를 아직 안 만들었으면 온다
      * @param recentCards       최근 브리핑 카드 3건
      */
     public record HomeResponse(
@@ -51,22 +51,33 @@ public final class HomeDtos {
     ) {
 
         /**
-         * 이어서 할 문답 세션.
+         * 이어서 할 문답 세션. <b>가장 최근 세션이 아직 카드가 없을 때만</b> 온다(#171).
          *
-         * <p>화면의 "복부 통증 · 3단계 중 2단계까지 답했어요"가 이 셋으로 만들어진다.
+         * <p>{@code progressCurrent}·{@code progressTotal} 은 <b>대화 턴</b> 진행도다.
+         * 화면 단계(n/3)가 아니다.
          */
         public record InProgressSession(
                 Long sessionId,
                 String siteText,
                 int progressCurrent,
-                int progressTotal
+                int progressTotal,
+
+                /**
+                 * 문답이 끝났는지. <b>턴 응답의 {@code ended} 와 같은 뜻이다.</b>
+                 *
+                 * <p>{@code true} 면 문답은 끝났고 질문 고르기({@code 1c-D})에서 멈춘 것이다 —
+                 * 이어서 하기를 누르면 그 자리로 보낸다. {@code false} 면 문답 채팅으로 보낸다.
+                 * 이 값이 없으면 앱이 홈에 들어올 때마다 세션을 한 번 더 읽어야 한다.
+                 */
+                boolean ended
         ) {
             public static InProgressSession from(IntakeSession s) {
                 return new InProgressSession(
                         s.getId(),
                         s.getSiteText(),
                         s.getProgressCurrent(),
-                        s.getProgressTotal());
+                        s.getProgressTotal(),
+                        s.isCompleted());
             }
         }
     }

@@ -3,6 +3,7 @@ package com.jinryomate.backend.home.service;
 import com.jinryomate.backend.appointment.dto.AppointmentDtos.AppointmentResponse;
 import com.jinryomate.backend.appointment.service.AppointmentService;
 import com.jinryomate.backend.card.dto.CardDtos.CardSummary;
+import com.jinryomate.backend.card.repository.BriefingCardRepository;
 import com.jinryomate.backend.card.service.BriefingCardService;
 import com.jinryomate.backend.home.dto.HomeDtos.HomeResponse;
 import com.jinryomate.backend.home.dto.HomeDtos.HomeResponse.InProgressSession;
@@ -32,6 +33,7 @@ public class HomeService {
     private final VisitRecordService visitRecordService;
     private final AppointmentService appointmentService;
     private final IntakeSessionRepository intakeSessionRepository;
+    private final BriefingCardRepository briefingCardRepository;
 
     /**
      * 홈에 필요한 것을 한 번에 모은다.
@@ -65,13 +67,24 @@ public class HomeService {
                 .orElse(null);
     }
 
-    /** 작성 중이던 증상 정리. 가장 최근 하나만. */
+    /**
+     * 이어서 할 증상 정리. <b>가장 최근 세션이 아직 카드가 없을 때만</b> 낸다.
+     *
+     * <p><b>끝난 문답도 담는다(#171).</b> 문답 3단계에서는 문답이 끝난 뒤에도 같은 채팅에서
+     * 질문을 고르고 나서야 카드를 만든다. 그 사이에 나가면 세션은 {@code COMPLETED} 인데
+     * 카드가 없어, {@code IN_PROGRESS} 만 보면 돌아갈 길이 사라진다.
+     *
+     * <p>카드가 있으면 그 문답은 끝까지 간 것이다. 카드를 만들면 세션도 끝나므로
+     * ({@code BriefingCardService}) 카드 있는 진행 중 세션은 없다.
+     *
+     * <p><b>가장 최근 세션만 본다.</b> 그게 카드까지 갔으면 옛 세션을 거슬러 찾지 않는다 —
+     * 그러면 방금 카드를 만든 사람에게 몇 주 전에 놓은 문답이 다시 뜬다.
+     */
     private InProgressSession inProgressSession(Long userId) {
         return intakeSessionRepository
-                .findAllByUserIdAndStatusOrderByStartedAtDesc(
-                        userId, IntakeSession.Status.IN_PROGRESS)
-                .stream()
-                .findFirst()
+                .findFirstByUserIdAndStatusNotOrderByStartedAtDescIdDesc(
+                        userId, IntakeSession.Status.ABANDONED)
+                .filter(s -> !briefingCardRepository.existsBySessionId(s.getId()))
                 .map(InProgressSession::from)
                 .orElse(null);
     }

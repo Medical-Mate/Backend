@@ -17,6 +17,7 @@ import com.jinryomate.backend.appointment.entity.Appointment.Status;
 import com.jinryomate.backend.auth.client.KakaoClient;
 import com.jinryomate.backend.auth.dto.AuthDtos.KakaoLoginRequest;
 import com.jinryomate.backend.auth.dto.AuthDtos.TokenResponse;
+import com.jinryomate.backend.intake.dto.IntakeDtos.SendMessageRequest;
 import com.jinryomate.backend.intake.dto.IntakeDtos.StartSessionRequest;
 import com.jinryomate.backend.intake.entity.Side;
 import com.jinryomate.backend.profile.dto.ProfileDtos.HealthProfileRequest;
@@ -91,7 +92,51 @@ class HomeApiTest {
                 .andExpect(jsonPath("$.inProgressSession.sessionId").exists())
                 .andExpect(jsonPath("$.inProgressSession.siteText").value("손(오른쪽)"))
                 .andExpect(jsonPath("$.inProgressSession.progressCurrent").exists())
-                .andExpect(jsonPath("$.inProgressSession.progressTotal").exists());
+                .andExpect(jsonPath("$.inProgressSession.progressTotal").exists())
+                // 앱이 이 값으로 문답 채팅에 보낼지 질문 고르기로 보낼지 가른다.
+                .andExpect(jsonPath("$.inProgressSession.ended").value(false));
+    }
+
+    @Test
+    @DisplayName("문답이 끝났어도 카드를 아직 안 만들었으면 이어서 하기에 남는다")
+    void 끝났지만_카드_없음() throws Exception {
+        completeOnboarding();
+        long sessionId = startSession();
+        answerUntilEnd(sessionId);
+
+        // 문답 3단계에서는 끝난 뒤에도 같은 채팅에서 질문을 고르고 나서야 카드를 만든다(#171).
+        // 그 사이에 나가면 COMPLETED 인데 카드가 없다 — 여기서 빠지면 돌아갈 길이 없다.
+        mockMvc.perform(get("/api/me/home").header("Authorization", token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.inProgressSession.sessionId").value((int) sessionId))
+                .andExpect(jsonPath("$.inProgressSession.ended").value(true));
+    }
+
+    @Test
+    @DisplayName("가장 최근 문답으로 카드를 만들었으면 옛 문답이 되살아나지 않는다")
+    void 옛_문답은_되살아나지_않는다() throws Exception {
+        completeOnboarding();
+        // A: 문답만 끝내고 카드는 안 만들었다.
+        answerUntilEnd(startSession());
+        // B: 새로 시작해 카드까지 만들었다.
+        createCard();
+
+        // 조건에 맞는 세션을 거슬러 찾으면 A 가 다시 뜬다. 새 문답을 시작했으면 A 는 놓은 것이다.
+        mockMvc.perform(get("/api/me/home").header("Authorization", token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.inProgressSession").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("끝난 문답을 두고 새 문답을 시작하면 새 문답이 온다")
+    void 새_문답이_우선() throws Exception {
+        completeOnboarding();
+        answerUntilEnd(startSession());
+        long newer = startSession();
+
+        mockMvc.perform(get("/api/me/home").header("Authorization", token))
+                .andExpect(jsonPath("$.inProgressSession.sessionId").value((int) newer))
+                .andExpect(jsonPath("$.inProgressSession.ended").value(false));
     }
 
     @Test
@@ -282,6 +327,18 @@ class HomeApiTest {
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
         return objectMapper.readTree(body).path("sessionId").asLong();
+    }
+
+    /** 스텁 AI 는 네 번째 답변에서 문답을 끝낸다. */
+    private void answerUntilEnd(long sessionId) throws Exception {
+        for (int i = 0; i < 4; i++) {
+            mockMvc.perform(post("/api/sessions/" + sessionId + "/messages")
+                            .header("Authorization", token)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(
+                                    new SendMessageRequest("답변 " + i, null, null, null))))
+                    .andExpect(jsonPath("$.ended").value(i == 3));
+        }
     }
 
     private long createCard() throws Exception {
