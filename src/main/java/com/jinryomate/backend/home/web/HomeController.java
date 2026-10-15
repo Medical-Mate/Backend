@@ -28,7 +28,7 @@ public class HomeController {
                     | `lastVisitedOn` | "지난 진료 후 12일이 지났어요" |
                     | `nextAppointment` | "다가오는 일정" · D-day · **오늘 진료** |
                     | `pendingRecordOn` | "9월 12일 진료, 기록이 아직 없어요" |
-                    | `inProgressSession` | "이어서 하기" · "3단계 중 2단계까지" |
+                    | `inProgressSession` | "이어서 하기" · 원형 진행 표시 |
                     | `recentCards` | "최근 브리핑 카드" 3건 |
 
                     **문구와 D-day 는 서버가 만들지 않습니다.** 숫자와 날짜만 옵니다.
@@ -68,6 +68,23 @@ public class HomeController {
                     **취소한 일정은 세지 않습니다.** `DONE` 은 거르지 않는데, 서버가 그 값을
                     세우는 곳이 없어서 믿을 수 없기 때문입니다 — 앱이 `DONE` 을 "다녀왔지만
                     기록은 안 함" 으로 쓰고 계시면 알려주세요.
+
+                    ### `inProgressSession` — 카드까지 못 간 가장 최근 문답
+
+                    **가장 최근에 시작한 문답 하나만 봅니다.** 그 문답으로 카드를 아직 안
+                    만들었으면 오고, 만들었으면 `null` 입니다. 더 옛 문답을 거슬러 찾지 않습니다 —
+                    새 문답을 시작했으면 옛 것은 놓은 것으로 봅니다.
+
+                    **문답이 끝났어도 카드가 없으면 옵니다.** 질문 고르기(`1c-D`)에서 나간 경우입니다.
+                    `ended` 로 가르세요.
+
+                    | `ended` | 이어서 하기를 누르면 |
+                    | --- | --- |
+                    | `false` | 문답 채팅으로 |
+                    | `true` | 질문 고르기 자리로. 후보는 `GET /api/sessions/{id}` 의 `questionCandidates` |
+
+                    `progressCurrent`·`progressTotal` 은 **대화 턴** 진행도입니다. 화면 단계(n/3)는
+                    `ended` 와 앱이 아는 화면 위치로 그리시면 됩니다.
 
                     **신규 사용자는 전부 `null` 또는 빈 배열입니다.** 404 가 아닙니다 —
                     이걸 보고 "증상 정리 유도" 화면(1n-2)을 그리세요.

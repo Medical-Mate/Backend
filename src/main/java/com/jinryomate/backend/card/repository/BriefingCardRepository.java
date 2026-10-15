@@ -25,6 +25,9 @@ public interface BriefingCardRepository extends JpaRepository<BriefingCard, Long
      */
     Optional<BriefingCard> findFirstBySessionIdOrderByVersionDesc(Long sessionId);
 
+    /** 이 문답으로 카드를 만들었는지. 홈의 "이어서 하기"가 끝난 문답을 가르는 데 쓴다(#171). */
+    boolean existsBySessionId(Long sessionId);
+
     /** 한 문답에서 나온 카드 전부. 버전 체인이라 함께 다룬다. */
     List<BriefingCard> findAllBySessionIdOrderByVersionDesc(Long sessionId);
 
