@@ -13,7 +13,7 @@ Prometheus 도 Loki 도 두지 않습니다. 호스트가 2GB 인데 풀스택�
 마이그레이션에 넣지 않은 이유는 비밀번호가 환경마다 다르고, 저장소에 박히면 안 되기 때문입니다.
 
 ```bash
-ssh -i ~/.ssh/lightsail-jinryomate.pem ubuntu@54.116.115.128
+ssh -i ~/.ssh/jinryomate ubuntu@54.116.115.128
 cd /opt/jinryomate
 docker compose -f docker-compose.prod.yml exec -T postgres psql -U jinryomate -d jinryomate
 ```
@@ -118,7 +118,7 @@ docker compose -f docker-compose.prod.yml up -d grafana
 ```
 
 ```bash
-ssh -i ~/.ssh/lightsail-jinryomate.pem -L 3000:127.0.0.1:3000 ubuntu@54.116.115.128
+ssh -i ~/.ssh/jinryomate -L 3000:127.0.0.1:3000 ubuntu@54.116.115.128
 ```
 
 터널을 연 채로 브라우저에서 `http://localhost:3000`.
