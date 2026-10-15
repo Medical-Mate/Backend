@@ -7,8 +7,8 @@ import com.jinryomate.backend.demo.service.DemoEventService;
 import com.jinryomate.backend.demo.service.DemoRateLimiter;
 import com.jinryomate.backend.global.error.ApiException;
 import com.jinryomate.backend.global.error.ErrorCode;
-import com.jinryomate.backend.hospital.client.HospitalSearchClient;
 import com.jinryomate.backend.hospital.dto.HospitalDtos.HospitalSearchResponse;
+import com.jinryomate.backend.hospital.service.HospitalSearchService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
@@ -62,7 +62,7 @@ public class DemoController {
     private final DemoRateLimiter rateLimiter;
 
     /** 앱이 쓰는 것과 같은 구현이다. 여기서는 문만 하나 더 낸다. */
-    private final HospitalSearchClient hospitalSearchClient;
+    private final HospitalSearchService hospitalSearchService;
 
     private final DemoEventService eventService;
 
@@ -169,7 +169,8 @@ public class DemoController {
     @Operation(
             summary = "병원 검색",
             description = """
-                    이름으로 병원을 찾습니다. **부분 일치**입니다.
+                    이름으로 병원을 찾습니다. **부분 일치**입니다. `노원 피부과` 처럼 지역을
+                    앞에 붙이면 그 지역에서 찾습니다(규칙은 `GET /api/hospitals` 설명 참고).
 
                     **인증 경로(`GET /api/hospitals`)와 같은 것을 냅니다.** 앱이 쓰는 그 길은
                     그대로 두고, 여기에 문 하나를 더 낸 것뿐입니다.
@@ -200,7 +201,7 @@ public class DemoController {
         rateLimiter.check(request);
         // AI 쪽과 달리 서명이 없고 우리 도메인 코드라, 바이트를 그대로 흘려보내는 것이
         // 아니라 평범한 위임이다. 캐시(결과 6시간·0건 5분)가 그 안에 이미 붙어 있다.
-        return hospitalSearchClient.search(query, page, size);
+        return hospitalSearchService.search(query, page, size);
     }
 
     @Operation(

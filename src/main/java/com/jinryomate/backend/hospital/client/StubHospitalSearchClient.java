@@ -2,6 +2,7 @@ package com.jinryomate.backend.hospital.client;
 
 import com.jinryomate.backend.hospital.dto.HospitalDtos.Hospital;
 import com.jinryomate.backend.hospital.dto.HospitalDtos.HospitalSearchResponse;
+import com.jinryomate.backend.hospital.query.HospitalQuery;
 import java.util.List;
 
 /**
@@ -23,9 +24,11 @@ public class StubHospitalSearchClient implements HospitalSearchClient {
             new Hospital("행복한의원", null));
 
     @Override
-    public HospitalSearchResponse search(String query, int page, int size) {
+    public HospitalSearchResponse search(HospitalQuery query, int page, int size) {
+        // 지역 코드는 보지 않는다. 가짜 넷에 지역을 매겨 봐야 확인할 것이 없다.
+        String name = query.name();
         List<Hospital> matched = FIXTURES.stream()
-                .filter(h -> query == null || query.isBlank() || h.name().contains(query))
+                .filter(h -> name == null || name.isBlank() || h.name().contains(name))
                 .toList();
 
         int from = Math.min((page - 1) * size, matched.size());

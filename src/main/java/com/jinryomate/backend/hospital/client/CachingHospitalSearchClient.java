@@ -4,6 +4,7 @@ import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.Expiry;
 import com.jinryomate.backend.hospital.dto.HospitalDtos.HospitalSearchResponse;
+import com.jinryomate.backend.hospital.query.HospitalQuery;
 import java.time.Duration;
 import lombok.extern.slf4j.Slf4j;
 
@@ -67,9 +68,10 @@ public class CachingHospitalSearchClient implements HospitalSearchClient {
     }
 
     @Override
-    public HospitalSearchResponse search(String query, int page, int size) {
+    public HospitalSearchResponse search(HospitalQuery query, int page, int size) {
         // 검색어는 증상이 아니라 병원 이름이라 로그에 남겨도 된다. 그래도 키에만 쓴다.
-        String key = query + "|" + page + "|" + size;
+        // 푼 결과로 잡는다 — "노원 피부과" 와 "노원구 피부과" 는 같은 질의다.
+        String key = query.cacheKey() + "|" + page + "|" + size;
 
         HospitalSearchResponse cached = cache.getIfPresent(key);
         if (cached != null) {

@@ -1,7 +1,7 @@
 package com.jinryomate.backend.hospital.web;
 
-import com.jinryomate.backend.hospital.client.HospitalSearchClient;
 import com.jinryomate.backend.hospital.dto.HospitalDtos.HospitalSearchResponse;
+import com.jinryomate.backend.hospital.service.HospitalSearchService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.constraints.Max;
@@ -22,12 +22,22 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 public class HospitalController {
 
-    private final HospitalSearchClient hospitalSearchClient;
+    private final HospitalSearchService hospitalSearchService;
 
     @Operation(
             summary = "병원 검색",
             description = """
-                    이름으로 병원을 찾습니다. **부분 일치**입니다 — `서울` 로 4천 건이 넘게 나옵니다.
+                    이름으로 병원을 찾습니다. **부분 일치**입니다.
+
+                    **지역을 앞에 붙이면 그 지역에서 찾습니다.** `노원 피부과` 는 노원구에서
+                    이름에 `피부과` 가 든 곳입니다. `노원구 피부과` · `서울 노원 피부과` 도 같고,
+                    `노원` 만 치면 노원구 전체입니다. 시도(`서울 피부과`)도 됩니다.
+
+                    - **진료과로 거르지 않습니다.** `피부과` 는 이름 검색이라 피부과 간판을 단
+                      곳이 나옵니다. 증상(`무릎 아픈데`)은 이름 검색으로 가서 대개 0건입니다
+                    - **겹치는 지역은 거르지 않습니다.** `중구` 는 여섯 곳이라 `서울 중구` 처럼
+                      시도를 붙여야 합니다. 안 붙이면 검색어 전체로 이름 검색을 합니다
+                    - 시군구까지입니다. 동(`상계동`)은 풀지 않습니다
 
                     원천은 **심평원 병원정보서비스**이고 서버가 목록을 들고 있지 않습니다.
                     개원·폐원이 계속 생기는 데이터라 복사해 두면 바로 낡습니다.
@@ -64,6 +74,6 @@ public class HospitalController {
             @Min(value = 1, message = "1개 이상 요청해주세요.")
             @Max(value = 50, message = "한 번에 50개까지입니다.")
             int size) {
-        return hospitalSearchClient.search(query, page, size);
+        return hospitalSearchService.search(query, page, size);
     }
 }
