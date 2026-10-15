@@ -278,7 +278,7 @@ class HomeApiTest {
                         .header("Authorization", token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(
-                                new StartSessionRequest("SUR:072", null, Side.RIGHT, "손(오른쪽)"))))
+                                new StartSessionRequest("SUR:072", null, Side.RIGHT, "손(오른쪽)", null))))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
         return objectMapper.readTree(body).path("sessionId").asLong();

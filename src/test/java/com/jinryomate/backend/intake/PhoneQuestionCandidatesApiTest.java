@@ -105,7 +105,7 @@ class PhoneQuestionCandidatesApiTest {
                 .andExpect(jsonPath("$.questionCandidates[0].text").value("계단 내려갈 때 더 아픈 건 괜찮은 건가요?"))
                 .andExpect(jsonPath("$.questionCandidates[0].origin").value("model"));
 
-        // 저장까지 됐는지 — 재조회에도 같은 후보여야 화면 1i 를 다시 그릴 수 있다.
+        // 저장까지 됐는지 — 재조회에도 같은 후보여야 질문 고르기(1c-D)를 다시 그릴 수 있다.
         mockMvc.perform(get("/api/sessions/" + sessionId).header("Authorization", token))
                 .andExpect(jsonPath("$.questionCandidates.length()").value(2));
     }
@@ -174,7 +174,7 @@ class PhoneQuestionCandidatesApiTest {
                         .header("Authorization", token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(
-                                new StartSessionRequest("SUR:032", profile, null, "아랫배"))))
+                                new StartSessionRequest("SUR:032", profile, null, "아랫배", null))))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
         return objectMapper.readTree(body).path("sessionId").asLong();

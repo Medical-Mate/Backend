@@ -10,10 +10,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 /**
- * 세션에 보관해둔 AI 카드에서 질문 후보만 꺼낸다. 화면 {@code 1i} 가 쓴다.
+ * 세션에 보관해둔 AI 카드에서 질문 후보만 꺼낸다. 문답 채팅 안의 질문 고르기({@code 1c-D})가 쓴다.
  *
- * <p><b>카드가 아니라 세션에서 읽는다.</b> 화면 순서가
- * {@code 문답 → 통증 강도 → 물어볼 것 → 카드} 라, 후보가 필요한 시점에는 카드 행이 아직 없다.
+ * <p><b>카드가 아니라 세션에서 읽는다.</b> 후보는 문답 채팅 안에서 고르고 카드는 그 뒤에
+ * 만들어서, 후보가 필요한 시점에는 카드 행이 아직 없다.
  *
  * <p><b>후보는 저장하지 않는다.</b> 환자가 고르고 나면 최종 목록만 남으면 되고, 고르지 않은
  * 후보를 들고 있을 이유가 없다. 원문은 세션의 {@code aiCard} 안에 이미 있다.
@@ -23,7 +23,7 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class QuestionCandidateReader {
 
-    /** 화면 {@code 1i} 의 "적어둔 질문" 후보. AI 가 만든 것은 계약대로 최대 3개다. */
+    /** 질문 고르기에 보이는 후보 줄 수. AI 가 만든 것은 계약대로 최대 3개다. */
     private static final int MAX = 3;
 
     private final ObjectMapper objectMapper;

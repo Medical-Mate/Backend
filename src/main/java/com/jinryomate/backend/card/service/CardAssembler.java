@@ -41,7 +41,7 @@ public class CardAssembler {
     /**
      * 세션에 쌓인 것을 카드 본문으로 만든다.
      *
-     * <p>대부분은 AI 가 준 카드 그대로이고, <b>통증 강도만 우리가 채운다</b>
+     * <p>대부분은 AI 가 준 카드 그대로이고, <b>통증 강도만 우리가 다시 채운다</b>
      * ({@link #fillSeverity}).
      */
     public Assembled assemble(IntakeSession session) {
@@ -83,29 +83,22 @@ public class CardAssembler {
     }
 
     /**
-     * 통증 강도 축을 우리가 채운다. 화면 3단계({@code 1d}) 슬라이더 값이다.
+     * 통증 강도 축을 우리가 채운다. 화면 {@code 1d} 슬라이더 값이다.
      *
-     * <p><b>AI 로 보낼 길이 없어서 우리가 채운다.</b> 계약상 폼 값은 턴 요청의
-     * {@code selections} 로 보내는데, 강도는 <b>문답이 끝난 뒤</b> 화면이라 그때는 이미
-     * {@code ended} 다. 종료 뒤 턴은 마무리 문장만 돌려주고 카드를 건드리지 않는다 —
-     * 실제로 보내 보고 확인했다. 그대로 두면 강도가 카드에 <b>영영 안 들어간다</b>.
+     * <p><b>AI 카드에도 강도가 들어가지만 여기서 한 번 더 채운다.</b> AI 에는 질문 후보를 받을
+     * 때만 {@code selections} 로 실어 보낸다(#168). 그러니 후보 요청 <b>뒤에</b> 강도를 고쳤거나,
+     * 후보 요청이 실패했거나, 끝나기 전에 카드를 만들면 AI 카드의 강도는 낡았거나 비어 있다.
+     * 세션 값이 언제나 최신이라 이쪽이 최종이다.
      *
      * <p>모양은 계약의 {@code selection} 규약을 그대로 따른다 — 근거가
      * {@code "[선택] 3 (꽤 아파요)"} 이고 {@code source} 가 {@code SELECTION} 이다.
-     * 우리가 만든 새 규칙이 아니다.
-     *
-     * <p><b>AI 가 종료 뒤 {@code selections} 를 받아주면 이 메서드를 지운다.</b> 문의해 뒀다.
+     * 값은 AI 에 보낸 것과 같은 {@link IntakeSession#severityValue()} 다.
      */
     private void fillSeverity(Map<String, CardAxis> axes, IntakeSession session) {
-        if (session.getSeverityLevel() == null) {
+        String value = session.severityValue();
+        if (value == null) {
             return;
         }
-
-        // 라벨은 앱이 보낸 디자인 카피다. 없으면 숫자만 쓴다 — 우리가 문구를 만들지 않는다.
-        String label = session.getSeverityLabel();
-        String value = label == null || label.isBlank()
-                ? String.valueOf(session.getSeverityLevel())
-                : session.getSeverityLevel() + " (" + label + ")";
 
         axes.put("severity", CardAxis.of(
                 "severity",

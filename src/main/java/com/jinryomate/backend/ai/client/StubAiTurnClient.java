@@ -37,15 +37,18 @@ public class StubAiTurnClient implements AiTurnClient {
             "associated", "time_course", "exacerbating_relieving", "severity");
 
     /**
-     * 물어볼 축의 순서. AI 계약의 8축 중 앞쪽 넷을 흉내 낸다.
+     * 물어볼 축의 순서. AI 계약의 8축 중 넷을 흉내 낸다.
      *
      * <p>실제 AI 는 환자 답변에서 이미 채워진 축을 건너뛰지만, 스텁은 그러지 않는다.
+     *
+     * <p><b>강도는 묻지 않는다.</b> 실제 AI 가 2026-09-11 에 문답에서 뺐다 — 슬라이더({@code 1d})로
+     * 받는다. 스텁이 계속 물으면 앱이 실제와 다른 대화를 보고 만든다.
      */
     private static final List<String> QUESTIONS = List.of(
             "언제부터 그러셨어요? 정확하지 않아도 괜찮아요.",
             "어떨 때 더 아프세요?",
             "어떻게 아픈지 말씀해 주시겠어요? 쑤시는지, 뻐근한지처럼요.",
-            "가장 심할 때를 10점이라고 하면 지금은 몇 점 정도인가요?");
+            "처음보다 지금은 어떤가요? 심해졌는지, 비슷한지, 나아졌는지요.");
 
     /**
      * 위 질문이 각각 묻는 칸. 라벨은 AI 의 폰 프롬프트 표({@code prompt_small.AXIS_KO})와
@@ -55,7 +58,7 @@ public class StubAiTurnClient implements AiTurnClient {
             new AskingAxis("onset", "언제부터·어떻게 시작"),
             new AskingAxis("exacerbating_relieving", "심해지거나 나아지는 상황"),
             new AskingAxis("character", "어떤 느낌"),
-            new AskingAxis("severity", "심한 정도"));
+            new AskingAxis("time_course", "처음과 비교한 변화"));
 
     private static final String CLOSING = "말씀해 주셔서 감사해요. 정리해서 카드로 만들어 드릴게요.";
 
@@ -76,10 +79,15 @@ public class StubAiTurnClient implements AiTurnClient {
                 null);
     }
 
+    /** 서버 후보. 고정 문구 하나를 낸다 — 저장 경로(카드 덮어쓰기 → 후보 읽기 → 턴 응답)가 도는지 보려는 것이다. */
+    static final String STUB_SERVER_CANDIDATE = "검사를 받아야 하나요?";
+
     @Override
     public AiTurnResult requestQuestionCandidates(IntakeSession session, PatientProfile profile) {
-        // 스텁은 후보를 만들지 않는다. 카드를 그대로 두고 아무것도 바꾸지 않는다.
-        return new AiTurnResult(CLOSING, true, "complete", STUB_STATE, card(session, null), null, null);
+        return new AiTurnResult(CLOSING, true, "complete", STUB_STATE,
+                card(session, null, "[{\"text\":" + quote(STUB_SERVER_CANDIDATE)
+                        + ",\"source\":\"general\",\"rank\":1}]"),
+                null, null);
     }
 
     /**
