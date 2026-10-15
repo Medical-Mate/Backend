@@ -396,10 +396,18 @@ S5 되묻기는 기억 재구성 방식입니다. 오디오 컬럼 자체를 만
 GitHub Actions는 **GHCR에 이미지를 올리는 데서 끝납니다**(`image.yml`). 서버에 접속해 갈아끼우는 잡은 없습니다. `main`에 머지한 뒤 직접 하세요.
 
 ```bash
-ssh -i ~/.ssh/lightsail-jinryomate.pem ubuntu@54.116.115.128
+ssh -i ~/.ssh/jinryomate ubuntu@54.116.115.128
 cd /opt/jinryomate
 docker compose -f docker-compose.prod.yml pull backend
 docker compose -f docker-compose.prod.yml up -d backend
+```
+
+**키는 `~/.ssh/jinryomate` 입니다**(2026-09-28 인수 때 등록). 예전 문서의 `lightsail-jinryomate.pem` 은 원래 담당이 쓰던 키 파일 이름입니다. 서버 `authorized_keys` 에는 원래 담당 쪽 키(`LightsailDefaultKeyPair`)도 아직 남아 있습니다.
+
+Claude Code 에서는 대화형 셸이 안 열리므로 원격 명령을 한 줄로 붙여 `!` 로 실행합니다. 따옴표 안의 `&&` 는 서버에서 돌아서 로컬 셸(PowerShell·bash)과 상관없습니다.
+
+```
+! ssh -i $HOME/.ssh/jinryomate ubuntu@54.116.115.128 "cd /opt/jinryomate && docker compose -f docker-compose.prod.yml pull backend && docker compose -f docker-compose.prod.yml up -d backend"
 ```
 
 **`sudo`를 붙이지 마세요.** GHCR 자격 증명이 `~ubuntu/.docker/config.json`에만 있고 `root`에는 없어서, `sudo`로 돌리면 비공개 이미지를 못 당깁니다. `ubuntu`가 이미 `docker` 그룹이라 필요도 없습니다.
