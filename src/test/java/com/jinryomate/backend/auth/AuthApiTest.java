@@ -25,6 +25,8 @@ import com.jinryomate.backend.global.error.ErrorCode;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.context.annotation.Import;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -33,6 +35,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
@@ -164,19 +167,15 @@ class AuthApiTest {
     @Test
     @DisplayName("진료 전 알림 설정은 기본이 켜짐이고 꺼도 계정에 남는다")
     void 알림_설정() throws Exception {
-        String token = "Bearer " + objectMapper.readValue(
-                login("kakao-token").getResponse().getContentAsString(),
-                TokenResponse.class).accessToken();
+        String token = accessToken();
 
         // 진료를 놓치지 않게 하는 것이 이 앱의 목적이라 기본은 켜짐이다.
         mockMvc.perform(get("/api/me/settings").header("Authorization", token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.visitReminderEnabled").value(true));
 
-        mockMvc.perform(patch("/api/me/settings")
-                        .header("Authorization", token)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(new SettingsRequest(false))))
+        mockMvc.perform(patchSettings(token, objectMapper.writeValueAsString(
+                        new SettingsRequest(false, null, null, null))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.visitReminderEnabled").value(false));
 
@@ -186,10 +185,121 @@ class AuthApiTest {
     }
 
     @Test
+    @DisplayName("새 회원의 알림 설정은 토글 둘 다 켜짐, 시각 둘 다 19:00 이다")
+    void 알림_설정_기본값() throws Exception {
+        mockMvc.perform(get("/api/me/settings").header("Authorization", accessToken()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.visitReminderEnabled").value(true))
+                .andExpect(jsonPath("$.recordReminderEnabled").value(true))
+                // 초까지 붙은 "19:00:00" 이 아니라 요청과 같은 HH:mm 이어야 한다.
+                .andExpect(jsonPath("$.visitReminderTime").value("19:00"))
+                .andExpect(jsonPath("$.recordReminderTime").value("19:00"));
+    }
+
+    @Test
+    @DisplayName("시각 하나만 보내면 그 시각만 바뀌고 토글과 다른 시각은 그대로다")
+    void 알림_설정_시각만_변경() throws Exception {
+        String token = accessToken();
+        // 기본값(켜짐)과 다른 상태에서 시작해야 "그대로 둠" 과 "기본값으로 덮음" 이 갈린다.
+        mockMvc.perform(patchSettings(token,
+                        "{\"visitReminderEnabled\": false, \"recordReminderEnabled\": false}"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(patchSettings(token, "{\"recordReminderTime\": \"07:30\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.visitReminderEnabled").value(false))
+                .andExpect(jsonPath("$.recordReminderEnabled").value(false))
+                .andExpect(jsonPath("$.visitReminderTime").value("19:00"))
+                .andExpect(jsonPath("$.recordReminderTime").value("07:30"));
+
+        mockMvc.perform(get("/api/me/settings").header("Authorization", token))
+                .andExpect(jsonPath("$.visitReminderEnabled").value(false))
+                .andExpect(jsonPath("$.recordReminderEnabled").value(false))
+                .andExpect(jsonPath("$.visitReminderTime").value("19:00"))
+                .andExpect(jsonPath("$.recordReminderTime").value("07:30"));
+    }
+
+    @Test
+    @DisplayName("토글 하나만 보내면 시각은 그대로다. null 도 그대로 둠이다")
+    void 알림_설정_토글만_변경() throws Exception {
+        String token = accessToken();
+        mockMvc.perform(patchSettings(token,
+                        "{\"visitReminderTime\": \"21:00\", \"recordReminderTime\": \"08:15\"}"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(patchSettings(token,
+                        "{\"recordReminderEnabled\": false, \"visitReminderTime\": null}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.visitReminderEnabled").value(true))
+                .andExpect(jsonPath("$.recordReminderEnabled").value(false))
+                .andExpect(jsonPath("$.visitReminderTime").value("21:00"))
+                .andExpect(jsonPath("$.recordReminderTime").value("08:15"));
+    }
+
+    @Test
+    @DisplayName("빈 본문 {} 은 아무것도 안 바꾸고 지금 설정을 돌려준다")
+    void 알림_설정_빈_본문() throws Exception {
+        String token = accessToken();
+        mockMvc.perform(patchSettings(token,
+                        "{\"recordReminderEnabled\": false, \"visitReminderTime\": \"06:00\"}"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(patchSettings(token, "{}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.visitReminderEnabled").value(true))
+                .andExpect(jsonPath("$.recordReminderEnabled").value(false))
+                .andExpect(jsonPath("$.visitReminderTime").value("06:00"))
+                .andExpect(jsonPath("$.recordReminderTime").value("19:00"));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"7:00", "25:00", "24:00", "19:60", "19:00:00", "19시", ""})
+    @DisplayName("HH:mm 이 아닌 시각은 400 이고 아무것도 바뀌지 않는다")
+    void 알림_설정_시각_형식(String time) throws Exception {
+        String token = accessToken();
+
+        mockMvc.perform(patchSettings(token, objectMapper.writeValueAsString(
+                        new SettingsRequest(false, null, time, null))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("INVALID_REQUEST"));
+
+        // 같은 요청의 토글도 반영되면 안 된다 — 반만 저장되면 화면과 어긋난다.
+        mockMvc.perform(get("/api/me/settings").header("Authorization", token))
+                .andExpect(jsonPath("$.visitReminderEnabled").value(true))
+                .andExpect(jsonPath("$.visitReminderTime").value("19:00"));
+    }
+
+    @Test
+    @DisplayName("visitReminderEnabled 하나만 보내던 기존 앱 요청도 그대로 동작한다")
+    void 알림_설정_기존_요청() throws Exception {
+        String token = accessToken();
+
+        mockMvc.perform(patchSettings(token, "{\"visitReminderEnabled\": false}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.visitReminderEnabled").value(false))
+                .andExpect(jsonPath("$.recordReminderEnabled").value(true))
+                .andExpect(jsonPath("$.visitReminderTime").value("19:00"))
+                .andExpect(jsonPath("$.recordReminderTime").value("19:00"));
+    }
+
+    @Test
     @DisplayName("설정 API 는 토큰이 필요하다")
     void 알림_설정_인증() throws Exception {
         mockMvc.perform(get("/api/me/settings"))
                 .andExpect(status().isUnauthorized());
+    }
+
+    private String accessToken() throws Exception {
+        return "Bearer " + objectMapper.readValue(
+                login("kakao-token").getResponse().getContentAsString(),
+                TokenResponse.class).accessToken();
+    }
+
+    private MockHttpServletRequestBuilder patchSettings(String token, String json) {
+        return patch("/api/me/settings")
+                .header("Authorization", token)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(json);
     }
 
     private org.springframework.test.web.servlet.MvcResult login(String kakaoToken) throws Exception {
