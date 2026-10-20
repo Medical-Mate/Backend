@@ -7,6 +7,8 @@ import com.jinryomate.backend.ai.dto.PatientProfile;
 import com.jinryomate.backend.ai.dto.PhoneQuestionCandidates;
 import com.jinryomate.backend.auth.entity.User;
 import com.jinryomate.backend.auth.repository.UserRepository;
+import com.jinryomate.backend.card.entity.BriefingCard;
+import com.jinryomate.backend.card.repository.BriefingCardRepository;
 import com.jinryomate.backend.global.error.ApiException;
 import com.jinryomate.backend.global.error.ErrorCode;
 import com.jinryomate.backend.intake.dto.IntakeDtos.PhoneQuestionCandidatesRequest;
@@ -24,6 +26,7 @@ import com.jinryomate.backend.intake.repository.IntakeSessionRepository;
 import com.jinryomate.backend.profile.repository.HealthProfileRepository;
 import com.jinryomate.backend.profile.service.HealthProfileService;
 import java.util.List;
+import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -44,6 +47,14 @@ public class IntakeSessionService {
     private final BodyMap bodyMap;
     private final QuestionCandidateReader candidateReader;
     private final CardAxisReader cardAxisReader;
+
+    /**
+     * 문답을 지울 때 카드가 있는지 본다(#180).
+     *
+     * <p>{@code card} 가 이미 {@code intake} 에 기대고 있어서 방향이 하나 더 생긴다. 다만
+     * 읽기 전용 조회이고 리포지토리라 생성자 순환이 생기지 않는다.
+     */
+    private final BriefingCardRepository cardRepository;
 
     /**
      * 문답 세션을 시작한다.
@@ -318,6 +329,35 @@ public class IntakeSessionService {
         log.info("폰 질문 후보 sessionId={} 보냄={} profile={}",
                 sessionId, request.candidates().size(), profile != null);
         return respond(session);
+    }
+
+    /**
+     * 카드까지 가지 않은 문답을 지운다. 카드 목록(1j-4) 편집에서 문답 줄을 고른 경로다(#180).
+     *
+     * <p><b>행을 실제로 지운다.</b> {@code ABANDONED} 로만 돌리면 환자는 지웠다고 생각하는데
+     * 증상 대화와 복용약이 계속 남는다 — 카드를 지울 때 문답까지 지우는 것과 같은 이유다.
+     * 메시지·질문·턴 감사 기록은 세션을 따라 함께 지워진다.
+     *
+     * <p><b>놓은 문답도 지운다.</b> 홈에는 안 보이지만 증상이 든 것은 같다.
+     *
+     * <p><b>카드가 있으면 409 다.</b> 그 문답은 카드 삭제가 지운다 —
+     * {@link ErrorCode#SESSION_HAS_CARD} 에 이유를 적었다.
+     */
+    @Transactional
+    public void delete(Long userId, Long sessionId) {
+        IntakeSession session = findOwned(userId, sessionId);
+
+        Long cardId = cardRepository.findFirstBySessionIdOrderByVersionDescIdDesc(sessionId)
+                .map(BriefingCard::getId)
+                .orElse(null);
+        if (cardId != null) {
+            throw new ApiException(ErrorCode.SESSION_HAS_CARD,
+                    ErrorCode.SESSION_HAS_CARD.getDefaultMessage(),
+                    Map.of("cardId", cardId));
+        }
+
+        sessionRepository.delete(session);
+        log.info("문답 삭제 userId={} sessionId={}", userId, sessionId);
     }
 
     /** 세션 응답. 후보와 카드 축은 보관한 AI 카드에서 그때그때 읽는다. */
