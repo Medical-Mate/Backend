@@ -113,7 +113,9 @@ class BriefingCardApiTest {
 
         JsonNode card = generateCard(sessionId);
 
-        assertThat(card.path("status").asText()).isEqualTo("DRAFT");
+        // 확정된 채로 태어난다(#181). 앱에 "저장하기"가 없다.
+        assertThat(card.path("status").asText()).isEqualTo("CONFIRMED");
+        assertThat(card.path("confirmedAt").isNull()).isFalse();
         assertThat(card.path("version").asInt()).isEqualTo(1);
         assertThat(card.path("patient").path("name").asText()).isEqualTo("김서연");
         assertThat(card.path("patient").path("sex").asText()).isEqualTo("FEMALE");
@@ -191,24 +193,24 @@ class BriefingCardApiTest {
                 .andReturn().getResponse().getContentAsString();
         long cardId = objectMapper.readTree(body).path("cardId").asLong();
 
-        // 카드 수정은 "보낸 것만 바뀐다"가 규칙이다.
-        mockMvc.perform(patch("/api/cards/" + cardId)
+        // 카드 수정은 "보낸 것만 바뀐다"가 규칙이다. 새 버전에도 따라간다.
+        String edited = mockMvc.perform(patch("/api/cards/" + cardId)
                         .header("Authorization", token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new UpdateCardRequest(
                                 "고친 설명", null, null, null, null))))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.clinic.name").value("서울OO병원 내과"));
+                .andExpect(jsonPath("$.version").value(2))
+                .andExpect(jsonPath("$.clinic.name").value("서울OO병원 내과"))
+                .andReturn().getResponse().getContentAsString();
+        long v2 = objectMapper.readTree(edited).path("cardId").asLong();
 
-        // 확정 뒤 새 버전에도 따라간다.
-        mockMvc.perform(post("/api/cards/" + cardId + "/confirm").header("Authorization", token))
-                .andExpect(status().isOk());
-        mockMvc.perform(patch("/api/cards/" + cardId)
+        mockMvc.perform(patch("/api/cards/" + v2)
                         .header("Authorization", token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new UpdateCardRequest(
                                 "또 고친 설명", null, null, null, null))))
-                .andExpect(jsonPath("$.version").value(2))
+                .andExpect(jsonPath("$.version").value(3))
                 .andExpect(jsonPath("$.clinic.name").value("서울OO병원 내과"));
     }
 
@@ -491,8 +493,9 @@ class BriefingCardApiTest {
     }
 
     @Test
-    @DisplayName("draft는 제자리에서 수정되고 버전이 그대로다")
-    void 초안_수정() throws Exception {
+    @DisplayName("만든 직후 고쳐도 확정된 새 버전이 생기고 환자 수정이 남는다")
+    void 만든_직후_수정() throws Exception {
+        // 제자리에서 고칠 초안이 없다(#181). 첫 편집부터 버전이 하나 는다.
         completeOnboarding();
         long cardId = generateCard(startSession()).path("cardId").asLong();
 
@@ -504,8 +507,9 @@ class BriefingCardApiTest {
                                 List.of(new AxisEdit("onset", "3주 전 시작")),
                                 null, null, null))))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.cardId").value(cardId))
-                .andExpect(jsonPath("$.version").value(1))
+                .andExpect(jsonPath("$.parentCardId").value(cardId))
+                .andExpect(jsonPath("$.version").value(2))
+                .andExpect(jsonPath("$.status").value("CONFIRMED"))
                 .andExpect(jsonPath("$.axes.onset.value").value("3주 전 시작"))
                 .andExpect(jsonPath("$.axes.onset.source").value("PATIENT_EDIT"))
                 .andExpect(jsonPath("$.axes.onset.evidence[0]").value("[환자 수정] 3주 전 시작"));
@@ -528,7 +532,8 @@ class BriefingCardApiTest {
                                 "바뀐 증상 설명", null, null, null, null))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.version").value(2))
-                .andExpect(jsonPath("$.status").value("DRAFT"))
+                // 새 버전도 확정된 채다. 초안으로 남으면 기록·전달이 막힌다(#181).
+                .andExpect(jsonPath("$.status").value("CONFIRMED"))
                 .andExpect(jsonPath("$.parentCardId").value(cardId))
                 .andReturn().getResponse().getContentAsString();
 
@@ -543,15 +548,25 @@ class BriefingCardApiTest {
     }
 
     @Test
-    @DisplayName("이미 확정된 카드를 다시 확정하면 400")
-    void 중복_확정() throws Exception {
+    @DisplayName("확정을 불러도 200 이고 확정 시각이 그대로다")
+    void 확정_호출은_그대로_돌려준다() throws Exception {
+        // 이미 배포된 앱이 "저장하기"에서 부른다(#181). 400 이면 서버를 먼저 올리는 순간
+        // 그 앱의 저장이 전부 실패한다.
         completeOnboarding();
         long cardId = generateCard(startSession()).path("cardId").asLong();
+        // 만든 응답이 아니라 조회 값과 견준다. 만든 응답은 저장 전 나노초까지 들고 있어
+        // DB 를 거친 마이크로초 값과 끝자리가 어긋날 수 있다.
+        String confirmedAt = objectMapper.readTree(mockMvc.perform(
+                        get("/api/cards/" + cardId).header("Authorization", token))
+                .andReturn().getResponse().getContentAsString()).path("confirmedAt").asText();
+        assertThat(confirmedAt).isNotBlank();
 
-        mockMvc.perform(post("/api/cards/" + cardId + "/confirm").header("Authorization", token))
-                .andExpect(status().isOk());
-        mockMvc.perform(post("/api/cards/" + cardId + "/confirm").header("Authorization", token))
-                .andExpect(status().isBadRequest());
+        for (int i = 0; i < 2; i++) {
+            mockMvc.perform(post("/api/cards/" + cardId + "/confirm").header("Authorization", token))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.status").value("CONFIRMED"))
+                    .andExpect(jsonPath("$.confirmedAt").value(confirmedAt));
+        }
     }
 
     @Test
@@ -769,25 +784,6 @@ class BriefingCardApiTest {
     }
 
     @Test
-    @DisplayName("확정 전 초안은 몇 번을 고쳐도 버전이 안 는다")
-    void 초안은_제자리에서_고친다() throws Exception {
-        // 초안은 새 버전을 만들지 않고 그 자리에서 고친다. 여기에 409 가 끼면
-        // 확정 전 편집이 통째로 막힌다.
-        long cardId = createCard();
-
-        for (int i = 0; i < 3; i++) {
-            mockMvc.perform(patch("/api/cards/" + cardId)
-                            .header("Authorization", token)
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content("""
-                                    {"axes": [{"axis": "onset", "value": "어제부터"}]}"""))
-                    .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.cardId").value((int) cardId))
-                    .andExpect(jsonPath("$.version").value(1));
-        }
-    }
-
-    @Test
     @DisplayName("오류 응답의 details 는 필요할 때만 채운다")
     void 평소_오류에는_details_가_없다() throws Exception {
         // 전역 봉투라 오류마다 필드가 늘면 앱의 파싱이 갈라진다. 기본은 null 이다.
@@ -839,11 +835,10 @@ class BriefingCardApiTest {
     // ---------- helpers ----------
 
     /**
-     * 확정된 카드를 고치고 <b>새 버전도 확정한다.</b> 새 버전 id 를 돌려준다.
+     * 카드를 한 번 고친다. 새 버전 id 를 돌려준다.
      *
-     * <p>확정까지 하는 이유 — 새 버전은 {@code DRAFT} 로 나오고, 초안은 제자리에서 고쳐진다.
-     * 확정하지 않으면 몇 번을 고쳐도 버전이 늘지 않아 체인이 생기지 않는다.
-     * 운영 데이터를 보면 앱도 고칠 때마다 확정을 거친다.
+     * <p>확정을 부르지 않는다 — 새 버전이 확정된 채로 나온다(#181). 앱도 고친 뒤에
+     * 확정을 부르지 않는다.
      */
     private long editOnce(long cardId) throws Exception {
         String body = mockMvc.perform(patch("/api/cards/" + cardId)
@@ -854,10 +849,7 @@ class BriefingCardApiTest {
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
 
-        long next = objectMapper.readTree(body).path("cardId").asLong();
-        mockMvc.perform(post("/api/cards/" + next + "/confirm").header("Authorization", token))
-                .andExpect(status().isOk());
-        return next;
+        return objectMapper.readTree(body).path("cardId").asLong();
     }
 
     private TokenResponse login() throws Exception {

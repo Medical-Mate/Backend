@@ -67,13 +67,15 @@ class HandoffApiTest {
     }
 
     @Test
-    @DisplayName("확정하지 않은 카드는 의사에게 보여줄 수 없다")
-    void 미확정_카드_거부() throws Exception {
+    @DisplayName("만든 카드는 확정을 부르지 않아도 전달 화면이 열린다")
+    void 확정_없이_전달() throws Exception {
+        // 카드가 확정된 채로 태어난다(#181). 앱에 "저장하기"가 없어서 여기서 막히면
+        // 진료실에서 카드를 못 연다.
         long cardId = createCard();
 
         mockMvc.perform(get("/api/cards/" + cardId + "/handoff").header("Authorization", token))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.error.code").value("INVALID_REQUEST"));
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.confirmedAt").exists());
     }
 
     @Test

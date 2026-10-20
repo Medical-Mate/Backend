@@ -53,7 +53,7 @@ public class BriefingCard {
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 16)
-    private CardStatus status = CardStatus.DRAFT;
+    private CardStatus status;
 
     @Column(nullable = false)
     private int version = 1;
@@ -215,12 +215,22 @@ public class BriefingCard {
 
     // --- 생성 ---
 
+    /**
+     * <b>확정된 채로 태어난다.</b> 첫 버전도, 고쳐서 생긴 새 버전도 그렇다(#181).
+     *
+     * <p>앱이 "저장하기" 단계를 없앴다. 확정을 앱 호출에 맡기면 부르지 않은 경로마다
+     * 초안이 남는데, 초안에는 진료 기록이 안 붙고 전달 화면도 안 열린다 — 목록에는
+     * "진료 전"으로 멀쩡히 보이면서 막힌다. 실제로 편집 뒤에는 확정을 안 불러서,
+     * 저장한 카드를 고치면 최신 버전이 초안으로 남았다.
+     */
     private BriefingCard(User user, IntakeSession session) {
         this.user = user;
         this.session = session;
+        this.status = CardStatus.CONFIRMED;
+        this.confirmedAt = createdAt;
     }
 
-    public static BriefingCard draft(User user, IntakeSession session) {
+    public static BriefingCard create(User user, IntakeSession session) {
         return new BriefingCard(user, session);
     }
 
@@ -335,19 +345,10 @@ public class BriefingCard {
                 CardAxis::getAxis, Function.identity(), (a, b) -> a, LinkedHashMap::new));
     }
 
-    // --- 상태 전이 ---
-
-    public boolean isEditable() {
-        return status == CardStatus.DRAFT;
-    }
-
-    public void confirm() {
-        this.status = CardStatus.CONFIRMED;
-        this.confirmedAt = Instant.now();
-    }
+    // --- 버전 ---
 
     /**
-     * 확정된 카드를 고치려 할 때, 이 카드를 이어받은 새 초안을 만든다.
+     * 카드를 고치려 할 때, 이 카드를 이어받은 새 버전을 만든다. 새 버전도 확정된 채다.
      *
      * <p>원본은 그대로 둔다. 의사가 이미 본 카드이기 때문이다.
      */
@@ -374,7 +375,12 @@ public class BriefingCard {
 
     // --- 전달 ---
 
-    /** 확정된 카드만 의사에게 보여줄 수 있다. 초안을 의사가 보면 안 된다. */
+    /**
+     * 확정된 카드만 의사에게 보여줄 수 있다.
+     *
+     * <p>카드가 확정된 채로 태어나므로(#181) 지금은 늘 참이다. 상태 값이 남아 있는 한
+     * 막는 자리도 남겨 둔다.
+     */
     public boolean isHandoffReady() {
         return status == CardStatus.CONFIRMED;
     }
