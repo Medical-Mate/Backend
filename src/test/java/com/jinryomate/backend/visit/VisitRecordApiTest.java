@@ -71,16 +71,32 @@ class VisitRecordApiTest {
     }
 
     @Test
-    @DisplayName("확정되지 않은 카드에는 기록을 남길 수 없다")
-    void 미확정_카드_거부() throws Exception {
-        long cardId = createCard();
+    @DisplayName("만든 카드와 고친 새 버전에 확정 없이 바로 기록을 남길 수 있다")
+    void 확정_없이_기록() throws Exception {
+        // 앱이 "저장하기"를 없앴고 고친 뒤에도 확정을 부르지 않는다(#181). 새 버전이
+        // 초안으로 남으면 목록에는 "진료 전"인데 기록이 400 으로 막힌다.
+        long v1 = createCard();
 
-        mockMvc.perform(post("/api/cards/" + cardId + "/visit")
+        mockMvc.perform(post("/api/cards/" + v1 + "/visit")
                         .header("Authorization", token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(fullRecord())))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.error.code").value("INVALID_REQUEST"));
+                .andExpect(status().isOk());
+
+        String edited = mockMvc.perform(patch("/api/cards/" + v1)
+                        .header("Authorization", token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"axes": [{"axis": "onset", "value": "지난주부터"}]}"""))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        long v2 = objectMapper.readTree(edited).path("cardId").asLong();
+
+        mockMvc.perform(post("/api/cards/" + v2 + "/visit")
+                        .header("Authorization", token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(fullRecord())))
+                .andExpect(status().isOk());
     }
 
     @Test

@@ -79,8 +79,10 @@ public class BriefingCardService {
      * 계약에 카드만 만드는 경로가 없다. 같은 {@code state} 로 다시 불러봐야 바이트까지 같은
      * 카드가 올 뿐이고, 환자에게 질문만 하나 더 나간다.
      *
-     * <p><b>여러 번 불러도 카드가 늘지 않는다.</b> 이미 만든 초안이 있으면 그걸 돌려준다.
-     * 앱이 화면을 다시 그리거나 네트워크가 끊겼다 이어져도 카드가 쌓이면 안 된다.
+     * <p><b>여러 번 불러도 카드가 늘지 않는다.</b> 이미 만든 카드가 있으면 그 최신 버전을
+     * 돌려준다. 앱이 화면을 다시 그리거나 네트워크가 끊겼다 이어져도 카드가 쌓이면 안 된다.
+     *
+     * <p><b>확정된 채로 만든다(#181).</b> 앱에 "저장하기" 단계가 없다.
      *
      * <p>환자 인적사항은 이 시점 값을 카드에 박아둔다. 프로필을 나중에 고쳐도
      * 이미 만들어진 카드는 그대로 남는다.
@@ -100,7 +102,7 @@ public class BriefingCardService {
         CardAssembler.Assembled assembled = assembler.assemble(session);
         CardContentValidator.Result validated = validator.validate(assembled.content());
 
-        BriefingCard card = BriefingCard.draft(session.getUser(), session);
+        BriefingCard card = BriefingCard.create(session.getUser(), session);
         // 알레르기·복용약·기저질환도 여기서 박는다. 의사에게 보여주는 한 장이 안전 정보를
         // 얻으려고 API 를 두 번 부르게 하면 안 된다.
         card.applyPatientSnapshot(PatientSnapshot.from(profile));
@@ -267,8 +269,11 @@ public class BriefingCardService {
     /**
      * 환자가 카드를 고친다. 화면 {@code 1e-1-E}.
      *
-     * <p><b>확정된 카드는 고치지 않는다.</b> 대신 이 카드를 이어받은 새 버전을 만들어 거기에
+     * <p><b>카드 행은 고치지 않는다.</b> 대신 이 카드를 이어받은 새 버전을 만들어 거기에
      * 반영한다. 의사가 이미 본 카드가 뒤바뀌면 안 된다.
+     *
+     * <p><b>고칠 때마다 버전이 하나 는다.</b> 카드가 확정된 채로 태어나서(#181) 제자리에서
+     * 고칠 초안이 없다. 만든 직후 고쳐도 그렇다.
      *
      * <p>고친 축에는 {@code source} 를 {@code patient_edit} 으로 남기고 근거에
      * {@code "[환자 수정] …"} 을 적는다. <b>의사가 "말한 그대로"와 "나중에 고친 값"을
@@ -278,18 +283,13 @@ public class BriefingCardService {
     public CardResponse update(Long userId, Long cardId, UpdateCardRequest request) {
         BriefingCard card = findOwned(userId, cardId);
 
-        BriefingCard target;
-        if (card.isEditable()) {
-            target = card;
-        } else {
-            // 이미 이어받은 카드가 있으면 여기서 또 새 버전을 만들면 안 된다. 체인이 갈라지고
-            // 그 가지에 넣은 편집은 목록에도 상세에도 안 나온다 — 조용히 사라진다.
-            // 앱이 옛 id 를 들고 있다가 다시 보내면서 실제로 일어났다(#114).
-            if (cardRepository.existsByParentCardId(cardId)) {
-                throw alreadyEdited(card);
-            }
-            target = cardRepository.save(card.newVersion());
+        // 이미 이어받은 카드가 있으면 여기서 또 새 버전을 만들면 안 된다. 체인이 갈라지고
+        // 그 가지에 넣은 편집은 목록에도 상세에도 안 나온다 — 조용히 사라진다.
+        // 앱이 옛 id 를 들고 있다가 다시 보내면서 실제로 일어났다(#114).
+        if (cardRepository.existsByParentCardId(cardId)) {
+            throw alreadyEdited(card);
         }
+        BriefingCard target = cardRepository.save(card.newVersion());
 
         CardContent merged = merge(target, request);
         CardContentValidator.Result validated = validator.validate(merged);
@@ -302,15 +302,16 @@ public class BriefingCardService {
                 linksOf(target.getId(), target.getSession().getId()));
     }
 
-    /** 확정. 이미 확정된 카드를 다시 확정하려 하면 막는다. */
-    @Transactional
+    /**
+     * 확정. <b>카드가 이미 확정된 채라 아무것도 바꾸지 않고 카드를 돌려준다(#181).</b>
+     *
+     * <p>지우지 않고 200 으로 둔다. 이미 배포된 앱이 "저장하기"에서 이것을 부르는데,
+     * 예전처럼 400 을 내면 서버를 먼저 올리는 순간 그 앱의 저장이 전부 실패한다.
+     * 확정 시각도 건드리지 않는다 — 다시 불렀다고 뒤로 밀리면 안 된다.
+     */
+    @Transactional(readOnly = true)
     public CardResponse confirm(Long userId, Long cardId) {
         BriefingCard card = findOwned(userId, cardId);
-        if (!card.isEditable()) {
-            throw new ApiException(ErrorCode.INVALID_REQUEST, "이미 확정된 카드입니다.");
-        }
-        card.confirm();
-        log.info("카드 확정 userId={} cardId={} version={}", userId, cardId, card.getVersion());
         return CardResponse.from(card, linksOf(cardId));
     }
 
