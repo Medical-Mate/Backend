@@ -190,6 +190,15 @@ public class IntakeSession {
 
     private Instant completedAt;
 
+    /**
+     * 질문 고르기({@code 1c-D})에서 "다음"을 누른 시각(#185). 안 눌렀으면 {@code null}.
+     *
+     * <p>앱이 카드 없는 문답을 "작성 중"과 "임시 저장"으로 가른다. {@link #completedAt} 은
+     * 채팅이 끝난 순간이라 질문 고르기에서 나간 사람도 끝난 것으로 보이고, 고른 질문이
+     * 비어 있는 것은 "안 고르고 다음"과 "아직 안 누름"이 같다. 그래서 따로 둔다.
+     */
+    private Instant questionsConfirmedAt;
+
     private IntakeSession(User user, String siteNodeId, Side side, String siteText, AiProfile aiProfile) {
         this.user = user;
         this.siteNodeId = siteNodeId;
@@ -328,12 +337,24 @@ public class IntakeSession {
      *
      * <p>추가·편집·삭제·순서변경이 전부 "목록을 다시 보내기" 하나로 처리된다.
      * 몇 개 안 되는 목록에 엔드포인트를 여러 개 둘 이유가 없다.
+     *
+     * <p><b>끝난 문답에서 받으면 질문 고르기를 마친 것으로 남긴다(#185).</b> 앱은 이 목록을
+     * 질문 고르기의 "다음"에서만 보낸다. 질문 고르기는 채팅이 끝난 뒤에 나오므로, 끝나기 전에
+     * 받은 목록은 그 "다음"이 아니다 — 거기서 남기면 채팅 중인 문답이 "임시 저장"으로 보인다.
+     * 처음 마친 시각을 지킨다. 다시 들어가 고쳐도 마친 것은 그대로다.
      */
     public void replaceQuestions(List<String> questions) {
         this.questions.clear();
         if (questions != null) {
             this.questions.addAll(questions);
         }
+        if (isCompleted() && questionsConfirmedAt == null) {
+            this.questionsConfirmedAt = Instant.now();
+        }
+    }
+
+    public boolean isQuestionsConfirmed() {
+        return questionsConfirmedAt != null;
     }
 
     public boolean isOwnedBy(Long userId) {

@@ -334,7 +334,13 @@ public final class IntakeDtos {
              * 마지막 AI 문장이 묻는 칸. <b>세션에 저장해 두므로 재조회에도 같은 값이 온다</b> —
              * 앱을 다시 켜도 폰 추출을 이어 갈 수 있다. 끝났으면 {@code null}.
              */
-            AskingAxis askingAxis
+            AskingAxis askingAxis,
+
+            /**
+             * 질문 고르기({@code 1c-D})에서 "다음"을 눌렀는지(#185). 카드 없는 문답의 칩이
+             * {@code true} 면 "임시 저장", {@code false} 면 "작성 중"이다.
+             */
+            boolean questionsConfirmed
     ) {
         public record Progress(int current, int total) {}
 
@@ -360,7 +366,8 @@ public final class IntakeDtos {
                     List.copyOf(s.getQuestions()),
                     List.copyOf(candidates),
                     List.copyOf(cardAxes),
-                    AskingAxis.of(s));
+                    AskingAxis.of(s),
+                    s.isQuestionsConfirmed());
         }
     }
 }
