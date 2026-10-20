@@ -3,6 +3,7 @@ package com.jinryomate.backend.home.dto;
 import com.jinryomate.backend.appointment.dto.AppointmentDtos.AppointmentResponse;
 import com.jinryomate.backend.card.dto.CardDtos.CardSummary;
 import com.jinryomate.backend.intake.entity.IntakeSession;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 
@@ -69,7 +70,16 @@ public final class HomeDtos {
                  * 이어서 하기를 누르면 그 자리로 보낸다. {@code false} 면 문답 채팅으로 보낸다.
                  * 이 값이 없으면 앱이 홈에 들어올 때마다 세션을 한 번 더 읽어야 한다.
                  */
-                boolean ended
+                boolean ended,
+
+                /**
+                 * 문답을 시작한 시각(#179).
+                 *
+                 * <p>카드 목록(1j-4)이 이 줄을 카드들과 날짜순으로 섞고 월 묶음과
+                 * "오늘"·"MM.dd" 를 정한다. 날짜 계산은 앱이 한다 — 서버가 날짜로 잘라
+                 * 내려주면 시간대가 어긋날 때 하루 틀린다.
+                 */
+                Instant startedAt
         ) {
             public static InProgressSession from(IntakeSession s) {
                 return new InProgressSession(
@@ -77,7 +87,8 @@ public final class HomeDtos {
                         s.getSiteText(),
                         s.getProgressCurrent(),
                         s.getProgressTotal(),
-                        s.isCompleted());
+                        s.isCompleted(),
+                        s.getStartedAt());
             }
         }
     }
