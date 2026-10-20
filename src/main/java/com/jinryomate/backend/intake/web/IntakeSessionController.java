@@ -12,13 +12,16 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 @Tag(name = "문답", description = "부위 짚기 → 통증 강도 → 문답·질문 고르기 (화면 1b · 1d · 1c)")
@@ -186,5 +189,32 @@ public class IntakeSessionController {
                                                          @PathVariable Long sessionId,
                                                          @Valid @RequestBody PhoneQuestionCandidatesRequest request) {
         return intakeSessionService.submitPhoneQuestionCandidates(userId, sessionId, request);
+    }
+
+    @Operation(
+            summary = "문답 삭제 (카드를 만들지 않은 것만)",
+            description = """
+                    카드 목록 편집(`1j-4-D2`)에서 **카드를 아직 만들지 않은 문답 줄**을 지웁니다.
+
+                    **실제로 지웁니다.** 증상 대화·질문까지 서버에서 사라지고 되돌릴 수 없습니다.
+                    앱에서 한 번 확인받고 부르세요. 지운 문답은 홈의 `inProgressSession` 에 다시
+                    나오지 않습니다.
+
+                    **카드를 만든 문답이면 `409 SESSION_HAS_CARD` 입니다.** 그 문답은 카드 삭제
+                    (`DELETE /api/cards/{id}`)가 문답까지 함께 지웁니다. `details.cardId` 로 지우세요.
+
+                    ```jsonc
+                    { "error": { "code": "SESSION_HAS_CARD",
+                                 "details": { "cardId": 23 } } }
+                    ```
+
+                    남의 문답이거나 없는 문답이면 404 입니다. 새 문답을 시작해 놓은 문답(`#174`)도
+                    지울 수 있습니다.
+                    """)
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @DeleteMapping("/{sessionId}")
+    public void delete(@AuthenticationPrincipal Long userId,
+                       @PathVariable Long sessionId) {
+        intakeSessionService.delete(userId, sessionId);
     }
 }
