@@ -94,7 +94,10 @@ class HomeApiTest {
                 .andExpect(jsonPath("$.inProgressSession.progressCurrent").exists())
                 .andExpect(jsonPath("$.inProgressSession.progressTotal").exists())
                 // 앱이 이 값으로 문답 채팅에 보낼지 질문 고르기로 보낼지 가른다.
-                .andExpect(jsonPath("$.inProgressSession.ended").value(false));
+                .andExpect(jsonPath("$.inProgressSession.ended").value(false))
+                // 카드 목록(1j-4)이 이 값으로 월 묶음과 날짜를 정한다(#179). 숫자 타임스탬프가
+                // 아니라 ISO-8601 문자열이어야 한다.
+                .andExpect(jsonPath("$.inProgressSession.startedAt").isString());
     }
 
     @Test
