@@ -78,10 +78,16 @@ public class HomeController {
                     **문답이 끝났어도 카드가 없으면 옵니다.** 질문 고르기(`1c-D`)에서 나간 경우입니다.
                     `ended` 로 가르세요.
 
-                    | `ended` | 이어서 하기를 누르면 |
-                    | --- | --- |
-                    | `false` | 문답 채팅으로 |
-                    | `true` | 질문 고르기 자리로. 후보는 `GET /api/sessions/{id}` 의 `questionCandidates` |
+                    | `ended` | `questionsConfirmed` | 칩 | 이어서 하기를 누르면 |
+                    | --- | --- | --- | --- |
+                    | `false` | `false` | 작성 중 | 문답 채팅으로 |
+                    | `true` | `false` | 작성 중 | 질문 고르기 자리로. 후보는 `GET /api/sessions/{id}` 의 `questionCandidates` |
+                    | `true` | `true` | 임시 저장 | 증상 정리 완료(`1c-5`)로 |
+
+                    `questionsConfirmed` 는 질문 고르기의 "다음"(`PUT /api/sessions/{id}/questions`)을
+                    **문답이 끝난 뒤에** 받았는지입니다(#185). 질문을 하나도 안 골라도 다음을 누르면
+                    참입니다. 이 값이 생기기 전의 문답은 거짓이라 "작성 중"으로 보이고, 질문 고르기에서
+                    다음을 한 번 더 누르면 참이 됩니다.
 
                     `progressCurrent`·`progressTotal` 은 **대화 턴** 진행도입니다. 화면 단계(n/3)는
                     `ended` 와 앱이 아는 화면 위치로 그리시면 됩니다.

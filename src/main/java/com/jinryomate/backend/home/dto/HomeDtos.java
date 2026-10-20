@@ -79,7 +79,16 @@ public final class HomeDtos {
                  * "오늘"·"MM.dd" 를 정한다. 날짜 계산은 앱이 한다 — 서버가 날짜로 잘라
                  * 내려주면 시간대가 어긋날 때 하루 틀린다.
                  */
-                Instant startedAt
+                Instant startedAt,
+
+                /**
+                 * 질문 고르기({@code 1c-D})에서 "다음"을 눌렀는지(#185).
+                 *
+                 * <p>{@code ended} 만으로는 질문 고르기에서 나간 사람과 다음까지 누른 사람을
+                 * 못 가른다. {@code true} 면 "임시 저장"(3/3, 이어서 하기는 증상 정리 완료
+                 * {@code 1c-5} 로), {@code false} 면 "작성 중"이다.
+                 */
+                boolean questionsConfirmed
         ) {
             public static InProgressSession from(IntakeSession s) {
                 return new InProgressSession(
@@ -88,7 +97,8 @@ public final class HomeDtos {
                         s.getProgressCurrent(),
                         s.getProgressTotal(),
                         s.isCompleted(),
-                        s.getStartedAt());
+                        s.getStartedAt(),
+                        s.isQuestionsConfirmed());
             }
         }
     }
