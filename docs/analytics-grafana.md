@@ -1,6 +1,6 @@
 # 이벤트 대시보드 — Grafana + Postgres
 
-웹 데모 이벤트를 Grafana 로 봅니다. **한시입니다** — 심사가 끝나면 `demo` 패키지, `analytics` 스키마와 함께 지웁니다.
+웹 데모 이벤트를 Grafana 로 봅니다. `demo` 패키지와 수명을 같이 합니다 — 심사 뒤에도 테스트 웹(UT·A/B) 때문에 패키지를 유지하므로 이것도 남깁니다([#187](https://github.com/Medical-Mate/Backend/issues/187)). 테스트 웹은 PostHog 를 쓰고 여기로 이벤트를 보내지 않습니다.
 
 Prometheus 도 Loki 도 두지 않습니다. 호스트가 2GB 인데 풀스택이 600~900MB 라 안 들어갑니다. Grafana 하나(~150MB)가 Postgres 를 SQL 로 직접 읽습니다.
 
@@ -180,7 +180,7 @@ GROUP BY 1;
 
 ---
 
-## 6. 심사가 끝나면
+## 6. 데모를 내릴 때
 
 ```sql
 DROP SCHEMA analytics CASCADE;

@@ -18,7 +18,7 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
 /**
- * 웹 데모 경로 (한시).
+ * 웹 데모 경로.
  *
  * <p><b>AI 통로는 여기서 끝까지 못 본다.</b> 테스트에는 HMAC 시크릿이 없어 프록시 빈이
  * 없고, 있어도 실제 AI 를 불러야 한다. 대신 <b>인증 없이 열려 있는지</b>와

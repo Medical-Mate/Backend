@@ -54,13 +54,13 @@ public class AiClientConfig {
      * <p>없으면 이 빈이 없고 데모 문답이 503 이 된다(부위 마스터는 그대로 나간다).
      * 서명 없이 붙는 시늉을 하다 401 로 터지는 것보다 낫다 — 문답 스텁과 같은 방침이다.
      *
-     * <p>심사가 끝나면 {@code demo} 패키지와 함께 이 빈을 지운다.
+     * <p>{@code demo} 패키지를 지울 때 이 빈도 함께 지운다.
      */
     @Bean
     @ConditionalOnExpression("!'${ai.hmac-secret:}'.isBlank()")
     public DemoAiProxy demoAiProxy(RestClient aiRestClient, ObjectMapper objectMapper,
                                    AiProperties properties, DemoEventRecorder recorder) {
-        log.info("웹 데모 AI 통로를 엽니다. 심사 뒤 제거 대상입니다");
+        log.info("웹 데모 AI 통로를 엽니다");
         return new DemoAiProxy(aiRestClient, objectMapper, properties, recorder);
     }
 
