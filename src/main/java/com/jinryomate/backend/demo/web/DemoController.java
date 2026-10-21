@@ -31,8 +31,9 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-@Tag(name = "웹 데모 (한시)", description = """
-        스토어 제출이 불가해 만든 웹 데모 전용 경로입니다. **심사가 끝나면 지웁니다.**
+@Tag(name = "웹 데모", description = """
+        스토어 제출이 불가해 만든 웹 데모 전용 경로입니다. 원본 웹 데모와 UT·A/B 테스트용
+        웹이 함께 씁니다.
 
         **인증이 없습니다.** 대신 호출 빈도를 제한합니다.
 

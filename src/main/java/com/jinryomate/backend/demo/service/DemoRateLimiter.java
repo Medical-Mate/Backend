@@ -46,18 +46,23 @@ public class DemoRateLimiter {
      * 막힌 횟수를 남긴다.
      *
      * <p><b>브라우저는 자기가 막힌 것만 안다.</b> 전체 상한에 걸려 떨어진 사람이 몇인지는
-     * 서버만 안다 — 심사 중에 제일 알고 싶은 숫자다.
+     * 서버만 안다 — 공개해 둔 동안 제일 알고 싶은 숫자다.
      */
     private final DemoEventRecorder recorder;
 
-    /** 한 IP 가 1분에 보낼 수 있는 요청 수. 문답 한 세션이 6턴 남짓이라 넉넉하다. */
+    /**
+     * 한 IP 가 1분에 보낼 수 있는 요청 수. 문답 한 세션이 6턴 남짓이라 한 사람에게는 넉넉하다.
+     *
+     * <p><b>같은 와이파이의 여러 명은 IP 하나로 보인다.</b> 테스트 웹의 A/B 테스트 일정에
+     * 맞춰 60 으로 올리기로 했다(#187).
+     */
     private static final int PER_IP_PER_MINUTE = 30;
 
     /**
      * 전체가 1분에 보낼 수 있는 요청 수.
      *
-     * <p>AI 일일 상한이 $2(하루 100세션 남짓)이다. 분당 200이면 한 사람이 몰아쳐도
-     * 그 상한에 닿기 전에 여기서 먼저 걸린다.
+     * <p>AI 일일 상한($12, 앱과 함께 쓴다)은 하루 총액만 막는다. 이쪽은 몰아치는 속도를
+     * 막는다 — 봇 하나가 분 단위로 크레딧을 태우면 상한에 닿기 전에 여기서 먼저 걸린다.
      */
     private static final int TOTAL_PER_MINUTE = 200;
 
@@ -76,7 +81,7 @@ public class DemoRateLimiter {
         if (total.incrementAndGet() > TOTAL_PER_MINUTE) {
             log.warn("데모 전체 호출 제한 초과");
             // **브라우저는 자기가 막힌 것만 안다.** 전체 상한에 걸려 떨어진 사람이
-            // 몇인지는 서버만 안다 — 심사 중에 제일 알고 싶은 숫자다.
+            // 몇인지는 서버만 안다 — 공개해 둔 동안 제일 알고 싶은 숫자다.
             recorder.record("guard.rate_limited", pathOf(request));
             throw new ApiException(ErrorCode.TOO_MANY_REQUESTS);
         }

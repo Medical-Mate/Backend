@@ -25,7 +25,9 @@ import org.hibernate.type.SqlTypes;
  * 난수입니다. 같은 값을 쓰면 이벤트가 카드와 이어져, 원문을 한 글자도 안 담아도
  * "이 사람이 무엇을 말했나"가 복원됩니다.
  *
- * <p><b>한시입니다.</b> 심사가 끝나면 {@code demo} 패키지와 함께 스키마째 지웁니다.
+ * <p>{@code demo} 패키지와 수명을 같이 합니다. 패키지를 지울 때 스키마째 지웁니다.
+ * 테스트 웹(UT·A/B)은 PostHog 를 쓰고 여기로 보내지 않기로 했습니다(#187) — 보내면
+ * 원본 데모 이벤트와 섞입니다.
  */
 @Entity
 @Table(name = "demo_event", schema = "analytics")
